@@ -4,3 +4,6 @@
 [submodule "lmdb"]
 	path = lmdb
 	url = https://github.com/raicoincommunity/lmdb.git
+[submodule "phc-winner-argon2"]
+	path = phc-winner-argon2
+	url = https://github.com/raicoincommunity/phc-winner-argon2.git
