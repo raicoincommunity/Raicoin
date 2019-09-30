@@ -1,0 +1,28 @@
+---
+BasedOnStyle: Google
+Language:        Cpp
+Standard:        Cpp11
+TabWidth:        4
+IndentWidth: 4
+AccessModifierOffset: -4
+AlignEscapedNewlinesLeft: true
+AlignConsecutiveAssignments: true
+DerivePointerAlignment: false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Custom
+AllowShortFunctionsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BraceWrapping:
+  AfterEnum: true
+  AfterStruct: true
+  SplitEmptyFunction: true
+  AfterControlStatement: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterUnion: true
+  AfterClass: true
+  BeforeCatch: true
+  BeforeElse: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+...
