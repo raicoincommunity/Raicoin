@@ -61,7 +61,8 @@ Raicoin will be developed based on the ideas of NANO(formerly Raiblocks) but wit
             July 2020: 0.09BTC/900NANO  
             Aug. 2020: 0.1BTC/1000NANO  
             After then: 0.2BTC/2000NANO  
-     * There will be 16 official invited nodes: 8 light nodes, 8 full nodes.     
+     * There will be 16 official invited nodes: 8 light nodes, 8 full nodes. 
+     
 **Roadmap**
   * Beta release: March 31, 2020.
   * Live release: September 30, 2020.
