@@ -791,9 +791,10 @@ rai::ErrorCode rai::QueryMessage::Check_() const
     {
         return rai::ErrorCode::SUCCESS;
     }
-
+    
     rai::QueryBy by = QueryBy();
     rai::QueryStatus status = QueryStatus();
+    
     if (by == rai::QueryBy::HASH)
     {
         if (status != rai::QueryStatus::SUCCESS)
