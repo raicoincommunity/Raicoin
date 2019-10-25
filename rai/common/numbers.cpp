@@ -275,6 +275,16 @@ bool rai::uint256_union::operator>(const rai::uint256_union& other) const
     return Number() > other.Number();
 }
 
+bool rai::uint256_union::operator<=(const rai::uint256_union& other) const
+{
+    return Number() <= other.Number();
+}
+
+bool rai::uint256_union::operator>=(const rai::uint256_union& other) const
+{
+    return Number() >= other.Number();
+}
+
 rai::uint256_union rai::uint256_union::operator^(
     const rai::uint256_union& other) const
 {

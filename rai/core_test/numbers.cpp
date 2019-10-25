@@ -255,6 +255,10 @@ TEST(uint256_union, relational_operator)
     ASSERT_EQ(false, ret);
     ret = value1 > value2;
     ASSERT_EQ(false, ret);
+    ret = value1 >= value2;
+    ASSERT_EQ(true, ret);
+    ret = value1 <= value2;
+    ASSERT_EQ(true, ret);
 
     ret = value1 == value3;
     ASSERT_EQ(false, ret);
@@ -264,6 +268,10 @@ TEST(uint256_union, relational_operator)
     ASSERT_EQ(true, ret);
     ret = value1 > value3;
     ASSERT_EQ(false, ret);
+    ret = value1 >= value3;
+    ASSERT_EQ(false, ret);
+    ret = value1 <= value3;
+    ASSERT_EQ(true, ret);
 }
 
 TEST(uint256_union, bitwise_operator)
