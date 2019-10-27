@@ -292,6 +292,41 @@ TEST(uint256_union, bitwise_operator)
     ASSERT_EQ(0, value1.Number());
 }
 
+
+TEST(uint256_union, arithmetic_operator)
+{
+    rai::uint256_t number("0x34F0A37AAD20F4A260F0A5B3CB3D7FB534F0A37AAD20F4A260F0A5B3CB3D7FB5");
+    rai::uint256_union value1 = number;
+    rai::uint256_union value2 = number;
+    rai::uint256_union value3 = number + 1;
+
+    rai::uint256_union result = value2 - value1;
+    ASSERT_EQ(0, result.Number());
+    result = value3 - value1;
+    ASSERT_EQ(1, result.Number());
+    result = value1 - value3;
+    ASSERT_EQ(rai::uint256_t(-1), result.Number());
+    
+    result = value1 + 1;
+    ASSERT_EQ(value3, result);
+    result = rai::uint256_union(rai::uint256_t(-1)) + 2;
+    ASSERT_EQ(1, result.Number());
+
+    result = value1;
+    result += 1;
+    ASSERT_EQ(value3, result);
+    result = rai::uint256_t(-1);
+    result += 2;
+    ASSERT_EQ(1, result.Number());
+
+    result = value3;
+    result -= 1;
+    ASSERT_EQ(value1, result);
+    result = 1;
+    result -= 2;
+    ASSERT_EQ(rai::uint256_t(-1), result.Number());
+}
+
 TEST(uint256_union, hex)
 {
     bool ret;

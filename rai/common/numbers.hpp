@@ -62,8 +62,12 @@ union uint256_union
     bool operator>(const rai::uint256_union&) const;
     bool operator<=(const rai::uint256_union&) const;
     bool operator>=(const rai::uint256_union&) const;
-    uint256_union operator^(const rai::uint256_union&) const;
-    uint256_union& operator^=(const rai::uint256_union&);
+    rai::uint256_union operator^(const rai::uint256_union&) const;
+    rai::uint256_union& operator^=(const rai::uint256_union&);
+    rai::uint256_union operator+(const rai::uint256_union&) const;
+    rai::uint256_union operator-(const rai::uint256_union&) const;
+    rai::uint256_union& operator+=(const rai::uint256_union&);
+    rai::uint256_union& operator-=(const rai::uint256_union&);
     rai::uint256_t Number() const;
     void Clear();
     void SecureClear();
