@@ -306,6 +306,32 @@ rai::uint256_union& rai::uint256_union::operator^=(
     return *this;
 }
 
+rai::uint256_union rai::uint256_union::operator+(
+    const rai::uint256_union& other) const
+{
+    return rai::uint256_union(Number() + other.Number());
+}
+
+rai::uint256_union rai::uint256_union::operator-(
+    const rai::uint256_union& other) const
+{
+    return rai::uint256_union(Number() - other.Number());
+}
+
+rai::uint256_union& rai::uint256_union::operator+=(
+    const rai::uint256_union& other)
+{
+    *this = *this + other;
+    return *this;
+}
+
+rai::uint256_union& rai::uint256_union::operator-=(
+    const rai::uint256_union& other)
+{
+    *this = *this - other;
+    return *this;
+}
+
 rai::uint256_t rai::uint256_union::Number() const
 {
     rai::uint256_t result;
