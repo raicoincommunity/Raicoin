@@ -280,6 +280,30 @@ bool rai::Ledger::AccountCount(rai::Transaction& transaction,
     return false;
 }
 
+bool rai::Ledger::NextAccountInfo(rai::Transaction& transaction,
+                                  rai::Account& account,
+                                  rai::AccountInfo& info) const
+{
+    rai::MdbVal key(account);
+    rai::StoreIterator store_it(transaction.mdb_transaction_, store_.accounts_,
+                                key);
+    if (store_it->first.Data() == nullptr
+        || store_it->first.Size() == 0)
+    {
+        return true;
+    }
+    account = store_it->first.uint256_union();
+
+    auto data = store_it->second.Data();
+    auto size = store_it->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream(data, size);
+    return info.Deserialize(stream);
+}
+
 bool rai::Ledger::BlockPut(rai::Transaction& transaction,
                            const rai::BlockHash& hash, const rai::Block& block)
 {
@@ -718,6 +742,52 @@ rai::Iterator rai::Ledger::ForkUpperBound(rai::Transaction& transaction,
     return rai::Iterator(std::move(store_it));
 }
 
+bool rai::Ledger::NextFork(rai::Transaction& transaction, rai::Account& account,
+                           uint64_t height, std::shared_ptr<rai::Block>& first,
+                           std::shared_ptr<rai::Block>& second) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_, store_.forks_,
+                                key);
+    auto data = store_it->first.Data();
+    auto size = store_it->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream key_stream(data, size);
+    bool error = rai::Read(key_stream, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(key_stream, height);
+    IF_ERROR_RETURN(error, true);
+
+    data = store_it->second.Data();
+    size = store_it->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream data_stream(data, size);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    first = rai::DeserializeBlock(error_code, data_stream);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return true;
+    }
+    second = rai::DeserializeBlock(error_code, data_stream);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return true;
+    }
+
+    return false;
+}
 
 bool rai::Ledger::ReceivableInfoPut(rai::Transaction& transaction,
                                     const rai::Account& destination,
