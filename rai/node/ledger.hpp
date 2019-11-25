@@ -117,6 +117,8 @@ public:
     rai::Iterator AccountInfoBegin(rai::Transaction&);
     rai::Iterator AccountInfoEnd(rai::Transaction&);
     bool AccountCount(rai::Transaction&, size_t&) const;
+    bool NextAccountInfo(rai::Transaction&, rai::Account&,
+                         rai::AccountInfo&) const;
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);
@@ -145,6 +147,9 @@ public:
     bool ForkExists(rai::Transaction&, const rai::Account&, uint64_t) const;
     rai::Iterator ForkLowerBound(rai::Transaction&, const rai::Account&);
     rai::Iterator ForkUpperBound(rai::Transaction&, const rai::Account&);
+    bool NextFork(rai::Transaction&, rai::Account&, uint64_t,
+                  std::shared_ptr<rai::Block>&,
+                  std::shared_ptr<rai::Block>&) const;
     bool ReceivableInfoPut(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&, const rai::ReceivableInfo&);
     bool ReceivableInfoGet(rai::Transaction&, const rai::Account&,
