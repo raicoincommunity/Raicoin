@@ -107,6 +107,26 @@ bool rai::AccountInfo::Deserialize(rai::Stream& stream)
     return false;
 }
 
+bool rai::AccountInfo::Confirmed(uint64_t height) const
+{
+    if (!Valid())
+    {
+        return false;
+    }
+
+    if (confirmed_height_ == rai::Block::INVALID_HEIGHT)
+    {
+        return false;
+    }
+
+    if (confirmed_height_ >= height)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 bool rai::AccountInfo::Valid() const
 {
     if (head_height_ == rai::Block::INVALID_HEIGHT
@@ -171,13 +191,72 @@ bool rai::RewardableInfo::Deserialize(rai::Stream& stream)
     return false;
 }
 
-rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store)
+rai::WalletInfo::WalletInfo()
+    : version_(0), index_(0), salt_(0), key_(0), seed_(0), check_(0)
+{
+}
+
+void rai::WalletInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, version_);
+    rai::Write(stream, index_);
+    rai::Write(stream, selected_account_id_);
+    rai::Write(stream, salt_.bytes);
+    rai::Write(stream, key_.bytes);
+    rai::Write(stream, seed_.bytes);
+    rai::Write(stream, check_.bytes);
+}
+
+bool rai::WalletInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, version_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, index_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, selected_account_id_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, salt_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, key_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, seed_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, check_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+
+void rai::WalletAccountInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, index_);
+    rai::Write(stream, private_key_.bytes);
+    rai::Write(stream, public_key_.bytes);
+}
+
+bool rai::WalletAccountInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, index_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, private_key_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, public_key_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node)
     : store_(store), total_rep_weight_(0)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     rai::Transaction transaction(error_code, *this, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
-    InitRepWeights_(transaction);
+    if (is_node)
+    {
+        InitRepWeights_(transaction);
+    }
 }
 
 bool rai::Ledger::AccountInfoPut(rai::Transaction& transaction,
@@ -248,7 +327,7 @@ bool rai::Ledger::AccountInfoDel(rai::Transaction& transaction,
     }
 
     rai::MdbVal key(account);
-    return store_.Put(transaction.mdb_transaction_, store_.accounts_, key,
+    return store_.Del(transaction.mdb_transaction_, store_.accounts_, key,
                       nullptr);
 }
 
@@ -674,6 +753,38 @@ bool rai::Ledger::ForkGet(const rai::Iterator& it,
 }
 
 bool rai::Ledger::ForkDel(rai::Transaction& transaction,
+                          const rai::Account& account)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint64_t> heights;
+    rai::Iterator i = ForkLowerBound(transaction, account);
+    rai::Iterator n = ForkUpperBound(transaction, account);
+    for (; i != n; ++i)
+    {
+        std::shared_ptr<rai::Block> first(nullptr);
+        std::shared_ptr<rai::Block> second(nullptr);
+        bool error = ForkGet(i, first, second);
+        if (error || first->Account() != account)
+        {
+            return true;
+        }
+        heights.push_back(first->Height());
+    }
+
+    for (uint64_t height : heights)
+    {
+        bool error = ForkDel(transaction, account, height);
+        IF_ERROR_RETURN(error, true);
+    }
+
+    return false;
+}
+
+bool rai::Ledger::ForkDel(rai::Transaction& transaction,
                           const rai::Account& account, uint64_t height)
 {
     if (!transaction.write_)
@@ -841,6 +952,36 @@ bool rai::Ledger::ReceivableInfoGet(rai::Transaction& transaction,
     return info.Deserialize(stream);
 }
 
+bool rai::Ledger::ReceivableInfoGet(const rai::Iterator& it,
+                                    rai::Account& destination,
+                                    rai::BlockHash& hash,
+                                    rai::ReceivableInfo& info) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, destination.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, hash.bytes);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = info.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
 bool rai::Ledger::ReceivableInfoDel(rai::Transaction& transaction,
                                     const rai::Account& destination,
                                     const rai::BlockHash& hash)
@@ -875,6 +1016,39 @@ bool rai::Ledger::ReceivableInfoCount(rai::Transaction& transaction,
 
     count = stat.ms_entries;
     return false;
+}
+
+rai::Iterator rai::Ledger::ReceivableInfoLowerBound(
+    rai::Transaction& transaction, const rai::Account& account)
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::BlockHash hash(0);
+        rai::Write(stream, hash.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.receivables_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+
+rai::Iterator rai::Ledger::ReceivableInfoUpperBound(
+    rai::Transaction& transaction, const rai::Account& account)
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::BlockHash hash(std::numeric_limits<rai::uint256_t>::max());
+        rai::Write(stream, hash.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.receivables_, key);
+    return rai::Iterator(std::move(store_it));
 }
 
 bool rai::Ledger::RewardableInfoPut(rai::Transaction& transaction,
@@ -1029,6 +1203,299 @@ void rai::Ledger::RepWeightsGet(
     std::lock_guard<std::mutex> lock(rep_weights_mutex_);
     total = total_rep_weight_;
     weights = rep_weights_;
+}
+
+bool rai::Ledger::WalletInfoPut(rai::Transaction& transaction, uint32_t id,
+                                const rai::WalletInfo& info)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    if (id == 0)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, id);
+        uint32_t account_id = 0;
+        rai::Write(stream, account_id);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        info.Serialize(stream);
+    }
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.wallets_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::WalletInfoGet(rai::Transaction& transaction, uint32_t id,
+                                rai::WalletInfo& info) const
+{
+    if (id == 0)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, id);
+        uint32_t account_id = 0;
+        rai::Write(stream, account_id);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    rai::MdbVal value;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.wallets_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = info.Deserialize(stream);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::WalletInfoGetAll(
+    rai::Transaction& transaction,
+    std::vector<std::pair<uint32_t, rai::WalletInfo>>& results) const
+{
+    rai::StoreIterator it(transaction.mdb_transaction_, store_.wallets_);
+    rai::StoreIterator end(nullptr);
+    for (; it != end; ++it)
+    {
+        auto data = it->first.Data();
+        auto size = it->first.Size();
+        if (data == nullptr || size == 0)
+        {
+            assert(0);
+            return true;
+        }
+
+        uint32_t wallet_id = 0;
+        uint32_t account_id = 0;
+        rai::BufferStream stream_key(data, size);
+        bool error = rai::Read(stream_key, wallet_id);
+        IF_ERROR_RETURN(error, true);
+        error = rai::Read(stream_key, account_id);
+        IF_ERROR_RETURN(error, true);
+        if (account_id != 0)
+        {
+            continue;
+        }
+        
+        data = it->second.Data();
+        size = it->second.Size();
+        if (data == nullptr || size == 0)
+        {
+            assert(0);
+            return true;
+        }
+
+        rai::WalletInfo info;
+        rai::BufferStream stream_value(data, size);
+        error = info.Deserialize(stream_value);
+        IF_ERROR_RETURN(error, true);
+
+        results.emplace_back(wallet_id, info);
+    }
+
+    return false;
+}
+
+bool rai::Ledger::WalletAccountInfoPut(rai::Transaction& transaction,
+                                       uint32_t wallet_id, uint32_t account_id,
+                                       const rai::WalletAccountInfo& info)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    if (wallet_id == 0 || account_id == 0)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, wallet_id);
+        rai::Write(stream, account_id);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        info.Serialize(stream);
+    }
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.wallets_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::WalletAccountInfoGet(rai::Transaction& transaction,
+                                       uint32_t wallet_id, uint32_t account_id,
+                                       rai::WalletAccountInfo& info) const
+{
+    if (wallet_id == 0 || account_id == 0)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, wallet_id);
+        rai::Write(stream, account_id);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    rai::MdbVal value;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.wallets_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = info.Deserialize(stream);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::WalletAccountInfoGetAll(
+    rai::Transaction& transaction, uint32_t wallet_id,
+    std::vector<std::pair<uint32_t, rai::WalletAccountInfo>>& results) const
+{
+    std::vector<uint8_t> bytes_key_begin;
+    {
+        rai::VectorStream stream(bytes_key_begin);
+        rai::Write(stream, wallet_id);
+        uint32_t account_id = 1;
+        rai::Write(stream, account_id);
+    }
+    rai::MdbVal key_begin(bytes_key_begin.size(), bytes_key_begin.data());
+    rai::StoreIterator it(transaction.mdb_transaction_, store_.wallets_,
+                          key_begin);
+
+    std::vector<uint8_t> bytes_key_end;
+    {
+        rai::VectorStream stream(bytes_key_end);
+        rai::Write(stream, wallet_id);
+        uint32_t account_id = std::numeric_limits<uint32_t>::max();
+        rai::Write(stream, account_id);
+    }
+    rai::MdbVal key_end(bytes_key_end.size(), bytes_key_end.data());
+    rai::StoreIterator end(transaction.mdb_transaction_, store_.wallets_,
+                          key_end);
+
+    for (; it != end; ++it)
+    {
+        auto data = it->first.Data();
+        auto size = it->first.Size();
+        if (data == nullptr || size == 0)
+        {
+            assert(0);
+            return true;
+        }
+
+        uint32_t wallet_id_l = 0;
+        uint32_t account_id = 0;
+        rai::BufferStream stream_key(data, size);
+        bool error = rai::Read(stream_key, wallet_id_l);
+        IF_ERROR_RETURN(error, true);
+        error = rai::Read(stream_key, account_id);
+        IF_ERROR_RETURN(error, true);
+        if (wallet_id_l != wallet_id || account_id == 0)
+        {
+            assert(0);
+            return true;
+        }
+        
+        data = it->second.Data();
+        size = it->second.Size();
+        if (data == nullptr || size == 0)
+        {
+            assert(0);
+            return true;
+        }
+
+        rai::WalletAccountInfo info;
+        rai::BufferStream stream_value(data, size);
+        error = info.Deserialize(stream_value);
+        IF_ERROR_RETURN(error, true);
+
+        results.emplace_back(account_id, info);
+    }
+
+    return false;
+}
+
+bool rai::Ledger::SelectedWalletIdPut(rai::Transaction& transaction,
+                                      uint32_t wallet_id)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, rai::MetaKey::SELECTED_WALLET_ID);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        rai::Write(stream, wallet_id);
+    }
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.meta_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::SelectedWalletIdGet(rai::Transaction& transaction,
+                                      uint32_t& wallet_id) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, rai::MetaKey::SELECTED_WALLET_ID);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    rai::MdbVal value;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.meta_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = rai::Read(stream, wallet_id);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
 }
 
 bool rai::Ledger::BlockIndexPut_(rai::Transaction& transaction,

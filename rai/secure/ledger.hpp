@@ -66,6 +66,7 @@ public:
     AccountInfo(rai::BlockType, const rai::BlockHash&); // first block
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
+    bool Confirmed(uint64_t) const;
     bool Valid() const;
 
     rai::BlockType type_;
@@ -102,10 +103,42 @@ public:
     uint64_t valid_timestamp_;
 };
 
+class WalletInfo
+{
+public:
+    WalletInfo();
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint32_t version_;
+    uint32_t index_;
+    uint32_t selected_account_id_;
+    rai::uint256_union salt_;
+    rai::uint256_union key_;
+    rai::uint256_union seed_;
+    rai::uint256_union check_;
+};
+
+class WalletAccountInfo
+{
+public:
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint32_t index_;
+    rai::PrivateKey private_key_;
+    rai::PublicKey public_key_;
+};
+
+enum class MetaKey : uint32_t
+{
+    SELECTED_WALLET_ID = 0,
+};
+
 class Ledger
 {
 public:
-    Ledger(rai::ErrorCode&, rai::Store&);
+    Ledger(rai::ErrorCode&, rai::Store&, bool = true);
 
     bool AccountInfoPut(rai::Transaction&, const rai::Account&,
                         const rai::AccountInfo&);
@@ -143,6 +176,7 @@ public:
                  std::shared_ptr<rai::Block>&) const;
     bool ForkGet(const rai::Iterator&, std::shared_ptr<rai::Block>&,
                  std::shared_ptr<rai::Block>&) const;
+    bool ForkDel(rai::Transaction&, const rai::Account&);
     bool ForkDel(rai::Transaction&, const rai::Account&, uint64_t);
     bool ForkExists(rai::Transaction&, const rai::Account&, uint64_t) const;
     rai::Iterator ForkLowerBound(rai::Transaction&, const rai::Account&);
@@ -154,9 +188,15 @@ public:
                            const rai::BlockHash&, const rai::ReceivableInfo&);
     bool ReceivableInfoGet(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&, rai::ReceivableInfo&) const;
+    bool ReceivableInfoGet(const rai::Iterator&, rai::Account&, rai::BlockHash&,
+                           rai::ReceivableInfo&) const;
     bool ReceivableInfoDel(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&);
     bool ReceivableInfoCount(rai::Transaction&, size_t&) const;
+    rai::Iterator ReceivableInfoLowerBound(rai::Transaction&,
+                                           const rai::Account&);
+    rai::Iterator ReceivableInfoUpperBound(rai::Transaction&,
+                                           const rai::Account&);
     bool RewardableInfoPut(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&, const rai::RewardableInfo&);
     bool RewardableInfoGet(rai::Transaction&, const rai::Account&,
@@ -175,6 +215,20 @@ public:
     bool RepWeightGet(const rai::Account&, rai::Amount&) const;
     void RepWeightsGet(rai::Amount&,
                        std::unordered_map<rai::Account, rai::Amount>&) const;
+    bool WalletInfoPut(rai::Transaction&, uint32_t, const rai::WalletInfo&);
+    bool WalletInfoGet(rai::Transaction&, uint32_t, rai::WalletInfo&) const;
+    bool WalletInfoGetAll(
+        rai::Transaction&,
+        std::vector<std::pair<uint32_t, rai::WalletInfo>>&) const;
+    bool WalletAccountInfoPut(rai::Transaction&, uint32_t, uint32_t,
+                              const rai::WalletAccountInfo&);
+    bool WalletAccountInfoGet(rai::Transaction&, uint32_t, uint32_t,
+                              rai::WalletAccountInfo&) const;
+    bool WalletAccountInfoGetAll(
+        rai::Transaction&, uint32_t,
+        std::vector<std::pair<uint32_t, rai::WalletAccountInfo>>&) const;
+    bool SelectedWalletIdPut(rai::Transaction&, uint32_t);
+    bool SelectedWalletIdGet(rai::Transaction&, uint32_t&) const;
 
 private:
     friend class rai::Transaction;
