@@ -31,10 +31,8 @@ Raicoin will be developed based on the ideas of NANO(formerly Raiblocks) but wit
         3rd year: 20M,  
         4th year: 10M,
         from 5th year: about 5% coins.
-        
-8. **Developer Fund**: no coins will be reserved as developer fund, the project is planned to be operated by donation and volunteers.
-        
-9.  **Airdrop**
+                
+8.  **Airdrop**
     * Airdrop is randomly distributed based on the total online time of the node, that is, the higher online time, the higher probability of getting airdrop.
     * Airdrop will last 4 years, the approximate amounts by time:  
         1st quarter of 1st year: 7M,  
@@ -44,7 +42,7 @@ Raicoin will be developed based on the ideas of NANO(formerly Raiblocks) but wit
         2nd year: 5M,  
         3rd year: 2M,  
         4th year: 1M.
-    * In first 2 quarters, only invited nodes can get airdrop. And after then all nodes can get airdrop.
+    * To anti sybil attack, in the first 2 quarters, only invited nodes can get airdrop. And after then all nodes can get airdrop.
     * How to get invitations?
         * To be active github contributors for the project.
         * By donation, the minimum amounts of BTC/NANO for an invitation are as follows(UTC time):  
@@ -62,6 +60,8 @@ Raicoin will be developed based on the ideas of NANO(formerly Raiblocks) but wit
             Aug. 2020: 0.1BTC/1000NANO  
             After then: 0.2BTC/2000NANO  
      * There will be 16 official invited nodes: 8 light nodes, 8 full nodes. 
+     
+9. **Developer Fund**: Donations and the airdrop that official invited nodes get.    
      
 **Roadmap**
   * Beta release: March 31, 2020.
