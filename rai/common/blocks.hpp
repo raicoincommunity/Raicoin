@@ -14,6 +14,7 @@ enum class BlockType : uint8_t
     INVALID     = 0,
     TX_BLOCK    = 1,  // Transaction Block
     REP_BLOCK   = 2,  // Representive Block
+    AD_BLOCK    = 3,  // Airdrop Block
 };
 std::string BlockTypeToString(rai::BlockType);
 
@@ -25,6 +26,7 @@ enum class BlockOpcode : uint8_t
     CHANGE  = 3,
     CREDIT  = 4,
     REWARD  = 5,
+    DESTROY = 6,
 };
 std::string BlockOpcodeToString(rai::BlockOpcode);
 rai::BlockOpcode StringToBlockOpcode(const std::string&);
@@ -38,6 +40,8 @@ public:
     std::string Json() const;
     bool CheckSignature() const;
     bool operator!=(const rai::Block&) const;
+    bool ForkWith(const rai::Block&) const;
+    size_t Size() const;
 
     virtual ~Block()                                          = default;
     virtual bool operator==(const rai::Block&) const          = 0;
@@ -129,7 +133,6 @@ public:
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
 
-    static bool CheckType(rai::BlockType);
     static bool CheckOpcode(rai::BlockOpcode);
     static bool CheckNoteLength(uint32_t);
     static uint32_t MaxNoteLength();
@@ -188,7 +191,6 @@ public:
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
 
-    static bool CheckType(rai::BlockType);
     static bool CheckOpcode(rai::BlockOpcode);
 
 private:
@@ -205,56 +207,58 @@ private:
     rai::Signature signature_;
 };
 
-// Admin Block
-#if 0
-class AdminBlock : public Block
+// Airdrop Block
+class AdBlock : public Block
 {
 public:
-    AdminBlock(rai::BlockOpcode, uint16_t, uint32_t, uint64_t, uint64_t,
-               const rai::Account&, const rai::BlockHash&, const rai::Amount&,
-               uint64_t, uint64_t, const rai::RawKey&, const rai::PublicKey&);
-    AdminBlock(rai::ErrorCode&, rai::Stream&);
-    AdminBlock(rai::ErrorCode&, const rai::Ptree&);
-    virtual ~AdminBlock() = default;
+    AdBlock(rai::BlockOpcode, uint16_t, uint32_t, uint64_t, uint64_t,
+            const rai::Account&, const rai::BlockHash&, const rai::Account&,
+            const rai::Amount&, const rai::uint256_union&, const rai::RawKey&,
+            const rai::PublicKey&);
+    AdBlock(rai::ErrorCode&, rai::Stream&);
+    AdBlock(rai::ErrorCode&, const rai::Ptree&);
+    virtual ~AdBlock() = default;
 
     bool operator==(const rai::Block&) const override;
-    bool operator==(const rai::AdminBlock&) const;
+    bool operator==(const rai::AdBlock&) const;
     using rai::Block::Hash;
     void Hash(blake2b_state&) const override;
     rai::BlockHash Previous() const override;
-    // rai::BlockHash Root() const override;
     void Serialize(rai::Stream&) const override;
     rai::ErrorCode Deserialize(rai::Stream&) override;
-    void SerializeJson(std::string&) const override;
+    void SerializeJson(rai::Ptree&) const override;
     rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
     void SetSignature(const rai::uint512_union&) override;
     rai::Signature Signature() const override;
     rai::BlockType Type() const override;
     rai::BlockOpcode Opcode() const override;
-    //void Visit(rai::BlockVisitor&) const override;
+    rai::ErrorCode Visit(rai::BlockVisitor&) const override;
     rai::Account Account() const override;
+    rai::Amount Balance() const override;
     uint16_t Credit() const override;
     uint32_t Counter() const override;
     uint64_t Timestamp() const override;
+    uint64_t Height() const override;
+    rai::uint256_union Link() const override;
+    rai::Account Representative() const override;
+    bool HasRepresentative() const override;
 
-    static bool CheckType(rai::BlockType);
     static bool CheckOpcode(rai::BlockOpcode);
 
 private:
     rai::BlockType type_;
     rai::BlockOpcode opcode_;
     uint16_t credit_;
-    uint32_t counter_;
+    uint32_t counter_; 
     uint64_t timestamp_;
     uint64_t height_;
     rai::Account account_;
     rai::BlockHash previous_;
-    rai::Amount price_;
-    uint64_t begin_time_;
-    uint64_t end_time_;
+    rai::Account representative_;
+    rai::Amount balance_;
+    rai::uint256_union link_;
     rai::Signature signature_;
 };
-#endif
 
 class BlockVisitor
 {
@@ -264,6 +268,7 @@ public:
     virtual rai::ErrorCode Change(const rai::Block&)  = 0;
     virtual rai::ErrorCode Credit(const rai::Block&)  = 0;
     virtual rai::ErrorCode Reward(const rai::Block&)  = 0;
+    virtual rai::ErrorCode Destroy(const rai::Block&) = 0;
 
     virtual ~BlockVisitor() = default;
 };
