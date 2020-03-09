@@ -39,14 +39,16 @@ std::string rai::BlockTypeToString(rai::BlockType type)
         {
             return "representative";
         }
+        case rai::BlockType::AD_BLOCK:
+        {
+            return "airdrop";
+        }
         default:
         {
             return "unknow";
         }
     }
-
 }
-
 
 std::string rai::BlockOpcodeToString(rai::BlockOpcode opcode)
 {
@@ -75,6 +77,10 @@ std::string rai::BlockOpcodeToString(rai::BlockOpcode opcode)
         case rai::BlockOpcode::REWARD:
         {
             return "reward";
+        }
+        case rai::BlockOpcode::DESTROY:
+        {
+            return "destroy";
         }
         default:
         {
@@ -108,6 +114,11 @@ rai::BlockOpcode rai::StringToBlockOpcode(const std::string& str)
     if (str == "reward")
     {
         return rai::BlockOpcode::REWARD;
+    }
+
+    if (str == "destroy")
+    {
+        return rai::BlockOpcode::DESTROY;
     }
 
     return rai::BlockOpcode::INVALID;
@@ -156,6 +167,37 @@ bool rai::Block::CheckSignature() const
 bool rai::Block::operator!=(const rai::Block& other) const
 {
     return !(*this == other);
+}
+
+bool rai::Block::ForkWith(const rai::Block& other) const
+{
+    if (Account() != other.Account())
+    {
+        return false;
+    }
+
+    if (Height() != other.Height())
+    {
+        return false;
+    }
+
+    if (*this == other)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+size_t rai::Block::Size() const
+{
+    std::vector<uint8_t> bytes;
+    bytes.reserve(1024);
+    {
+        rai::VectorStream stream(bytes);
+        Serialize(stream);
+    }
+    return bytes.size();
 }
 
 bool rai::Block::CheckSignature_() const
@@ -328,31 +370,25 @@ bool rai::TxBlock::operator==(const rai::TxBlock& other) const
 
 void rai::TxBlock::Hash(blake2b_state& state) const
 {
-    blake2b_update(&state, &type_, sizeof(type_));
-    blake2b_update(&state, &opcode_, sizeof(opcode_));
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        rai::Write(stream, type_);
+        rai::Write(stream, opcode_);
+        rai::Write(stream, credit_);
+        rai::Write(stream, counter_);
+        rai::Write(stream, timestamp_);
+        rai::Write(stream, height_);
+        rai::Write(stream, account_.bytes);
+        rai::Write(stream, previous_.bytes);
+        rai::Write(stream, representative_.bytes);
+        rai::Write(stream, balance_.bytes);
+        rai::Write(stream, link_.bytes);
+        rai::Write(stream, note_length_);
+        rai::Write(stream, note_);
+    }
 
-    uint16_t credit = boost::endian::native_to_big(credit_);
-    blake2b_update(&state, &credit, sizeof(credit));
-
-    uint32_t counter = boost::endian::native_to_big(counter_);
-    blake2b_update(&state, &counter, sizeof(counter));
-
-    uint64_t timestamp = boost::endian::native_to_big(timestamp_);
-    blake2b_update(&state, &timestamp, sizeof(timestamp));
-
-    uint64_t height = boost::endian::native_to_big(height_);
-    blake2b_update(&state, &height, sizeof(height));
-
-    blake2b_update(&state, account_.bytes.data(), account_.bytes.size());
-    blake2b_update(&state, previous_.bytes.data(), previous_.bytes.size());
-    blake2b_update(&state, representative_.bytes.data(),
-                  representative_.bytes.size());
-    blake2b_update(&state, balance_.bytes.data(), balance_.bytes.size());
-    blake2b_update(&state, link_.bytes.data(), link_.bytes.size());
-
-    uint32_t length = boost::endian::native_to_big(note_length_);
-    blake2b_update(&state, &length, sizeof(length));
-    blake2b_update(&state, note_.data(), note_.size());
+    blake2b_update(&state, bytes.data(), bytes.size());
 }
 
 rai::BlockHash rai::TxBlock::Previous() const
@@ -444,7 +480,7 @@ rai::ErrorCode rai::TxBlock::Deserialize(rai::Stream& stream)
 void rai::TxBlock::SerializeJson(rai::Ptree& ptree) const
 {
 
-    ptree.put("type", "transaction");
+    ptree.put("type", rai::BlockTypeToString(type_));
     ptree.put("opcode", rai::BlockOpcodeToString(opcode_));
     ptree.put("credit", std::to_string(credit_));
     ptree.put("counter", std::to_string(counter_));
@@ -475,7 +511,7 @@ rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
     {
         error_code = rai::ErrorCode::JSON_BLOCK_TYPE;
         std::string type = ptree.get<std::string>("type");
-        if (type != "transaction")
+        if (type != rai::BlockTypeToString(rai::BlockType::TX_BLOCK))
         {
             return rai::ErrorCode::BLOCK_TYPE;
         }
@@ -695,10 +731,6 @@ bool rai::TxBlock::HasRepresentative() const
     return true;
 }
 
-bool rai::TxBlock::CheckType(rai::BlockType type)
-{
-    return type != rai::BlockType::TX_BLOCK;
-}
 
 bool rai::TxBlock::CheckOpcode(rai::BlockOpcode opcode)
 {
@@ -768,25 +800,22 @@ bool rai::RepBlock::operator==(const rai::RepBlock& other) const
 
 void rai::RepBlock::Hash(blake2b_state& state) const
 {
-    blake2b_update(&state, &type_, sizeof(type_));
-    blake2b_update(&state, &opcode_, sizeof(opcode_));
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        rai::Write(stream, type_);
+        rai::Write(stream, opcode_);
+        rai::Write(stream, credit_);
+        rai::Write(stream, counter_);
+        rai::Write(stream, timestamp_);
+        rai::Write(stream, height_);
+        rai::Write(stream, account_.bytes);
+        rai::Write(stream, previous_.bytes);
+        rai::Write(stream, balance_.bytes);
+        rai::Write(stream, link_.bytes);
+    }
 
-    uint16_t credit = boost::endian::native_to_big(credit_);
-    blake2b_update(&state, &credit, sizeof(credit));
-
-    uint32_t counter = boost::endian::native_to_big(counter_);
-    blake2b_update(&state, &counter, sizeof(counter));
-
-    uint64_t timestamp = boost::endian::native_to_big(timestamp_);
-    blake2b_update(&state, &timestamp, sizeof(timestamp));
-
-    uint64_t height = boost::endian::native_to_big(height_);
-    blake2b_update(&state, &height, sizeof(height));
-
-    blake2b_update(&state, account_.bytes.data(), account_.bytes.size());
-    blake2b_update(&state, previous_.bytes.data(), previous_.bytes.size());
-    blake2b_update(&state, balance_.bytes.data(), balance_.bytes.size());
-    blake2b_update(&state, link_.bytes.data(), link_.bytes.size());
+    blake2b_update(&state, bytes.data(), bytes.size());
 }
 
 rai::BlockHash rai::RepBlock::Previous() const
@@ -829,10 +858,6 @@ rai::ErrorCode rai::RepBlock::Deserialize(rai::Stream& stream)
 
     error = rai::Read(stream, counter_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
-    if (counter_ == 0)
-    {
-        return rai::ErrorCode::BLOCK_COUNTER;
-    }
 
     error = rai::Read(stream, timestamp_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
@@ -863,7 +888,7 @@ rai::ErrorCode rai::RepBlock::Deserialize(rai::Stream& stream)
 
 void rai::RepBlock::SerializeJson(rai::Ptree& ptree) const
 {
-    ptree.put("type", "representative");
+    ptree.put("type", rai::BlockTypeToString(rai::BlockType::REP_BLOCK));
     ptree.put("opcode", rai::BlockOpcodeToString(opcode_));
     ptree.put("credit", std::to_string(credit_));
     ptree.put("counter", std::to_string(counter_));
@@ -891,7 +916,7 @@ rai::ErrorCode rai::RepBlock::DeserializeJson(const rai::Ptree& ptree)
     {
         error_code = rai::ErrorCode::JSON_BLOCK_TYPE;
         std::string type = ptree.get<std::string>("type");
-        if (type != "representative")
+        if (type != rai::BlockTypeToString(rai::BlockType::REP_BLOCK))
         {
             return rai::ErrorCode::BLOCK_TYPE;
         }
@@ -916,10 +941,6 @@ rai::ErrorCode rai::RepBlock::DeserializeJson(const rai::Ptree& ptree)
         std::string counter = ptree.get<std::string>("counter");
         error               = rai::StringToUint(counter, counter_);
         IF_ERROR_RETURN(error, error_code);
-        if (counter_ == 0)
-        {
-            return rai::ErrorCode::BLOCK_COUNTER;
-        }
 
         error_code            = rai::ErrorCode::JSON_BLOCK_TIMESTAMP;
         std::string timestamp = ptree.get<std::string>("timestamp");
@@ -1065,11 +1086,6 @@ bool rai::RepBlock::HasRepresentative() const
     return false;
 }
 
-bool rai::RepBlock::CheckType(rai::BlockType type)
-{
-    return type != rai::BlockType::REP_BLOCK;
-}
-
 bool rai::RepBlock::CheckOpcode(rai::BlockOpcode opcode)
 {
     std::vector<rai::BlockOpcode> opcodes = {
@@ -1079,16 +1095,14 @@ bool rai::RepBlock::CheckOpcode(rai::BlockOpcode opcode)
     return std::find(opcodes.begin(), opcodes.end(), opcode) == opcodes.end();
 }
 
-#if 0
-rai::AdminBlock::AdminBlock(rai::BlockOpcode opcode, uint16_t credit,
-                        uint32_t counter, uint64_t timestamp, uint64_t height,
-                        const rai::Account& account,
-                        const rai::BlockHash& previous,
-                        const rai::Amount& price,
-                        uint64_t begin_time, uint64_t end_time,
-                        const rai::RawKey& private_key,
-                        const rai::PublicKey& public_key)
-    : type_(rai::BlockType::ADMIN_BLOCK),
+
+rai::AdBlock::AdBlock(
+    rai::BlockOpcode opcode, uint16_t credit, uint32_t counter,
+    uint64_t timestamp, uint64_t height, const rai::Account& account,
+    const rai::BlockHash& previous, const rai::Account& representative,
+    const rai::Amount& balance, const rai::uint256_union& link,
+    const rai::RawKey& private_key, const rai::PublicKey& public_key)
+    : type_(rai::BlockType::AD_BLOCK),
       opcode_(opcode),
       credit_(credit),
       counter_(counter),
@@ -1096,75 +1110,68 @@ rai::AdminBlock::AdminBlock(rai::BlockOpcode opcode, uint16_t credit,
       height_(height),
       account_(account),
       previous_(previous),
-      price_(price),
-      begin_time_(begin_time),
-      end_time_(end_time),
+      representative_(representative),
+      balance_(balance),
+      link_(link),
       signature_(rai::SignMessage(private_key, public_key, Hash()))
 {
 }
 
-
-rai::AdminBlock::AdminBlock(rai::ErrorCode& error_code, rai::Stream& stream)
+rai::AdBlock::AdBlock(rai::ErrorCode& error_code, rai::Stream& stream)
 {
     error_code = Deserialize(stream);
 }
 
-rai::AdminBlock::AdminBlock(rai::ErrorCode& error_code, const rai::Ptree& ptree)
+rai::AdBlock::AdBlock(rai::ErrorCode& error_code, const rai::Ptree& ptree)
 {
     error_code = DeserializeJson(ptree);
 }
 
-bool rai::AdminBlock::operator==(const rai::Block& other) const
+
+bool rai::AdBlock::operator==(const rai::Block& other) const
 {
     return BlocksEqual(*this, other);
 }
 
-bool rai::AdminBlock::operator==(const rai::AdminBlock& other) const
+bool rai::AdBlock::operator==(const rai::AdBlock& other) const
 {
     // type_ and opcode_ compared in BlocksEqual
     return (credit_ == other.credit_) && (counter_ == other.counter_)
            && (timestamp_ == other.timestamp_) && (height_ == other.height_)
            && (account_ == other.account_) && (previous_ == other.previous_)
-           && (price_ == other.price_) && (begin_time_ == other.begin_time_)
-           && (end_time_ == other.end_time_)
+           && (representative_ == other.representative_)
+           && (balance_ == other.balance_) && (link_ == other.link_)
            && (signature_ == other.signature_);
 }
 
-void rai::AdminBlock::Hash(blake2b_state& state) const
+void rai::AdBlock::Hash(blake2b_state& state) const
 {
-    blake2b_update(&state, &type_, sizeof(type_));
-    blake2b_update(&state, &opcode_, sizeof(opcode_));
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        rai::Write(stream, type_);
+        rai::Write(stream, opcode_);
+        rai::Write(stream, credit_);
+        rai::Write(stream, counter_);
+        rai::Write(stream, timestamp_);
+        rai::Write(stream, height_);
+        rai::Write(stream, account_.bytes);
+        rai::Write(stream, previous_.bytes);
+        rai::Write(stream, representative_.bytes);
+        rai::Write(stream, balance_.bytes);
+        rai::Write(stream, link_.bytes);
+    }
 
-    uint16_t credit = boost::endian::native_to_big(credit_);
-    blake2b_update(&state, &credit, sizeof(credit));
-
-    uint32_t counter = boost::endian::native_to_big(counter_);
-    blake2b_update(&state, &counter, sizeof(counter));
-
-    uint64_t timestamp = boost::endian::native_to_big(timestamp_);
-    blake2b_update(&state, &timestamp, sizeof(timestamp));
-
-    uint64_t height = boost::endian::native_to_big(height_);
-    blake2b_update(&state, &height, sizeof(height));
-
-    blake2b_update(&state, account_.bytes.data(), account_.bytes.size());
-    blake2b_update(&state, previous_.bytes.data(), previous_.bytes.size());
-    blake2b_update(&state, price_.bytes.data(), price_.bytes.size());
-
-    uint64_t begin_time = boost::endian::native_to_big(begin_time_);
-    blake2b_update(&state, &begin_time, sizeof(begin_time));
-
-    uint64_t end_time = boost::endian::native_to_big(end_time_);
-    blake2b_update(&state, &end_time, sizeof(end_time));
+    blake2b_update(&state, bytes.data(), bytes.size());
 }
 
-rai::BlockHash rai::AdminBlock::Previous() const
+rai::BlockHash rai::AdBlock::Previous() const
 {
     return previous_;
 }
 
 
-void rai::AdminBlock::Serialize(rai::Stream& stream) const
+void rai::AdBlock::Serialize(rai::Stream& stream) const
 {
     rai::Write(stream, type_);
     rai::Write(stream, opcode_);
@@ -1174,28 +1181,36 @@ void rai::AdminBlock::Serialize(rai::Stream& stream) const
     rai::Write(stream, height_);
     rai::Write(stream, account_.bytes);
     rai::Write(stream, previous_.bytes);
-    rai::Write(stream, price_.bytes);
-    rai::Write(stream, begin_time_);
-    rai::Write(stream, end_time_);
+    rai::Write(stream, representative_.bytes);
+    rai::Write(stream, balance_.bytes);
+    rai::Write(stream, link_.bytes);
     rai::Write(stream, signature_.bytes);
 }
 
-rai::ErrorCode rai::AdminBlock::Deserialize(rai::Stream& stream)
+rai::ErrorCode rai::AdBlock::Deserialize(rai::Stream& stream)
 {
     bool error = false;
     
-    type_ = rai::BlockType::ADMIN_BLOCK;
+    type_ = rai::BlockType::AD_BLOCK;
 
     error = rai::Read(stream, opcode_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
-    error = rai::AdminBlock::CheckOpcode(opcode_);
+    error = rai::AdBlock::CheckOpcode(opcode_);
     IF_ERROR_RETURN(error, rai::ErrorCode::BLOCK_OPCODE);
 
     error =  rai::Read(stream, credit_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    if (credit_ == 0)
+    {
+        return rai::ErrorCode::BLOCK_CREDIT;
+    }
 
     error = rai::Read(stream, counter_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    if (counter_ == 0)
+    {
+        return rai::ErrorCode::BLOCK_COUNTER;
+    }
 
     error = rai::Read(stream, timestamp_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
@@ -1209,13 +1224,13 @@ rai::ErrorCode rai::AdminBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, previous_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error = rai::Read(stream, price_.bytes);
+    error = rai::Read(stream, representative_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error = rai::Read(stream, begin_time_);
+    error = rai::Read(stream, balance_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error = rai::Read(stream, end_time_);
+    error = rai::Read(stream, link_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, signature_.bytes);
@@ -1223,32 +1238,28 @@ rai::ErrorCode rai::AdminBlock::Deserialize(rai::Stream& stream)
 
     error = CheckSignature_();
     IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
-    
+
     return rai::ErrorCode::SUCCESS;
 }
 
-void rai::AdminBlock::SerializeJson(std::string& str) const
+void rai::AdBlock::SerializeJson(rai::Ptree& ptree) const
 {
-    rai::Ptree tree;
-    tree.put("type", "admin");
-    tree.put("opcode", rai::BlockOpcodeToString(opcode_));
-    tree.put("credit", std::to_string(credit_));
-    tree.put("counter", std::to_string(counter_));
-    tree.put("timestamp", std::to_string(timestamp_));
-    tree.put("height", std::to_string(height_));
-    tree.put("account", account_.StringAccount());
-    tree.put("previous", previous_.StringHex());
-    tree.put("price", price_.StringDec());
-    tree.put("begin_time", std::to_string(begin_time_));
-    tree.put("end_time", std::to_string(end_time_));
-    tree.put("signature", signature_.StringHex());
 
-    std::stringstream ostream;
-    boost::property_tree::write_json(ostream, tree);
-    str = ostream.str();
+    ptree.put("type", rai::BlockTypeToString(type_));
+    ptree.put("opcode", rai::BlockOpcodeToString(opcode_));
+    ptree.put("credit", std::to_string(credit_));
+    ptree.put("counter", std::to_string(counter_));
+    ptree.put("timestamp", std::to_string(timestamp_));
+    ptree.put("height", std::to_string(height_));
+    ptree.put("account", account_.StringAccount());
+    ptree.put("previous", previous_.StringHex());
+    ptree.put("representative", representative_.StringAccount());
+    ptree.put("balance", balance_.StringDec());
+    ptree.put("link", link_.StringHex());
+    ptree.put("signature", signature_.StringHex());
 }
 
-rai::ErrorCode rai::AdminBlock::DeserializeJson(const rai::Ptree& ptree)
+rai::ErrorCode rai::AdBlock::DeserializeJson(const rai::Ptree& ptree)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
 
@@ -1256,27 +1267,35 @@ rai::ErrorCode rai::AdminBlock::DeserializeJson(const rai::Ptree& ptree)
     {
         error_code = rai::ErrorCode::JSON_BLOCK_TYPE;
         std::string type = ptree.get<std::string>("type");
-        if (type != "admin")
+        if (type != rai::BlockTypeToString(rai::BlockType::AD_BLOCK))
         {
             return rai::ErrorCode::BLOCK_TYPE;
         }
-        type_ = rai::BlockType::ADMIN_BLOCK;
+        type_ = rai::BlockType::AD_BLOCK;
 
         error_code = rai::ErrorCode::JSON_BLOCK_OPCODE;
         std::string opcode = ptree.get<std::string>("opcode");
         opcode_ = rai::StringToBlockOpcode(opcode);
-        bool error = rai::AdminBlock::CheckOpcode(opcode_);
+        bool error = rai::AdBlock::CheckOpcode(opcode_);
         IF_ERROR_RETURN(error, rai::ErrorCode::BLOCK_OPCODE);
 
         error_code = rai::ErrorCode::JSON_BLOCK_CREDIT;
         std::string credit = ptree.get<std::string>("credit");
         error = rai::StringToUint(credit, credit_);
         IF_ERROR_RETURN(error, error_code);
+        if (credit_ == 0)
+        {
+            return rai::ErrorCode::BLOCK_CREDIT;
+        }
 
         error_code = rai::ErrorCode::JSON_BLOCK_COUNTER;
         std::string counter = ptree.get<std::string>("counter");
         error = rai::StringToUint(counter, counter_);
         IF_ERROR_RETURN(error, error_code);
+        if (counter_ == 0)
+        {
+            return rai::ErrorCode::BLOCK_COUNTER;
+        }
 
         error_code = rai::ErrorCode::JSON_BLOCK_TIMESTAMP;
         std::string timestamp = ptree.get<std::string>("timestamp");
@@ -1298,19 +1317,19 @@ rai::ErrorCode rai::AdminBlock::DeserializeJson(const rai::Ptree& ptree)
         error = previous_.DecodeHex(previous);
         IF_ERROR_RETURN(error, error_code);
 
-        error_code = rai::ErrorCode::JSON_BLOCK_PRICE;
-        std::string price = ptree.get<std::string>("price");
-        error = price_.DecodeDec(price);
+        error_code = rai::ErrorCode::JSON_BLOCK_REPRESENTATIVE;
+        std::string representative = ptree.get<std::string>("representative");
+        error = representative_.DecodeAccount(representative);
         IF_ERROR_RETURN(error, error_code);
 
-        error_code = rai::ErrorCode::JSON_BLOCK_BEGIN_TIME;
-        std::string begin_time = ptree.get<std::string>("begin_time");
-        error = rai::StringToUint(begin_time, begin_time_);
+        error_code = rai::ErrorCode::JSON_BLOCK_BALANCE;
+        std::string balance = ptree.get<std::string>("balance");
+        error = balance_.DecodeDec(balance);
         IF_ERROR_RETURN(error, error_code);
 
-        error_code = rai::ErrorCode::JSON_BLOCK_END_TIME;
-        std::string end_time = ptree.get<std::string>("end_time");
-        error = rai::StringToUint(end_time, end_time_);
+        error_code = rai::ErrorCode::JSON_BLOCK_LINK;
+        std::string link = ptree.get<std::string>("link");
+        error = link_.DecodeHex(link);
         IF_ERROR_RETURN(error, error_code);
 
         error_code = rai::ErrorCode::JSON_BLOCK_SIGNATURE;
@@ -1318,7 +1337,7 @@ rai::ErrorCode rai::AdminBlock::DeserializeJson(const rai::Ptree& ptree)
         error = signature_.DecodeHex(signature);
         IF_ERROR_RETURN(error, error_code);
 
-        error = CheckSignature_();
+        error =  CheckSignature_();
         IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
     }
     catch (const std::exception&)
@@ -1329,67 +1348,101 @@ rai::ErrorCode rai::AdminBlock::DeserializeJson(const rai::Ptree& ptree)
     return rai::ErrorCode::SUCCESS;
 }
 
-void rai::AdminBlock::SetSignature(const rai::uint512_union& signature)
+void rai::AdBlock::SetSignature(const rai::uint512_union& signature)
 {
     signature_ = signature;
     CheckSignature_();
 }
 
-rai::Signature rai::AdminBlock::Signature() const
+rai::Signature rai::AdBlock::Signature() const
 {
     return signature_;
 }
 
-rai::BlockType rai::AdminBlock::Type() const
+rai::BlockType rai::AdBlock::Type() const
 {
     return type_;
 }
 
-rai::BlockOpcode rai::AdminBlock::Opcode() const
+rai::BlockOpcode rai::AdBlock::Opcode() const
 {
     return opcode_;
 }
 
-void rai::AdminBlock::Visit(rai::BlockVisitor& visitor) const
+rai::ErrorCode rai::AdBlock::Visit(rai::BlockVisitor& visitor) const
 {
-    visitor.AdminBlock(*this);
+    if (opcode_ == rai::BlockOpcode::RECEIVE)
+    {
+        return visitor.Receive(*this);
+    }
+    else if (opcode_ == rai::BlockOpcode::CHANGE)
+    {
+        return visitor.Change(*this);
+    }
+    else if (opcode_ == rai::BlockOpcode::DESTROY)
+    {
+        return visitor.Destroy(*this);
+    }
+    else
+    {
+        assert(0);
+        return rai::ErrorCode::BLOCK_OPCODE;
+    }
 }
 
-rai::Account rai::AdminBlock::Account() const
+rai::Account rai::AdBlock::Account() const
 {
     return account_;
 }
 
-uint16_t rai::AdminBlock::Credit() const
+rai::Amount rai::AdBlock::Balance() const
+{
+    return balance_;
+}
+
+uint16_t rai::AdBlock::Credit() const
 {
     return credit_;
 }
 
-uint32_t rai::AdminBlock::Counter() const
+uint32_t rai::AdBlock::Counter() const
 {
     return counter_;
 }
 
-uint64_t rai::AdminBlock::Timestamp() const
+uint64_t rai::AdBlock::Timestamp() const
 {
     return timestamp_;
 }
 
-bool rai::AdminBlock::CheckType(rai::BlockType type)
+uint64_t rai::AdBlock::Height() const
 {
-    return type != rai::BlockType::ADMIN_BLOCK;
+    return height_;
 }
 
-bool rai::AdminBlock::CheckOpcode(rai::BlockOpcode opcode)
+rai::uint256_union rai::AdBlock::Link() const
 {
-    std::vector<rai::BlockOpcode> opcodes = {
-        rai::BlockOpcode::PRICE,
-        // TODO: CHANGE
-    };
+    return link_;
+}
+
+rai::Account rai::AdBlock::Representative() const
+{
+    return representative_;
+}
+
+bool rai::AdBlock::HasRepresentative() const
+{
+    return true;
+}
+
+bool rai::AdBlock::CheckOpcode(rai::BlockOpcode opcode)
+{
+    std::vector<rai::BlockOpcode> opcodes = {rai::BlockOpcode::RECEIVE,
+                                             rai::BlockOpcode::CHANGE,
+                                             rai::BlockOpcode::DESTROY};
 
     return std::find(opcodes.begin(), opcodes.end(), opcode) == opcodes.end();
 }
-#endif
 
 std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
     rai::ErrorCode& error_code, const rai::Ptree& ptree)
@@ -1400,7 +1453,7 @@ std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
     {
         error_code = rai::ErrorCode::JSON_BLOCK_TYPE;
         std::string type = ptree.get<std::string>("type");
-        if (type == "transaction")
+        if (type == rai::BlockTypeToString(rai::BlockType::TX_BLOCK))
         {
             std::unique_ptr<rai::TxBlock> ptr(
                 new rai::TxBlock(error_code, ptree));
@@ -1409,10 +1462,19 @@ std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
                 result = std::move(ptr);
             }
         }
-        else if (type == "representative")
+        else if (type == rai::BlockTypeToString(rai::BlockType::REP_BLOCK))
         {
             std::unique_ptr<rai::RepBlock> ptr(
                 new rai::RepBlock(error_code, ptree));
+            if (rai::ErrorCode::SUCCESS == error_code)
+            {
+                result = std::move(ptr);
+            }
+        }
+        else if (type == rai::BlockTypeToString(rai::BlockType::AD_BLOCK))
+        {
+            std::unique_ptr<rai::AdBlock> ptr(
+                new rai::AdBlock(error_code, ptree));
             if (rai::ErrorCode::SUCCESS == error_code)
             {
                 result = std::move(ptr);
@@ -1434,7 +1496,7 @@ std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
 std::unique_ptr<rai::Block> rai::DeserializeBlock(rai::ErrorCode& error_code,
                                                   rai::Stream& stream)
 {
-    std::unique_ptr<rai::Block> result;
+    std::unique_ptr<rai::Block> result(nullptr);
 
     rai::BlockType type;
     bool error = rai::Read(stream, type);
@@ -1460,6 +1522,16 @@ std::unique_ptr<rai::Block> rai::DeserializeBlock(rai::ErrorCode& error_code,
         {
             std::unique_ptr<rai::RepBlock> ptr(
                 new rai::RepBlock(error_code, stream));
+            if (rai::ErrorCode::SUCCESS == error_code)
+            {
+                result = std::move(ptr);
+            }
+            break;
+        }
+        case rai::BlockType::AD_BLOCK:
+        {
+            std::unique_ptr<rai::AdBlock> ptr(
+                new rai::AdBlock(error_code, stream));
             if (rai::ErrorCode::SUCCESS == error_code)
             {
                 result = std::move(ptr);
