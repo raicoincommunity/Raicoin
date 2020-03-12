@@ -2618,6 +2618,692 @@ TEST(AdBlock, deserialize_json_opcode)
     ASSERT_EQ(rai::ErrorCode::BLOCK_OPCODE, error_code);
 }
 
+TEST(AdBlock, deserialize_json_credit)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65536",
+    "counter": "1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block2(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "0xFFFF",
+    "counter": "1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block3(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "01",
+    "counter": "1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block4(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
+
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "0xFFFF",
+    "counter": "-1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block5(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
+
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "",
+    "counter": "1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block6(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
+}
+
+TEST(AdBlock, deserialize_json_counter)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "0A646B2A6A290FD006F54A5EA1FAFC9D8DAE4C2B2F59B095ADCEF425A1D304FEFEB37698BFD1F3EB30278E57484CB241E6BD92C9F3356C90C7484BED94B5750D"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967296",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block2(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_COUNTER, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "0x1",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "68EDBFAB5AF1BC676F5197CB75110CF39256BEE7DC2B236210E66E4B202FBA0A06725E9E1BAED5994F59219122FC8B0F8FE9F0AA39DA0D5CEAA255AD39205B0E"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block3(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_COUNTER, error_code);
+}
+
+TEST(AdBlock, deserialize_json_timestamp)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "9A13CEAADD05C9B72E45477F59F76E2060C166A6A2CD53379B0D5AA1B8D7993A22B5F379A4E58CE313F37C1FA99A6AD9558BECCB3CA9E82FCF2BDB9BC9951406"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551616",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "0A646B2A6A290FD006F54A5EA1FAFC9D8DAE4C2B2F59B095ADCEF425A1D304FEFEB37698BFD1F3EB30278E57484CB241E6BD92C9F3356C90C7484BED94B5750D"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block2(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_TIMESTAMP, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "0x1",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "0A646B2A6A290FD006F54A5EA1FAFC9D8DAE4C2B2F59B095ADCEF425A1D304FEFEB37698BFD1F3EB30278E57484CB241E6BD92C9F3356C90C7484BED94B5750D"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block3(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_TIMESTAMP, error_code);
+}
+
+TEST(AdBlock, deserialize_json_height)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "18446744073709551615",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "D499D46818BF5DC0D2BBEA8A81F6F2D63F3CB03879FADA14500FB71BE19E815BBBAFE3CEC6C17FE07A6EBFFBD9592E7A2A8C16AC9069A5972AA11DEF5D5DE80A"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "18446744073709551616",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "9A13CEAADD05C9B72E45477F59F76E2060C166A6A2CD53379B0D5AA1B8D7993A22B5F379A4E58CE313F37C1FA99A6AD9558BECCB3CA9E82FCF2BDB9BC9951406"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block2(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "0x1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "9A13CEAADD05C9B72E45477F59F76E2060C166A6A2CD53379B0D5AA1B8D7993A22B5F379A4E58CE313F37C1FA99A6AD9558BECCB3CA9E82FCF2BDB9BC9951406"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block3(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "9A13CEAADD05C9B72E45477F59F76E2060C166A6A2CD53379B0D5AA1B8D7993A22B5F379A4E58CE313F37C1FA99A6AD9558BECCB3CA9E82FCF2BDB9BC9951406"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block4(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "01",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "9A13CEAADD05C9B72E45477F59F76E2060C166A6A2CD53379B0D5AA1B8D7993A22B5F379A4E58CE313F37C1FA99A6AD9558BECCB3CA9E82FCF2BDB9BC9951406"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block5(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "-1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
+    "signature": "9A13CEAADD05C9B72E45477F59F76E2060C166A6A2CD53379B0D5AA1B8D7993A22B5F379A4E58CE313F37C1FA99A6AD9558BECCB3CA9E82FCF2BDB9BC9951406"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block6(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
+}
+
+TEST(AdBlock, deserialize_json_account)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "18446744073709551615",
+    "account": "0000000000000000000000000000000000000000000000000000000000000000",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "1",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_ACCOUNT, error_code);
+}
+
+TEST(AdBlock, deserialize_json_representative)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "18446744073709551615",
+    "height": "18446744073709551615",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "0000000000000000000000000000000000000000000000000000000000000000",
+    "balance": "1",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_REPRESENTATIVE, error_code);
+}
+
+TEST(AdBlock, deserialize_json_balance)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "340282366920938463463374607431768211455",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "340282366920938463463374607431768211456",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block2(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "0x1",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block3(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block4(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "01",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block5(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
+
+    str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "-1",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block6(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
+}
+
+TEST(AdBlock, deserialize_json_link)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "340282366920938463463374607431768211455",
+    "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0A"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_LINK, error_code);
+}
+
+TEST(AdBlock, deserialize_json_signature)
+{
+    std::string str = R"%%%({
+    "type": "airdrop",
+    "opcode": "receive",
+    "credit": "65535",
+    "counter": "4294967295",
+    "timestamp": "1541128318",
+    "height": "1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
+    "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "balance": "340282366920938463463374607431768211455",
+    "link": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signature": "F5352B1A581310CD4095A63EB8D31CEDAB29189BD03D091EAF985C257BDA9CE18E4052661C957D1F6CFEEBD29935336663E0DCDF7C2E6F06C9BAA47474F1CB0"
+})%%%";
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream = std::stringstream(str);
+    boost::property_tree::read_json(stream, ptree);
+    rai::AdBlock block1(error_code, ptree);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_SIGNATURE, error_code);
+}
+
+TEST(AdBlock, deserialize)
+{
+    rai::Account account;
+    rai::BlockHash hash;
+    rai::Account representive;
+    rai::Amount balance;
+    rai::uint256_union link;
+    rai::RawKey raw_key;
+    rai::PublicKey public_key;
+
+    account.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+    representive.DecodeHex(
+        "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252");
+    balance.DecodeDec("1");
+    link.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+    raw_key.data_.DecodeHex(
+        "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4");
+    public_key.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+
+    rai::AdBlock block(rai::BlockOpcode::DESTROY, 1, 1, 1541128318, 1, account,
+                       hash, representive, balance, link, raw_key, public_key);
+    std::string str("");
+    str += "06000100000001";  // opcode + credit + counter
+    str += "000000005BDBC07E";  // timestamp
+    str += "0000000000000001";  // height
+                                // account
+    str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
+    str += hash.StringHex();  // hash
+    // representive
+    str += "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252";
+    str += "00000000000000000000000000000001";  // balance
+    // link
+    str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
+    // signature
+    str +=
+        "2E119431BA93B502C2B0E3A8AF45C7561830FE7B952C19ACF60A2E425BC9201D425110488907CBEE54E54FA1FEF446AB0ED4DAF41321E027D8C28FC65D151107";
+
+    std::vector<uint8_t> bytes;
+    bool error = TestDecodeHex(str, bytes);
+    ASSERT_FALSE(error);
+    rai::BufferStream stream(bytes.data(), bytes.size());
+    rai::ErrorCode error_code;
+    rai::AdBlock block2(error_code, stream);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+    ASSERT_EQ(block, block2);
+
+    rai::BufferStream stream3(bytes.data(), bytes.size() - 1);
+    rai::AdBlock block3(error_code, stream3);
+    ASSERT_EQ(rai::ErrorCode::STREAM, error_code);
+}
+
+TEST(AdBlock, serialize)
+{
+
+    rai::Account account;
+    rai::BlockHash hash;
+    rai::Account representive;
+    rai::Amount balance;
+    rai::uint256_union link;
+    rai::RawKey raw_key;
+    rai::PublicKey public_key;
+
+    account.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+    representive.DecodeHex(
+        "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252");
+    balance.DecodeDec("1");
+    link.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+    raw_key.data_.DecodeHex(
+        "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4");
+    public_key.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+
+    rai::AdBlock block(rai::BlockOpcode::DESTROY, 1, 1, 1541128318, 1, account,
+                       hash, representive, balance, link, raw_key, public_key);
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        block.Serialize(stream);
+    }
+                       
+    std::string str("");
+    str += "0306000100000001";  // type + opcode + credit + counter
+    str += "000000005BDBC07E";  // timestamp
+    str += "0000000000000001";  // height
+                                // account
+    str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
+    str += hash.StringHex();  // hash
+    // representive
+    str += "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252";
+    str += "00000000000000000000000000000001";  // balance
+    // link
+    str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
+    // signature
+    str +=
+        "2E119431BA93B502C2B0E3A8AF45C7561830FE7B952C19ACF60A2E425BC9201D425110488907CBEE54E54FA1FEF446AB0ED4DAF41321E027D8C28FC65D151107";
+    std::vector<uint8_t> bytes_expect;
+    bool error = TestDecodeHex(str, bytes_expect);
+    ASSERT_FALSE(error);
+    ASSERT_EQ(bytes_expect, bytes);
+    ASSERT_EQ(232, block.Size());
+}
+
 TEST(blocks, DeserializeBlockJson_TxBlock)
 {
     rai::Account account;
@@ -2685,26 +3371,30 @@ TEST(blocks, DeserializeBlockJson_RepBlock)
     ASSERT_EQ(rai::BlockType::REP_BLOCK, ptr->Type());
 }
 
-#if 0
-TEST(blocks, DeserializeBlockJson_AdminBlock)
+TEST(blocks, DeserializeBlockJson_AdBlock)
 {
     rai::Account account;
     rai::BlockHash hash;
-    rai::Amount price;
+    rai::Account representive;
+    rai::Amount balance;
+    rai::uint256_union link;
     rai::RawKey raw_key;
     rai::PublicKey public_key;
 
     account.DecodeHex(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
-    price.DecodeDec("1");
+    representive.DecodeHex(
+        "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252");
+    balance.DecodeDec("1");
+    link.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
     raw_key.data_.DecodeHex(
         "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4");
     public_key.DecodeHex(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
 
-    rai::AdminBlock block(rai::BlockOpcode::PRICE, 1, 1, 1541128318, 1, account,
-                          hash, price, 1541128318, 1543720318, raw_key,
-                          public_key);
+    rai::AdBlock block(rai::BlockOpcode::DESTROY, 1, 1, 1541128318, 1, account,
+                       hash, representive, balance, link, raw_key, public_key);
     rai::Ptree ptree;
     rai::ErrorCode error_code;
     std::stringstream stream = std::stringstream(block.Json());
@@ -2712,9 +3402,8 @@ TEST(blocks, DeserializeBlockJson_AdminBlock)
     std::unique_ptr<rai::Block> ptr =
         rai::DeserializeBlockJson(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
-    ASSERT_EQ(rai::BlockType::ADMIN_BLOCK, ptr->Type());
+    ASSERT_EQ(rai::BlockType::AD_BLOCK, ptr->Type());
 }
-#endif
 
 TEST(blocks, DeserializeBlock_TxBlock)
 {
@@ -2789,26 +3478,30 @@ TEST(blocks, DeserializeBlock_RepBlock)
     ASSERT_EQ(block, *ptr);
 }
 
-#if 0
-TEST(blocks, DeserializeBlock_AdminBlock)
+TEST(blocks, DeserializeBlock_AdBlock)
 {
     rai::Account account;
     rai::BlockHash hash;
-    rai::Amount price;
+    rai::Account representive;
+    rai::Amount balance;
+    rai::uint256_union link;
     rai::RawKey raw_key;
     rai::PublicKey public_key;
 
     account.DecodeHex(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
-    price.DecodeDec("1");
+    representive.DecodeHex(
+        "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252");
+    balance.DecodeDec("1");
+    link.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
     raw_key.data_.DecodeHex(
         "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4");
     public_key.DecodeHex(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
 
-    rai::AdminBlock block(rai::BlockOpcode::PRICE, 1, 1, 1541128318, 1, account,
-                          hash, price, 1541128318, 1543720318, raw_key,
-                          public_key);
+    rai::AdBlock block(rai::BlockOpcode::DESTROY, 1, 1, 1541128318, 1, account,
+                       hash, representive, balance, link, raw_key, public_key);
     std::vector<uint8_t> bytes;
     {
         rai::VectorStream stream(bytes);
@@ -2821,4 +3514,3 @@ TEST(blocks, DeserializeBlock_AdminBlock)
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(block, *ptr);
 }
-#endif
