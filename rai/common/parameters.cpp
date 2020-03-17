@@ -1,5 +1,76 @@
 #include <rai/common/parameters.hpp>
 
+uint64_t rai::EpochTimestamp()
+{
+    switch (rai::RAI_NETWORK)
+    {
+        case rai::RaiNetworks::TEST:
+        {
+            return rai::TEST_EPOCH_TIMESTAMP;
+        }
+        case rai::RaiNetworks::BETA:
+        {
+            throw std::runtime_error("Beta network epoch timestamp is missing");
+        }
+        case rai::RaiNetworks::LIVE:
+        {
+            throw std::runtime_error("Live network epoch timestamp is missing");
+        }
+        default:
+        {
+            throw std::runtime_error("Unknown rai::RAI_NETWORK");
+        }
+    }
+}
+
+std::string rai::GenesisPublicKey()
+{
+    switch (rai::RAI_NETWORK)
+    {
+        case rai::RaiNetworks::TEST:
+        {
+            return rai::TEST_PUBLIC_KEY;
+        }
+        case rai::RaiNetworks::BETA:
+        {
+            throw std::runtime_error(
+                "Beta network genesis public key is missing");
+        }
+        case rai::RaiNetworks::LIVE:
+        {
+            throw std::runtime_error(
+                "Live network genesis public key is missing");
+        }
+        default:
+        {
+            throw std::runtime_error("Unknown rai::RAI_NETWORK");
+        }
+    }
+}
+
+std::string rai::GenesisBlock()
+{
+    switch (rai::RAI_NETWORK)
+    {
+        case rai::RaiNetworks::TEST:
+        {
+            return rai::TEST_GENESIS_BLOCK;
+        }
+        case rai::RaiNetworks::BETA:
+        {
+            throw std::runtime_error("Beta network genesis block is missing");
+        }
+        case rai::RaiNetworks::LIVE:
+        {
+            throw std::runtime_error("Live network genesis block is missing");
+        }
+        default:
+        {
+            throw std::runtime_error("Unknown rai::RAI_NETWORK");
+        }
+    }
+}
+
 // Credit price and reward rate take 360 days as one year and adjust quarterly
 rai::Amount rai::CreditPrice(uint64_t timestamp)
 {
@@ -16,17 +87,17 @@ rai::Amount rai::CreditPrice(uint64_t timestamp)
         3    * mRAI, 2    * mRAI, 1   *  mRAI, 1    * mRAI,  // 8th year
     };
 
-    if (timestamp < rai::EPOCH_TIMESTAMP)
+    if (timestamp < rai::EpochTimestamp())
     {
         return 0;
     }
 
-    if (timestamp >= rai::EPOCH_TIMESTAMP + quarter * max_quarters)
+    if (timestamp >= rai::EpochTimestamp() + quarter * max_quarters)
     {
         return mRAI;
     }
 
-    return prices[(timestamp - rai::EPOCH_TIMESTAMP) / quarter];
+    return prices[(timestamp - rai::EpochTimestamp()) / quarter];
 }
 
 rai::Amount rai::RewardRate(uint64_t timestamp)
@@ -40,17 +111,17 @@ rai::Amount rai::RewardRate(uint64_t timestamp)
         270  * uRAI, 270  * uRAI, 270 *  uRAI, 270  * uRAI,  // 4th year
     };
 
-    if (timestamp < rai::EPOCH_TIMESTAMP)
+    if (timestamp < rai::EpochTimestamp())
     {
         return 0;
     }
 
-    if (timestamp >= rai::EPOCH_TIMESTAMP + quarter * max_quarters)
+    if (timestamp >= rai::EpochTimestamp() + quarter * max_quarters)
     {
         return 140 * uRAI;
     }
 
-    return rates[(timestamp - rai::EPOCH_TIMESTAMP) / quarter];
+    return rates[(timestamp - rai::EpochTimestamp()) / quarter];
 }
 
 rai::Amount rai::RewardAmount(const rai::Amount& balance, uint64_t begin,
@@ -59,7 +130,7 @@ rai::Amount rai::RewardAmount(const rai::Amount& balance, uint64_t begin,
     const rai::uint256_t  day_s(24 * 60 * 60);
     const rai::uint256_t  rai_s(rai::RAI);
 
-    if (begin > end || begin < rai::EPOCH_TIMESTAMP)
+    if (begin > end || begin < rai::EpochTimestamp())
     {
         return rai::Amount(0);
     }
@@ -77,12 +148,12 @@ uint64_t rai::RewardTimestamp(uint64_t begin, uint64_t end)
 {
     uint64_t constexpr day = 24 * 60 * 60;
 
-    if (begin > end || begin < rai::EPOCH_TIMESTAMP)
+    if (begin > end || begin < rai::EpochTimestamp())
     {
         return 0;
     }
 
-    uint64_t result = begin + (end - begin) / 2 + day;
+    uint64_t result = begin + (end - begin + 1) / 2 + day;
     if (end > result)
     {
         result = end;
@@ -97,12 +168,12 @@ uint16_t rai::MaxAllowedForks(uint64_t timestamp)
     uint16_t constexpr max_forks = 256;
     uint64_t constexpr quarter = 90 * 24 * 60 * 60;
 
-    if (timestamp < rai::EPOCH_TIMESTAMP)
+    if (timestamp < rai::EpochTimestamp())
     {
         return min_forks;
     }
 
-    uint64_t forks = (timestamp - rai::EPOCH_TIMESTAMP) / quarter;
+    uint64_t forks = (timestamp - rai::EpochTimestamp()) / quarter;
     if (forks < min_forks)
     {
         return min_forks;
