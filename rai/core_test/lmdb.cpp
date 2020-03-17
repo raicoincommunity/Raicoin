@@ -47,8 +47,8 @@ TEST(lmdb, put_get_del)
     val_data.mv_size = sizeof(data);
     val_data.mv_data = data;
     ret = mdb_put(txn, dbi, &val_key, &val_data, 0);
-    ASSERT_EQ(0, ret);
-
+    ASSERT_EQ(0, ret); 
+   
     val_key.mv_size = sizeof(key2);
     val_key.mv_data = key2;
     val_data.mv_size = sizeof(data2);
@@ -146,7 +146,7 @@ TEST(lmdb, perfmance)
     ret = mdb_env_set_mapsize (env, 1ULL * 1024 * 1024 * 1024 * 128);
     ASSERT_EQ(0, ret);
     ret = mdb_env_open(env, file.c_str(), MDB_NOSUBDIR|MDB_NOTLS, 0600);
-    ASSERT_EQ(0, ret);
+    ASSERT_EQ(0, ret); 
     ret = mdb_txn_begin(env, nullptr, 0, &txn);
     ASSERT_EQ(0, ret);
     ret = mdb_dbi_open(txn, db.c_str(), MDB_CREATE, &dbi);

@@ -13,8 +13,9 @@ enum class RaiNetworks
     // Normal work parameters, secret live key, live IP ports
     LIVE,
 };
-rai::RaiNetworks constexpr RAI_NETWORK = RaiNetworks::ACTIVE_NETWORK;
+rai::RaiNetworks constexpr RAI_NETWORK = rai::RaiNetworks::ACTIVE_NETWORK;
 
+uint64_t constexpr TEST_EPOCH_TIMESTAMP = 1577836800;
 const std::string TEST_PRIVATE_KEY =
     "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4";
 // rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo
@@ -22,29 +23,37 @@ const std::string TEST_PUBLIC_KEY =
     "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
 
 const std::string TEST_GENESIS_BLOCK = R"%%%({
-    "type": "representative",
+    "type": "transaction",
     "opcode": "receive",
     "credit": "512",
     "counter": "1",
-    "timestamp": "1564272000",
+    "timestamp": "1577836800",
     "height": "0",
     "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
     "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+    "representative": "rai_1nwbq4dzmo7oe8kzz6ox3bdp75n6chhfrd344yforc8bo4n9mbi66oswoac9",
     "balance": "10000000000000000",
     "link": "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0",
-    "signature": "7CF2CDCC44E7765DF8C0B8B30E1B207489DCBB06C594EBC44D9E3D3E08AE4CCF6A1FF4D4BB19615FFEE5E6496C664E63B3430E6B9F6E8DBBD247195B95712206"
+    "note_length": "0",
+    "signature": "67DF01C204603C0715CAA3B1CB01B1CE1ED84E499F3432D85D01B1509DE9C51D4267FEAB2E376903A625B106818B0129FAC19B78C2F5631F8CAB48A7DF502602"
 })%%%";
 
-uint64_t constexpr EPOCH_TIMESTAMP = 1564272000;
-uint64_t constexpr MAX_TIMESTAMP_DIFF = 300;
-uint64_t constexpr MIN_CONFIRM_INTERVAL = 5;
+uint64_t constexpr MAX_TIMESTAMP_DIFF      = 300;
+uint64_t constexpr MIN_CONFIRM_INTERVAL    = 10;
 uint16_t constexpr TRANSACTIONS_PER_CREDIT = 20;
-uint32_t constexpr CONFIRM_WEIGHT_PERCENTAGE = 75;
+uint16_t constexpr MAX_ACCOUNT_CREDIT      = 65535;
+uint32_t constexpr MAX_ACCOUNT_DAILY_TRANSACTIONS =
+    MAX_ACCOUNT_CREDIT * TRANSACTIONS_PER_CREDIT;
+uint32_t constexpr CONFIRM_WEIGHT_PERCENTAGE      = 75;
 uint32_t constexpr FORK_ELECTION_ROUNDS_THRESHOLD = 5;
-
+uint32_t constexpr AIRDROP_ACCOUNTS = 10000;
 
 // Votes from qualified representatives will be broadcasted
 const rai::Amount QUALIFIED_REP_WEIGHT = rai::Amount(256 * rai::RAI);
+
+uint64_t EpochTimestamp();
+std::string GenesisPublicKey();
+std::string GenesisBlock();
 
 rai::Amount CreditPrice(uint64_t);
 rai::Amount RewardRate(uint64_t);

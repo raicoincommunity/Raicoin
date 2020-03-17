@@ -24,128 +24,128 @@ TEST(parameters, RewardAmount)
 {
     uint64_t constexpr day = 24 * 60 * 60;
     rai::Amount expect(0);
-    rai::Amount result = rai::RewardAmount(rai::RAI, rai::EPOCH_TIMESTAMP - 1,
+    rai::Amount result = rai::RewardAmount(rai::RAI, rai::EpochTimestamp() - 1,
                                           std::numeric_limits<uint64_t>::max());
     ASSERT_EQ(expect, result);
 
-    result = rai::RewardAmount(rai::RAI, rai::EPOCH_TIMESTAMP + 2,
-                               rai::EPOCH_TIMESTAMP + 1);
+    result = rai::RewardAmount(rai::RAI, rai::EpochTimestamp() + 2,
+                               rai::EpochTimestamp() + 1);
     ASSERT_EQ(expect, result);
 
     expect = 7800 * rai::uRAI;
-    result = rai::RewardAmount(rai::RAI, rai::EPOCH_TIMESTAMP,
-                               rai::EPOCH_TIMESTAMP + day);
+    result = rai::RewardAmount(rai::RAI, rai::EpochTimestamp(),
+                               rai::EpochTimestamp() + day);
     ASSERT_EQ(expect, result);
 
     expect = 4600  * rai::uRAI;
-    result = rai::RewardAmount(rai::RAI, rai::EPOCH_TIMESTAMP + 89 * day,
-                               rai::EPOCH_TIMESTAMP + 90 * day);
+    result = rai::RewardAmount(rai::RAI, rai::EpochTimestamp() + 89 * day,
+                               rai::EpochTimestamp() + 90 * day);
     ASSERT_EQ(expect, result);
 
     expect = 3000  * rai::uRAI;
-    result = rai::RewardAmount(rai::RAI, rai::EPOCH_TIMESTAMP + 360 * day,
-                               rai::EPOCH_TIMESTAMP + 362 * day);
+    result = rai::RewardAmount(rai::RAI, rai::EpochTimestamp() + 360 * day,
+                               rai::EpochTimestamp() + 362 * day);
     ASSERT_EQ(expect, result);
 
     expect = 270  * rai::uRAI;
     result =
-        rai::RewardAmount(rai::RAI, rai::EPOCH_TIMESTAMP + (4 * 360 - 2) * day,
-                          rai::EPOCH_TIMESTAMP + (4 * 360 - 1) * day);
+        rai::RewardAmount(rai::RAI, rai::EpochTimestamp() + (4 * 360 - 2) * day,
+                          rai::EpochTimestamp() + (4 * 360 - 1) * day);
     ASSERT_EQ(expect, result);
 
     expect = 540 * rai::uRAI;
     result = rai::RewardAmount(2 * rai::RAI,
-                               rai::EPOCH_TIMESTAMP + (4 * 360 - 2) * day,
-                               rai::EPOCH_TIMESTAMP + (4 * 360 - 1) * day);
+                               rai::EpochTimestamp() + (4 * 360 - 2) * day,
+                               rai::EpochTimestamp() + (4 * 360 - 1) * day);
     ASSERT_EQ(expect, result);
 
     expect = 140 * rai::uRAI;
     result = rai::RewardAmount(rai::RAI,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day,
-                               rai::EPOCH_TIMESTAMP + (4 * 360 + 1) * day);
+                               rai::EpochTimestamp() + 4 * 360 * day,
+                               rai::EpochTimestamp() + (4 * 360 + 1) * day);
     ASSERT_EQ(expect, result);
 
     expect = 70 * rai::uRAI;
     result = rai::RewardAmount(rai::RAI,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day + day / 2);
+                               rai::EpochTimestamp() + 4 * 360 * day,
+                               rai::EpochTimestamp() + 4 * 360 * day + day / 2);
     ASSERT_EQ(expect, result);
 
     expect = 1;
     result = rai::RewardAmount(rai::RAI / (70 * rai::uRAI) + 1,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day + day / 2);
+                               rai::EpochTimestamp() + 4 * 360 * day,
+                               rai::EpochTimestamp() + 4 * 360 * day + day / 2);
     ASSERT_EQ(expect, result);
 
     expect = 1;
-    result = rai::RewardAmount(rai::RAI / 90, rai::EPOCH_TIMESTAMP,
-                               rai::EPOCH_TIMESTAMP + 1);
+    result = rai::RewardAmount(rai::RAI / 90, rai::EpochTimestamp(),
+                               rai::EpochTimestamp() + 1);
     ASSERT_EQ(expect, result);
 
     expect = 0;
-    result = rai::RewardAmount(rai::RAI / 91, rai::EPOCH_TIMESTAMP,
-                               rai::EPOCH_TIMESTAMP + 1);
+    result = rai::RewardAmount(rai::RAI / 91, rai::EpochTimestamp(),
+                               rai::EpochTimestamp() + 1);
     ASSERT_EQ(expect, result);
 
     expect = 1;
-    result = rai::RewardAmount(11076924, rai::EPOCH_TIMESTAMP,
-                               rai::EPOCH_TIMESTAMP + 1);
+    result = rai::RewardAmount(11076924, rai::EpochTimestamp(),
+                               rai::EpochTimestamp() + 1);
     ASSERT_EQ(expect, result);
 
     expect = 0;
-    result = rai::RewardAmount(11076923, rai::EPOCH_TIMESTAMP,
-                               rai::EPOCH_TIMESTAMP + 1);
+    result = rai::RewardAmount(11076923, rai::EpochTimestamp(),
+                               rai::EpochTimestamp() + 1);
     ASSERT_EQ(expect, result);
 
     expect = 1;
-    result = rai::RewardAmount(617142858, rai::EPOCH_TIMESTAMP + 4 * 360 * day,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day + 1);
+    result = rai::RewardAmount(617142858, rai::EpochTimestamp() + 4 * 360 * day,
+                               rai::EpochTimestamp() + 4 * 360 * day + 1);
     ASSERT_EQ(expect, result);
 
     expect = 0;
-    result = rai::RewardAmount(617142857, rai::EPOCH_TIMESTAMP + 4 * 360 * day,
-                               rai::EPOCH_TIMESTAMP + 4 * 360 * day + 1);
+    result = rai::RewardAmount(617142857, rai::EpochTimestamp() + 4 * 360 * day,
+                               rai::EpochTimestamp() + 4 * 360 * day + 1);
     ASSERT_EQ(expect, result);
 }
 
 TEST(parameters, RewardTimestamp)
 {
     uint64_t constexpr day = 24 * 60 * 60;
-    uint64_t begin = rai::EPOCH_TIMESTAMP - 1;
-    uint64_t end = rai::EPOCH_TIMESTAMP + 1;
+    uint64_t begin = rai::EpochTimestamp() - 1;
+    uint64_t end = rai::EpochTimestamp() + 1;
 
     uint64_t ret = rai::RewardTimestamp(begin, end);
     ASSERT_EQ(0, ret);
 
-    begin = rai::EPOCH_TIMESTAMP + 2;
-    end = rai::EPOCH_TIMESTAMP + 1;
+    begin = rai::EpochTimestamp() + 2;
+    end = rai::EpochTimestamp() + 1;
     ret = rai::RewardTimestamp(begin, end);
     ASSERT_EQ(0, ret);
 
-    begin = rai::EPOCH_TIMESTAMP;
-    end = rai::EPOCH_TIMESTAMP + 1;
+    begin = rai::EpochTimestamp();
+    end = rai::EpochTimestamp() + 1;
     ret = rai::RewardTimestamp(begin, end);
-    ASSERT_EQ(rai::EPOCH_TIMESTAMP + day, ret);
+    ASSERT_EQ(rai::EpochTimestamp() + day + 1, ret);
 
-    begin = rai::EPOCH_TIMESTAMP;
-    end = rai::EPOCH_TIMESTAMP + 2;
+    begin = rai::EpochTimestamp();
+    end = rai::EpochTimestamp() + 2;
     ret = rai::RewardTimestamp(begin, end);
-    ASSERT_EQ(rai::EPOCH_TIMESTAMP + day + 1, ret);
+    ASSERT_EQ(rai::EpochTimestamp() + day + 1, ret);
 
-    begin = rai::EPOCH_TIMESTAMP;
-    end = rai::EPOCH_TIMESTAMP + 2 * day - 4;
+    begin = rai::EpochTimestamp();
+    end = rai::EpochTimestamp() + 2 * day - 4;
     ret = rai::RewardTimestamp(begin, end);
-    ASSERT_EQ(rai::EPOCH_TIMESTAMP + 2 * day - 2, ret);
+    ASSERT_EQ(rai::EpochTimestamp() + 2 * day - 2, ret);
 
-    begin = rai::EPOCH_TIMESTAMP;
-    end = rai::EPOCH_TIMESTAMP + 2 * day + 2;
+    begin = rai::EpochTimestamp();
+    end = rai::EpochTimestamp() + 2 * day + 2;
     ret = rai::RewardTimestamp(begin, end);
-    ASSERT_EQ(rai::EPOCH_TIMESTAMP + 2 * day + 2, ret);
+    ASSERT_EQ(rai::EpochTimestamp() + 2 * day + 2, ret);
 
-    begin = rai::EPOCH_TIMESTAMP;
-    end = rai::EPOCH_TIMESTAMP + 3 * day;
+    begin = rai::EpochTimestamp();
+    end = rai::EpochTimestamp() + 3 * day;
     ret = rai::RewardTimestamp(begin, end);
-    ASSERT_EQ(rai::EPOCH_TIMESTAMP + 3 * day, ret);
+    ASSERT_EQ(rai::EpochTimestamp() + 3 * day, ret);
 }
 
 TEST(parameters, TEST_GENESIS_BLOCK)
@@ -154,12 +154,12 @@ TEST(parameters, TEST_GENESIS_BLOCK)
     rai::ErrorCode error_code;
     std::stringstream stream(rai::TEST_GENESIS_BLOCK);
     boost::property_tree::read_json(stream, ptree);
-    rai::RepBlock block(error_code, ptree);
+    rai::TxBlock block(error_code, ptree);
     
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(false, block.CheckSignature());
     ASSERT_EQ(block.Balance(), rai::Amount(10000000 * rai::RAI));
-    ASSERT_EQ(rai::EPOCH_TIMESTAMP, block.Timestamp());
+    ASSERT_EQ(rai::EpochTimestamp(), block.Timestamp());
 
     rai::PublicKey public_key;
     bool error = public_key.DecodeHex(rai::TEST_PUBLIC_KEY);
