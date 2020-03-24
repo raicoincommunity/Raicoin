@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <rai/common/blocks.hpp>
 #include <rai/common/numbers.hpp>
+#include <rai/common/util.hpp>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -29,6 +30,7 @@ class RepVoteInfo
 public:
     RepVoteInfo();
     RepVoteInfo(bool, const rai::Amount&, const rai::Vote&);
+    uint64_t WeightFactor() const;
 
     bool conflict_found_;
     rai::Amount weight_;
@@ -54,6 +56,7 @@ public:
     rai::Account account_;
     uint64_t height_;
     bool fork_found_;
+    bool broadcast_;
     uint32_t rounds_;
     uint32_t rounds_fork_;
     uint32_t wins_;
@@ -82,7 +85,10 @@ class Elections
 public:
     Elections(rai::Node&);
     ~Elections();
+    void Add(const std::shared_ptr<rai::Block>&);
     void Add(const std::vector<std::shared_ptr<rai::Block>>&);
+    std::vector<std::pair<rai::Account, uint64_t>> GetAll() const;
+    bool Get(const rai::Account&, rai::Ptree&) const;
     void Run();
     void Stop();
     void ProcessElection(const rai::Election& election);
@@ -95,9 +101,9 @@ public:
                          const rai::Amount&);
 
     static std::chrono::seconds constexpr FORK_ELECTION_DELAY =
-        std::chrono::seconds(60);
+        std::chrono::seconds(16);
     static std::chrono::seconds constexpr FORK_ELECTION_INTERVAL =
-        std::chrono::seconds(30);
+        std::chrono::seconds(16);
     static std::chrono::seconds constexpr NON_FORK_ELECTION_DELAY =
         std::chrono::seconds(1);
     static std::chrono::seconds constexpr NON_FORK_ELECTION_INTERVAL =
@@ -114,6 +120,7 @@ private:
                       rai::Vote&) const;
     void AddRepVoteInfo_(const rai::Election&, const rai::Account&,
                          const rai::RepVoteInfo&);
+    void ModifyBroadcast_(const rai::Election&, bool);
     void ModifyRounds_(const rai::Election&, uint32_t);
     void ModifyRoundsFork_(const rai::Election&, uint32_t);
     void ModifyWins_(const rai::Election&, uint32_t);

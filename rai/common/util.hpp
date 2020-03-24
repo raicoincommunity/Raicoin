@@ -7,6 +7,7 @@
 #include <mutex>
 #include <streambuf>
 #include <string>
+#include <sstream>
 #include <type_traits>
 #include <vector>
 #include <boost/endian/conversion.hpp>
@@ -146,6 +147,11 @@ void DumpBytes(const uint8_t* data, size_t size);
 template <typename T>
 bool StringToUint(const std::string& str, T& value)
 {
+    if (str.empty())
+    {
+        return true;
+    }
+    
     if (str.find_first_not_of("0123456789") != std::string::npos)
     {
         return true;
@@ -196,6 +202,29 @@ inline bool SameDay(uint64_t t1, uint64_t t2)
     return t1 / day == t2 / day;
 }
 
+inline bool StringContain(const std::string& str, char c)
+{
+    return str.find(c) != std::string::npos;
+}
+
+inline size_t StringCount(const std::string& str, char c)
+{
+    size_t count = 0;
+    for (auto it = str.begin(); it != str.end(); ++it)
+    {
+        if (c == *it)
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void StringLeftTrim(std::string&, const std::string&);
+void StringRightTrim(std::string&, const std::string&);
+void StringTrim(std::string&, const std::string&);
+
+
 template <typename... T>
 class ObserverContainer
 {
@@ -220,6 +249,45 @@ private:
     std::vector<std::function<void(T...)>> observers_;
 };
 
+template <typename T>
+void ToStringStream(std::stringstream& stream, T value)
+{
+    stream << value;
+}
+
+template<typename T, typename... Args>
+void ToStringStream(std::stringstream& stream, T value, Args... args)
+{
+    stream << value;
+    ToStringStream(stream, args...);
+}
+
+template<typename... Args>
+std::string ToString(Args... args)
+{
+    std::stringstream stream;
+    ToStringStream(stream, args...);
+    return stream.str();
+}
+
+// only for config parsing
+class Url
+{
+public:
+    Url();
+    Url(const std::string&);
+    bool Parse(const std::string&);
+    std::string String() const;
+    uint16_t DefaultPort() const;
+    explicit operator bool() const;
+
+    std::string protocol_;
+    std::string host_;
+    uint16_t port_;
+    std::string path_;
+
+};
+
 }  // namespace rai
 
 #define IF_ERROR_RETURN(error, ret) \
@@ -227,5 +295,17 @@ private:
     {                               \
         return ret;                 \
     }
-    
-#define RAI_TODO 0
+
+#define IF_ERROR_RETURN_VOID(error) \
+    if (error)                      \
+    {                               \
+        return;                     \
+    }
+
+#define IF_ERROR_BREAK(error) \
+    if (error)                \
+    {                         \
+        break;                \
+    }
+
+#define RAI_TODO 1
