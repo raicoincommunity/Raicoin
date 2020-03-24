@@ -39,8 +39,11 @@ public:
     bool DecodeHex(const std::string&);
     void EncodeDec(std::string&) const;
     bool DecodeDec(const std::string&);
+    void EncodeBalance(const rai::uint128_t&, std::string&) const;
+    bool DecodeBalance(const rai::uint128_t&, const std::string&);
     std::string StringHex() const;
     std::string StringDec() const;
+    std::string StringBalance(const rai::uint128_t&) const;
 
     std::array<char, 16> chars;
     std::array<uint8_t, 16> bytes;
@@ -50,6 +53,7 @@ public:
 // Balances are 128 bit.
 using Amount = uint128_union;
 
+class RawKey;
 union uint256_union
 {
     uint256_union();
@@ -71,6 +75,8 @@ union uint256_union
     rai::uint256_t Number() const;
     void Clear();
     void SecureClear();
+    void Encrypt(const rai::RawKey&, const rai::RawKey&,
+                 const rai::uint128_union&);
     bool IsZero() const;
     void EncodeHex(std::string&) const;
     bool DecodeHex(const std::string&);
