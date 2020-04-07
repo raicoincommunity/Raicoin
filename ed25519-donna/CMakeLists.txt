@@ -9,7 +9,7 @@ target_compile_definitions(ed25519 PUBLIC
 	-DED25519_CUSTOMHASH
 	-DED25519_CUSTOMRNG)
 
-find_package (OpenSSL 1.0 EXACT REQUIRED)
+find_package (OpenSSL 1.1 EXACT REQUIRED)
 	include_directories(${OPENSSL_INCLUDE_DIR})
 	message("OpenSSL include dir: ${OPENSSL_INCLUDE_DIR}")
 	message("OpenSSL libraries: ${OPENSSL_LIBRARIES}")
