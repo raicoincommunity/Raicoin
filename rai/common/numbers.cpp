@@ -1,4 +1,5 @@
 #include <rai/common/numbers.hpp>
+#include <rai/common/util.hpp>
 
 #include <iostream>
 #include <string>
@@ -44,6 +45,26 @@ uint8_t AccountCharDecode(char value)
 
     result = account_reverse[value - 0x30] - 0x30;
     return result;
+}
+
+size_t MaxFracLen(rai::uint128_t scale)
+{
+    if (scale == rai::RAI)
+    {
+        return 9;
+    }
+    else if (scale == rai::mRAI)
+    {
+        return 6;
+    }
+    else if (scale == rai::uRAI)
+    {
+        return 3;
+    }
+    else
+    {
+        return 0;
+    }
 }
 }  // namespace
 
@@ -220,6 +241,92 @@ bool rai::uint128_union::DecodeDec(const std::string& text)
     }
 }
 
+void rai::uint128_union::EncodeBalance(const rai::uint128_t& scale,
+                                       std::string& balance) const
+{
+    if (scale != rai::RAI && scale != rai::mRAI && scale != rai::uRAI)
+    {
+        return;
+    }
+
+    std::stringstream stream;
+    rai::uint128_t int_part = Number() / scale;
+    rai::uint128_t frac_part = Number() % scale;
+    stream << int_part;
+    if (frac_part > 0)
+    {
+        stream << ".";
+        while (frac_part > 0)
+        {
+            frac_part *= 10;
+            stream << frac_part / scale;
+            frac_part %= scale;
+        }
+    }
+    balance = stream.str();
+}
+
+bool rai::uint128_union::DecodeBalance(const rai::uint128_t& scale,
+                                       const std::string& balance)
+{
+    size_t max_frac_len = MaxFracLen(scale);
+    if (max_frac_len == 0)
+    {
+        return true;
+    }
+
+    std::string str = balance;
+    if (str.empty() || str.size() > 40)
+    {
+        return true;
+    }
+
+    if (str.find_first_not_of("0123456789.") != std::string::npos)
+    {
+        return true;
+    }
+
+    if (rai::StringCount(str, '.') > 1 || *str.begin() == '.'
+        || *str.rbegin() == '.')
+    {
+        return true;
+    }
+
+    if (str.find('.') != std::string::npos)
+    {
+        rai::StringRightTrim(str, "0");
+        rai::StringRightTrim(str, ".");
+    }
+    std::string check = str;
+
+    size_t frac_len = 0;
+    if (str.find('.') != std::string::npos)
+    {
+        frac_len = str.size() - str.find('.') - 1;
+        str.erase(str.find('.'), 1);
+    }
+    if (frac_len > max_frac_len)
+    {
+        return true;
+    }
+    str.append(max_frac_len - frac_len, '0');
+    rai::StringLeftTrim(str, "0");
+
+    std::cout << str << std::endl;
+    bool error = DecodeDec(str);
+    if (error)
+    {
+        return true;
+    }
+
+    if (check != StringBalance(scale))
+    {
+        return true;
+    }
+
+    return false;
+}
+
 std::string rai::uint128_union::StringHex() const
 {
     string result;
@@ -231,6 +338,13 @@ std::string rai::uint128_union::StringDec() const
 {
     string result;
     EncodeDec(result);
+    return result;
+}
+
+std::string rai::uint128_union::StringBalance(const rai::uint128_t& scale) const
+{
+    string result;
+    EncodeBalance(scale, result);
     return result;
 }
 
@@ -358,6 +472,17 @@ void rai::uint256_union::SecureClear()
         volatile uint64_t& qword = qwords[i];
         qword                    = 0;
     }
+}
+
+void rai::uint256_union::Encrypt(const rai::RawKey& cleartext,
+                                 const rai::RawKey& key,
+                                 const rai::uint128_union& iv)
+{
+    CryptoPP::AES::Encryption alg(key.data_.bytes.data(),
+                                  key.data_.bytes.size());
+    CryptoPP::CTR_Mode_ExternalCipher::Encryption enc(alg, iv.bytes.data());
+    enc.ProcessData(bytes.data(), cleartext.data_.bytes.data(),
+                    cleartext.data_.bytes.size());
 }
 
 bool rai::uint256_union::IsZero() const
@@ -677,4 +802,45 @@ rai::PublicKey rai::GeneratePublicKey(const rai::PrivateKey& private_key)
     rai::PublicKey result;
     ed25519_publickey(private_key.bytes.data(), result.bytes.data());
     return result;
+}
+
+uint64_t rai::Random(uint64_t min, uint64_t max)
+{
+    if (min > max)
+    {
+        throw std::invalid_argument("Invalid ramdom parameters");
+    }
+    if (min == max)
+    {
+        return min;
+    }
+
+    uint64_t range = max - min;
+    uint32_t low = 0;
+    uint32_t high = 64;
+    while (high - low > 1)
+    {
+        uint32_t middle = (low + high) / 2;
+        if (range >> middle)
+        {
+            low = middle;
+        }
+        else
+        {
+            high = middle;
+        }
+    }
+    uint32_t bits = high;
+
+    uint64_t value = 0;
+    do
+    {
+        rai::random_pool.GenerateBlock((uint8_t*)&value, sizeof(value));
+        if (bits < 64)
+        {
+            value &= (uint64_t(1) << bits) - 1;
+        }
+    } while (value > range);
+
+    return value + min;
 }

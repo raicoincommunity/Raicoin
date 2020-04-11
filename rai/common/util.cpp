@@ -110,6 +110,23 @@ rai::Url::Url(const std::string& protocol) : protocol_(protocol), port_(0)
 {
 }
 
+void rai::Url::AddQuery(const std::string& key, const std::string& value)
+{
+    if (path_.find(key) != std::string::npos)
+    {
+        return;
+    }
+
+    if (path_.find("?") == std::string::npos)
+    {
+        path_ += "?" + key + "=" + value;
+    }
+    else
+    {
+        path_ += "&"+ key + "=" + value;
+    }
+}
+
 bool rai::Url::Parse(const std::string& url)
 {
     std::string str(url);
@@ -117,11 +134,12 @@ bool rai::Url::Parse(const std::string& url)
     rai::StringRightTrim(str, " \t\r\n");
     if (str.find("://") != std::string::npos)
     {
-        std::string prefix = protocol_ + "://";
-        if (str.find(prefix) != 0)
+        protocol_ = str.substr(0, str.find("://"));
+        if (CheckProtocol())
         {
             return true;
         }
+        std::string prefix = protocol_ + "://";
         str = str.substr(prefix.size());
     }
 
@@ -217,4 +235,15 @@ uint16_t rai::Url::DefaultPort() const
 rai::Url::operator bool() const
 {
     return !String().empty();
+}
+
+bool rai::Url::CheckProtocol()
+{
+    if (protocol_ != "http" && protocol_ != "https" && protocol_ != "ws"
+        && protocol_ != "wss")
+    {
+        return true;
+    }
+
+    return false;
 }

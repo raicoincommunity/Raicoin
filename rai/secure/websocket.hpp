@@ -21,14 +21,17 @@ enum class WebsocketStatus
     CONNECTED    = 2,
 };
 
-using WebsocketStream = boost::beast::websocket::stream<
+using WssStream = boost::beast::websocket::stream<
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
 
+using WsStream = boost::beast::websocket::stream<boost::asio::ip::tcp::socket>;
+
 class WebsocketClient
+    : public std::enable_shared_from_this<rai::WebsocketClient>
 {
 public:
-    WebsocketClient(rai::Wallets&, const std::string&, uint16_t,
-                    const std::string&);
+    WebsocketClient(boost::asio::io_service&, const std::string&, uint16_t,
+                    const std::string&, bool = true);
     ~WebsocketClient();
 
     void OnResolve(const boost::system::error_code&,
@@ -39,6 +42,7 @@ public:
     void Run();
     void Send(const std::string&);
     void Send(const rai::Ptree&);
+    std::shared_ptr<rai::WebsocketClient> Shared();
     void OnSend(uint32_t, const boost::system::error_code&, size_t);
     void OnReceive(uint32_t, const boost::system::error_code&, size_t);
     void Close();
@@ -52,7 +56,8 @@ private:
     void Receive_();
     void ChangeStatus_(rai::WebsocketStatus);
 
-    rai::Wallets& wallets_;
+    boost::asio::io_service& service_;
+    bool ssl_;
     std::string host_;
     uint16_t port_;
     std::string path_;
@@ -62,7 +67,8 @@ private:
     boost::asio::ip::tcp::resolver resolver_;
     boost::asio::ssl::context ctx_;
     uint32_t session_id_;
-    std::shared_ptr<rai::WebsocketStream> stream_;
+    std::shared_ptr<rai::WssStream> wss_stream_;
+    std::shared_ptr<rai::WsStream> ws_stream_;
     std::shared_ptr<boost::beast::multi_buffer> receive_buffer_;
     bool sending_;
     std::deque<std::string> send_queue_;

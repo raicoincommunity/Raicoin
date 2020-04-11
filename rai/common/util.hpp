@@ -202,6 +202,16 @@ inline bool SameDay(uint64_t t1, uint64_t t2)
     return t1 / day == t2 / day;
 }
 
+inline uint64_t DayBegin(uint64_t ts)
+{
+    return ts - ts % 86400;
+}
+
+inline uint64_t DayEnd(uint64_t ts)
+{
+    return ts - ts % 86400 + 86400;
+}
+
 inline bool StringContain(const std::string& str, char c)
 {
     return str.find(c) != std::string::npos;
@@ -276,10 +286,12 @@ class Url
 public:
     Url();
     Url(const std::string&);
+    void AddQuery(const std::string&, const std::string&);
     bool Parse(const std::string&);
     std::string String() const;
     uint16_t DefaultPort() const;
     explicit operator bool() const;
+    bool CheckProtocol();
 
     std::string protocol_;
     std::string host_;
