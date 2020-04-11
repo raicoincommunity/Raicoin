@@ -140,6 +140,7 @@ bool ValidateMessage(const rai::PublicKey&, const rai::uint256_union&,
                      const rai::uint512_union&);
 
 rai::PublicKey GeneratePublicKey(const rai::PrivateKey&);
+uint64_t Random(uint64_t, uint64_t);
 }  // namespace rai
 
 namespace boost
