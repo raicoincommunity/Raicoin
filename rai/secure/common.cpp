@@ -35,6 +35,48 @@ rai::ErrorCode rai::KeyPair::Serialize(const std::string& password,
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ErrorCode rai::KeyPair::Show(std::ifstream& stream) const
+{
+    bool error = false;
+    uint32_t version;
+    error =  rai::ReadFile(stream, version);
+    IF_ERROR_RETURN(error, rai::ErrorCode::INVALID_KEY_FILE);
+    boost::endian::big_to_native_inplace(version);
+
+    rai::uint256_union salt;
+    error = rai::ReadFile(stream, salt.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::INVALID_KEY_FILE);
+
+    rai::uint128_union iv;
+    error = rai::ReadFile(stream, iv.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::INVALID_KEY_FILE);
+
+    rai::RawKey encrypt;
+    error = rai::ReadFile(stream, encrypt.data_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::INVALID_KEY_FILE);
+
+    rai::PublicKey public_key;
+    error = rai::ReadFile(stream, public_key.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::INVALID_KEY_FILE);
+
+    uint8_t end;
+    rai::ReadFile(stream, end);
+    if (!stream.eof())
+    {
+        return rai::ErrorCode::INVALID_KEY_FILE;
+    }
+
+    std::cout << "Version: " << version << std::endl;
+    std::cout << "Salt: " << salt.StringHex() << std::endl;
+    std::cout << "IV: " << iv.StringHex() << std::endl;
+    std::cout << "Encrypted private key: " << encrypt.data_.StringHex()
+              << std::endl;
+    std::cout << "Public key: " << public_key.StringHex() << std::endl;
+    std::cout << "Account: " << public_key.StringAccount() << std::endl;
+
+    return rai::ErrorCode::SUCCESS;
+}
+
 rai::ErrorCode rai::KeyPair::Deserialize(const std::string& password,
                                          std::ifstream& stream)
 {
@@ -104,6 +146,10 @@ rai::ErrorCode rai::Kdf::DeriveKey(rai::RawKey& key,
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::Fan::Fan() : Fan(0, rai::Fan::FAN_OUT)
+{
+}
+
 rai::Fan::Fan(const rai::uint256_union& key, size_t count)
 {
     std::unique_ptr<rai::uint256_union> first(new rai::uint256_union(key));
@@ -117,7 +163,7 @@ rai::Fan::Fan(const rai::uint256_union& key, size_t count)
     values_.push_back(std::move(first));
 }
 
-void rai::Fan::Get(rai::RawKey& key)
+void rai::Fan::Get(rai::RawKey& key) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     Get_(key);
@@ -129,7 +175,7 @@ void rai::Fan::Set(const rai::RawKey& key)
     Set_(key);
 }
 
-void rai::Fan::Get_(rai::RawKey& key)
+void rai::Fan::Get_(rai::RawKey& key) const
 {
     key.data_.Clear();
     for (const auto& i : values_)
@@ -148,32 +194,8 @@ void rai::Fan::Set_(const rai::RawKey& key)
 
 rai::Genesis::Genesis() : block_(nullptr)
 {
-    std::string public_key_str;
-    std::string block_json_str;
-
-    switch (rai::RAI_NETWORK)
-    {
-        case rai::RaiNetworks::TEST:
-        {
-            public_key_str = rai::TEST_PUBLIC_KEY;
-            block_json_str = rai::TEST_GENESIS_BLOCK;
-            break;
-        }
-        case rai::RaiNetworks::BETA:
-        {
-            throw std::runtime_error("Genesis data missing");
-            break;
-        }
-        case rai::RaiNetworks::LIVE:
-        {
-            throw std::runtime_error("Genesis data missing");
-            break;
-        }
-        default:
-        {
-            throw std::runtime_error("Unknown rai::RAI_NETWORK");
-        }
-    }
+    std::string public_key_str = rai::GenesisPublicKey();
+    std::string block_json_str = rai::GenesisBlock();
 
     rai::PublicKey public_key;
     bool error = public_key.DecodeHex(public_key_str);
@@ -192,7 +214,7 @@ rai::Genesis::Genesis() : block_(nullptr)
         throw std::invalid_argument("Failed to deserialize genesis block");
     }
 
-    if (block_->Type() != rai::BlockType::REP_BLOCK)
+    if (block_->Type() != rai::BlockType::TX_BLOCK)
     {
         throw std::invalid_argument("Invalid genesis block type");
     }
@@ -212,7 +234,7 @@ rai::Genesis::Genesis() : block_(nullptr)
         throw std::invalid_argument("Invalid genesis block counter");
     }
 
-    if (block_->Timestamp() != rai::EPOCH_TIMESTAMP)
+    if (block_->Timestamp() != rai::EpochTimestamp())
     {
         throw std::invalid_argument("Invalid genesis block timestamp");
     }

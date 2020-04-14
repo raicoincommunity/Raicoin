@@ -8,11 +8,26 @@
 
 namespace rai
 {
+void SecureClearString(std::string&);
 boost::filesystem::path WorkingPath();
 
+class Password
+{
+public:
+    Password();
+    ~Password();
+    const std::string& Get() const;
+    void Input(const std::string&);
+    rai::ErrorCode Input(const std::string&, const std::string&);
+
+private:
+    std::string password_;
+};
+
 void OpenOrCreate(std::fstream&, const std::string&);
-rai::ErrorCode CreateKey(const boost::filesystem::path&, const std::string&);
+rai::ErrorCode CreateKey(const boost::filesystem::path&, bool);
 rai::ErrorCode DecryptKey(rai::Fan&, const boost::filesystem::path&);
+rai::ErrorCode DecryptKey(rai::KeyPair&, const std::string&, const std::string&);
 
 // Reads a json object from the stream and if was changed, write the object back
 // to the stream

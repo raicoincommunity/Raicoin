@@ -9,7 +9,56 @@
 
 namespace 
 {
-void SecureClearString(std::string& str)
+rai::ErrorCode InputPassword(const std::string& prompt1,
+                             const std::string& prompt2, std::string& password)
+{
+    password.reserve(1024);
+    rai::SetStdinEcho(false);
+    std::cout << prompt1;
+    std::string password_1;
+    password_1.reserve(1024);
+    std::cin >> password_1;
+    std::cout << std::endl;
+    if ((password_1.size() < 8) || (password_1.size() > 256))
+    {
+        rai::SecureClearString(password_1);
+        rai::SetStdinEcho(true);
+        return rai::ErrorCode::PASSWORD_LENGTH;
+    }
+
+    std::cout << prompt2;
+    std::string password_2;
+    password_2.reserve(1024);
+    std::cin >> password_2;
+    std::cout << std::endl;
+    if (password_1 != password_2)
+    {
+        rai::SecureClearString(password_1);
+        rai::SecureClearString(password_2);
+        rai::SetStdinEcho(true);
+        return rai::ErrorCode::PASSWORD_MATCH;
+    }
+
+    password = password_1;
+    rai::SecureClearString(password_1);
+    rai::SecureClearString(password_2);
+    rai::SetStdinEcho(true);
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+void InputPassword(const std::string& prompt, std::string& password)
+{
+    password.reserve(1024);
+    rai::SetStdinEcho(false);
+    std::cout << prompt;
+    std::cin >> password;
+    std::cout << std::endl;
+    rai::SetStdinEcho(true);
+}
+} // namespace
+
+void rai::SecureClearString(std::string& str)
 {
     volatile char* volatile ptr =
         const_cast<volatile char* volatile>(str.c_str());
@@ -19,56 +68,6 @@ void SecureClearString(std::string& str)
         ptr[i] = 0;
     }
 }
-
-rai::ErrorCode SetKeyPassword(std::string& password)
-{
-    rai::SetStdinEcho(false);
-    std::cout << "Set key pair password:";
-    std::string password_1;
-    password_1.reserve(1024);
-    std::cin >> password_1;
-    std::cout << std::endl;
-    if ((password_1.size() < 8) || (password_1.size() > 256))
-    {
-        SecureClearString(password_1);
-        rai::SetStdinEcho(true);
-        return rai::ErrorCode::PASSWORD_LENGTH;
-    }
-
-    std::cout << "Retype password:";
-    std::string password_2;
-    password_2.reserve(1024);
-    std::cin >> password_2;
-    std::cout << std::endl;
-    if (password_1 != password_2)
-    {
-        SecureClearString(password_1);
-        SecureClearString(password_2);
-        rai::SetStdinEcho(true);
-        return rai::ErrorCode::PASSWORD_MATCH;
-    }
-
-    password = password_1;
-    SecureClearString(password_1);
-    SecureClearString(password_2);
-    rai::SetStdinEcho(true);
-
-    return rai::ErrorCode::SUCCESS;
-}
-
-void InputKeyPassword(std::string& password)
-{
-    rai::SetStdinEcho(false);
-    std::cout << "Key pair password:";
-    std::string password_l;
-    password_l.reserve(1024);
-    std::cin >> password_l;
-    std::cout << std::endl;
-    password = password_l;
-    SecureClearString(password_l);
-    rai::SetStdinEcho(true);
-}
-} // namespace
 
 boost::filesystem::path rai::WorkingPath()
 {
@@ -98,6 +97,31 @@ boost::filesystem::path rai::WorkingPath()
     return result;
 }
 
+rai::Password::Password()
+{
+}
+
+rai::Password::~Password()
+{
+    rai::SecureClearString(password_);
+}
+
+const std::string& rai::Password::Get() const
+{
+    return password_;
+}
+
+void rai::Password::Input(const std::string& prompt)
+{
+    InputPassword(prompt, password_);
+}
+
+rai::ErrorCode rai::Password::Input(const std::string& prompt1,
+                                    const std::string& prompt2)
+{
+    return InputPassword(prompt1, prompt2, password_);
+}
+
 void rai::OpenOrCreate(std::fstream& stream, const std::string& path)
 {
     stream.open(path, std::ios_base::in);
@@ -109,37 +133,32 @@ void rai::OpenOrCreate(std::fstream& stream, const std::string& path)
     stream.open(path, std::ios_base::in | std::ios_base::out);
 }
 
-rai::ErrorCode rai::CreateKey(const boost::filesystem::path& path,
-                              const std::string& file)
+rai::ErrorCode rai::CreateKey(const boost::filesystem::path& path, bool dir)
 {
-    if (!file.empty() && boost::filesystem::exists(path / file))
+    if (!dir && boost::filesystem::exists(path))
     {
         return rai::ErrorCode::KEY_FILE_EXIST;
     }
 
     rai::ErrorCode error_code;
-    std::string password;
-    error_code = SetKeyPassword(password);
+    rai::Password password;
+    error_code = password.Input("Set key pair password:", "Retype password:");
     IF_NOT_SUCCESS_RETURN(error_code);
 
     rai::KeyPair key_pair;
-    boost::filesystem::path full_path;
-    if (file.empty())
+    boost::filesystem::path full_path(path);
+    if (dir)
     {
         full_path = path / (key_pair.public_key_.StringAccount() + ".dat");
     }
-    else
-    {
-        full_path = path / file;
-    }
+
     std::ofstream key_file(full_path.string(),
                            std::ios::binary | std::ios::out);
     if (key_file)
     {
-        error_code = key_pair.Serialize(password, key_file);
+        error_code = key_pair.Serialize(password.Get(), key_file);
     }
     key_file.close();
-    SecureClearString(password);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (!boost::filesystem::exists(full_path))
@@ -156,20 +175,34 @@ rai::ErrorCode rai::CreateKey(const boost::filesystem::path& path,
 
 rai::ErrorCode rai::DecryptKey(rai::Fan& key, const boost::filesystem::path& path)
 {
-    std::string password;
-    InputKeyPassword(password);
+    rai::Password password;
+    password.Input("Key pair password:");
 
     rai::KeyPair key_pair;
     std::ifstream stream(path.string(), std::ios::in | std::ios::binary);
     rai::ErrorCode error_code = rai::ErrorCode::INVALID_KEY_FILE;
     if (stream)
     {
-         error_code = key_pair.Deserialize(password, stream);
+         error_code = key_pair.Deserialize(password.Get(), stream);
     }
     stream.close();
-    SecureClearString(password);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     key.Set(key_pair.private_key_);
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::DecryptKey(rai::KeyPair& key_pair, const std::string& path,
+                               const std::string& password)
+{
+    std::ifstream stream(path, std::ios::in | std::ios::binary);
+    rai::ErrorCode error_code = rai::ErrorCode::INVALID_KEY_FILE;
+    if (stream)
+    {
+         error_code = key_pair.Deserialize(password, stream);
+    }
+    stream.close();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     return rai::ErrorCode::SUCCESS;
 }

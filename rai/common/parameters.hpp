@@ -4,6 +4,10 @@
 
 namespace rai
 {
+#define XSTR(x) VER_STR(x)
+#define VER_STR(x) #x
+const char * const RAI_VERSION_STRING = XSTR(TAG_VERSION_STRING);
+
 enum class RaiNetworks
 {
     // Low work parameters, publicly known genesis key, test IP ports
@@ -14,6 +18,7 @@ enum class RaiNetworks
     LIVE,
 };
 rai::RaiNetworks constexpr RAI_NETWORK = rai::RaiNetworks::ACTIVE_NETWORK;
+std::string NetworkString();
 
 uint64_t constexpr TEST_EPOCH_TIMESTAMP = 1577836800;
 const std::string TEST_PRIVATE_KEY =
