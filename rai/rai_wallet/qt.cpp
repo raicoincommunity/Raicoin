@@ -64,7 +64,7 @@ rai::QtStatus::QtStatus(rai::QtMain& qt_main) : main_(qt_main)
 
 void rai::QtStatus::Refresh()
 {
-    auto connection = main_.wallets_->websocket_.Status();
+    auto connection = main_.wallets_->websockets_[0]->Status();
     if (connection == rai::WebsocketStatus::CONNECTED)
     {
         status_set_.erase(rai::QtStatusType::DISCONNECTED);
@@ -232,9 +232,9 @@ rai::QtSelfPane::QtSelfPane(rai::QtMain& qt_main)
       main_(qt_main)
 {
     account_label_->setStyleSheet("font-weight: bold;");
-    version_ = new QLabel(QString("Version %1.%2")
-                              .arg(RAICOIN_VERSION_MAJOR)
-                              .arg(RAICOIN_VERSION_MINOR));
+    version_ = new QLabel(QString("%1 %2 network")
+                              .arg(RAI_VERSION_STRING)
+                              .arg(rai::NetworkString().c_str()));
     self_layout_->addWidget(account_label_);
     self_layout_->addStretch();
     self_layout_->addWidget(version_);

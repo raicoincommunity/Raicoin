@@ -12,6 +12,7 @@ class KeyPair
 public:
     KeyPair();
     rai::ErrorCode Serialize(const std::string&, std::ofstream&) const;
+    rai::ErrorCode Show(std::ifstream&) const;
     rai::ErrorCode Deserialize(const std::string&, std::ifstream&);
 
     rai::PublicKey public_key_;
@@ -31,17 +32,18 @@ public:
 class Fan
 {
 public:
+    Fan();
     Fan(const rai::uint256_union&, size_t);
-    void Get(rai::RawKey&);
+    void Get(rai::RawKey&) const;
     void Set(const rai::RawKey&);
 
     static size_t constexpr FAN_OUT = 1024;
 
 private:
-    void Get_(rai::RawKey&);
+    void Get_(rai::RawKey&) const;
     void Set_(const rai::RawKey&);
 
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::vector<std::unique_ptr<rai::uint256_union>> values_;
 };
 

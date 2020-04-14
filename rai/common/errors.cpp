@@ -246,9 +246,149 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to get account count from ledger";
         }
-        case rai::ErrorCode::BOOTSTRAP_PEER:
+        case rai::ErrorCode::CONFIG_WALLET_VERSION:
         {
-            return "Failed to get peer for bootstrap";
+            return "Unknow wallet config version";
+        }
+        case rai::ErrorCode::WALLET_PASSWORD:
+        {
+            return "Wallet password incorrect";
+        }
+        case rai::ErrorCode::WALLET_LOCKED:
+        {
+            return "Wallet is locked, unlock it first";
+        }
+        case rai::ErrorCode::WALLET_INFO_PUT:
+        {
+            return "Failed to put wallet infomation to ledger";
+        }
+        case rai::ErrorCode::WALLET_ACCOUNT_INFO_PUT:
+        {
+            return "Failed to put account infomation to ledger";
+        }
+        case rai::ErrorCode::WALLET_GET:
+        {
+            return "Failed to get wallet"; 
+        }
+        case rai::ErrorCode::WALLET_ACCOUNT_GET:
+        {
+            return "Failed to get account";
+        }
+        case rai::ErrorCode::WALLET_ACCOUNT_EXISTS:
+        {
+            return "The account already exists";
+        }
+        case rai::ErrorCode::DNS_RESOLVE:
+        {
+            return "Failed to resolve dns to ip";
+        }
+        case rai::ErrorCode::TCP_CONNECT:
+        {
+            return "Failed to make tcp connection";
+        }
+        case rai::ErrorCode::HTTP_POST:
+        {
+            return "Http post failed";
+        }
+        case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
+        {
+            return "Invalid subscription timestamp";
+        }
+        case rai::ErrorCode::SUBSCRIBE_SIGNATURE:
+        {
+            return "Invalid subscription signature";
+        }
+        case rai::ErrorCode::SUBSCRIBE_NO_CALLBACK:
+        {
+            return "Callback url not configured";
+        }
+        case rai::ErrorCode::ACCOUNT_ACTION_TOO_QUICKLY:
+        {
+            return "Create block too quickly";
+        }
+        case rai::ErrorCode::ACCOUNT_ACTION_CREDIT:
+        {
+            return "Account daily transactions limit exceeded";
+        }
+        case rai::ErrorCode::ACCOUNT_ACTION_BALANCE:
+        {
+            return "Not enough balance";
+        }
+        case rai::ErrorCode::LEDGER_RECEIVABLES_GET:
+        {
+            return "Failed to get receivables from ledger";
+        }
+        case rai::ErrorCode::WALLET_NOT_SELECTED_ACCOUNT:
+        {
+            return "Not selected account";
+        }
+        case rai::ErrorCode::LEDGER_RECEIVABLE_INFO_GET:
+        {
+            return "Failed to get receivable info from ledger";
+        }
+        case rai::ErrorCode::WALLET_RECEIVABLE_LESS_THAN_CREDIT:
+        {
+            return "Receivable amount less than credit price";
+        }
+        case rai::ErrorCode::REWARDER_REWARDABLE_LESS_THAN_CREDIT:
+        {
+            return "Rewardable amount less than credit price";
+        }
+        case rai::ErrorCode::LEDGER_REWARDABLE_INFO_GET:
+        {
+            return "Failed to get rewardable info from ledger";
+        }
+        case rai::ErrorCode::REWARDER_TIMESTAMP:
+        {
+            return "Not rewardable yet";
+        }
+        case rai::ErrorCode::REWARDER_AMOUNT:
+        {
+            return "Invalid rewardable amount";
+        }
+        case rai::ErrorCode::ACCOUNT_ZERO_BALANCE:
+        {
+            return "Account balance is zero";
+        }
+        case rai::ErrorCode::PEER_QUERY:
+        {
+            return "Failed to get peer";
+        }
+        case rai::ErrorCode::WALLET_EXISTS:
+        {
+            return "The wallet already exists";
+        }
+        case rai::ErrorCode::ACCOUNT_MAX_CREDIT:
+        {
+            return "Account's max allowed daily transactions limit is 1310700";
+        }
+        case rai::ErrorCode::INVALID_URL:
+        {
+            return "Invalid URL";
+        }
+        case rai::ErrorCode::HTTP_CLIENT_USED:
+        {
+            return "Http client is being used";
+        }
+        case rai::ErrorCode::LOAD_CERT:
+        {
+            return "Failed to load cacert.pem";
+        }
+        case rai::ErrorCode::SET_SSL_SNI:
+        {
+            return "Failed to set SSL SNI";
+        }
+        case rai::ErrorCode::SSL_HANDSHAKE:
+        {
+            return "SSL handshake failed";
+        }
+        case rai::ErrorCode::WRITE_STREAM:
+        {
+            return "Failed to write stream";
+        }
+        case rai::ErrorCode::HTTP_GET:
+        {
+            return "Http get failed";
         }
         case rai::ErrorCode::JSON_GENERIC:
         {
@@ -430,41 +570,148 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse log rpc from config.json";
         }
+        case rai::ErrorCode::JSON_CONFIG_WALLET_VERSION:
+        {
+            return "Failed to parse version from wallet_config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_WALLET_SERVER:
+        {
+            return "Failed to parse server from wallet_config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CALLBACK_URL:
+        {
+            return "Failed to parse callback_url from config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_WALLET_PRECONFIGURED_REP:
+        {
+            return "Failed to parse preconfigured_representatives from "
+                   "wallet_config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_REWARD_TO:
+        {
+            return "Failed to parse reward_to from config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_DAILY_REWARD_TIMES:
+        {
+            return "Failed to parse daily_reward_times from config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_ONLINE_STATS_URL:
+        {
+            return "Failed to parse online_statistics_url from "
+                   "airdrop_config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_INVITED_REPS_URL:
+        {
+            return "Failed to parse invited_representatives_url from "
+                   "airdrop_config.json";
+        }
+        case rai::ErrorCode::JSON_CONFIG_WALLET:
+        {
+            return "Failed to parse wallet config";
+        }
+        case rai::ErrorCode::JSON_CONFIG_AIRDROP_MISS:
+        {
+            return "Missing airdrop_config.json";
+        }
         case rai::ErrorCode::RPC_GENERIC:
         {
-            return "Internal server error in RPC";
+            return "[RPC] Internal server error";
         }
         case rai::ErrorCode::RPC_JSON:
         {
-            return "Invalid JSON format";
+            return "[RPC] Invalid JSON format";
         }
         case rai::ErrorCode::RPC_JSON_DEPTH:
         {
-            return "Max JSON depth exceeded";
+            return "[RPC] Max JSON depth exceeded";
         }
         case rai::ErrorCode::RPC_HTTP_BODY_SIZE:
         {
-            return "Max http body size exceeded";
+            return "[RPC] Max http body size exceeded";
         }
         case rai::ErrorCode::RPC_NOT_LOCALHOST:
         {
-            return "The action is only allowed on localhost(127.0.0.1)";
+            return "[RPC] The action is only allowed on localhost(127.0.0.1)";
         }
         case rai::ErrorCode::RPC_MISS_FIELD_BLOCK:
         {
-            return "The block field is missing";
+            return "[RPC] The block field is missing";
         }
         case rai::ErrorCode::RPC_MISS_FIELD_ACCOUNT:
         {
-            return "The account field is missing";
+            return "[RPC] The account field is missing";
         }
         case rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT:
         {
-            return "Invalid account field";
+            return "[RPC] Invalid account field";
         }
         case rai::ErrorCode::RPC_ACCOUNT_NOT_EXIST:
         {
-            return "The account does not exist";
+            return "[RPC] The account does not exist";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_TYPE:
+        {
+            return "[RPC] The type field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TYPE:
+        {
+            return "[RPC] Invalid type field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_HEIGHT:
+        {
+            return "[RPC] The height field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_HEIGHT:
+        {
+            return "[RPC] Invalid height field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_PREVIOUS:
+        {
+            return "[RPC] The previous field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_PREVIOUS:
+        {
+            return "[RPC] Invalid previous field";
+        }
+        case rai::ErrorCode::RPC_UNKNOWN_ACTION:
+        {
+            return "[RPC] Unknown action";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_TIMESTAMP:
+        {
+            return "[RPC] The timestamp field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TIMESTAMP:
+        {
+            return "[RPC] Invalid timestamp field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_SIGNATURE:
+        {
+            return "[RPC] The signature field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_SIGNATURE:
+        {
+            return "[RPC] Invalid signature field";
+        }
+        case rai::ErrorCode::RPC_ENABLE_CONTROL:
+        {
+            return "[RPC] RPC control is disabled";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_COUNT:
+        {
+            return "[RPC] The count field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_COUNT:
+        {
+            return "[RPC] Invalid count field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_HASH:
+        {
+            return "[RPC] The hash field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_HASH:
+        {
+            return "[RPC] Invalid hash field";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
@@ -594,6 +841,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to delete account infomation from ledger";
         }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_DEL:
+        {
+            return "Failed to delete fork entry from ledger";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_GET:
+        {
+            return "Failed to get fork entry from ledger";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_ROLLBACK_REWARDED:
         {
             return "Rollback rewarded block";
@@ -641,6 +896,62 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::BLOCK_PROCESS_WAIT:
         {
             return "Wait missing block";
+        }
+        case rai::ErrorCode::BOOTSTRAP_GENERIC:
+        {
+            return "Bootstrap error";
+        }
+        case rai::ErrorCode::BOOTSTRAP_PEER:
+        {
+            return "Failed to get peer for bootstrap";
+        }
+        case rai::ErrorCode::BOOTSTRAP_RESET:
+        {
+            return "Bootstrap has been reset";
+        }
+        case rai::ErrorCode::BOOTSTRAP_ATTACK:
+        {
+            return "Bootstrap attack is detected";
+        }
+        case rai::ErrorCode::BOOTSTRAP_CONNECT:
+        {
+            return "Failed to connect to peer";
+        }
+        case rai::ErrorCode::BOOTSTRAP_TYPE:
+        {
+            return "Invalid bootstrap type";
+        }
+        case rai::ErrorCode::BOOTSTRAP_SEND:
+        {
+            return "Failed to send data to peer";
+        }
+        case rai::ErrorCode::BOOTSTRAP_RECEIVE:
+        {
+            return "Failed to receive data from peer";
+        }
+        case rai::ErrorCode::BOOTSTRAP_ACCOUNT:
+        {
+            return "Invalid bootstrap account";
+        }
+        case rai::ErrorCode::BOOTSTRAP_FORK_LENGTH:
+        {
+            return "Invalid bootstrap fork message length";
+        }
+        case rai::ErrorCode::BOOTSTRAP_FORK_BLOCK:
+        {
+            return "Invalid block in bootstrap fork message";
+        }
+        case rai::ErrorCode::BOOTSTRAP_SIZE:
+        {
+            return "Bootstrap message exceeds maximum size";
+        }
+        case rai::ErrorCode::BOOTSTRAP_MESSAGE_TYPE:
+        {
+            return "Invalid bootstrap message";
+        }
+        case rai::ErrorCode::BOOTSTRAP_SLOW_CONNECTION:
+        {
+            return "Slow connection";
         }
         default:
         {

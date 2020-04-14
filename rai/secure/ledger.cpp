@@ -144,15 +144,22 @@ bool rai::AccountInfo::Valid() const
 }
 
 rai::ReceivableInfo::ReceivableInfo(const rai::Account& source,
-                                    const rai::Amount& amount)
-    : source_(source), amount_(amount)
+                                    const rai::Amount& amount,
+                                    uint64_t timestamp)
+    : source_(source), amount_(amount), timestamp_(timestamp)
 {
+}
+
+bool rai::ReceivableInfo::operator>(const rai::ReceivableInfo& other) const
+{
+    return amount_ > other.amount_;
 }
 
 void rai::ReceivableInfo::Serialize(rai::Stream& stream) const
 {
     rai::Write(stream, source_.bytes);
     rai::Write(stream, amount_.bytes);
+    rai::Write(stream, timestamp_);
 }
 
 bool rai::ReceivableInfo::Deserialize(rai::Stream& stream)
@@ -161,6 +168,8 @@ bool rai::ReceivableInfo::Deserialize(rai::Stream& stream)
     error      = rai::Read(stream, source_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, amount_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, timestamp_);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -182,7 +191,7 @@ void rai::RewardableInfo::Serialize(rai::Stream& stream) const
 bool rai::RewardableInfo::Deserialize(rai::Stream& stream)
 {
     bool error = false;
-    error      = rai::Read(stream, source_.bytes);
+    error = rai::Read(stream, source_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, amount_.bytes);
     IF_ERROR_RETURN(error, true);
@@ -532,6 +541,86 @@ bool rai::Ledger::BlockGet(rai::Transaction& transaction,
             if (height == block_l->Height() && account == block_l->Account())
             {
                 block = block_l;
+                return false;
+            }
+            hash = block_l->Previous();
+        }
+    }
+
+    assert(0);
+    return true;
+}
+
+bool rai::Ledger::BlockGet(rai::Transaction& transaction,
+                           const rai::Account& account, uint64_t height,
+                           std::shared_ptr<rai::Block>& block,
+                           rai::BlockHash& successor) const
+{
+    rai::AccountInfo info;
+    bool error = AccountInfoGet(transaction, account, info);
+    IF_ERROR_RETURN(error, error);
+
+    if (height < info.tail_height_ || height > info.head_height_)
+    {
+        return true;
+    }
+
+    uint64_t start = (height / rai::Ledger::BLOCKS_PER_INDEX)
+                     * rai::Ledger::BLOCKS_PER_INDEX;
+    uint64_t end = start + rai::Ledger::BLOCKS_PER_INDEX;
+    if (start < info.tail_height_)
+    {
+        start = info.tail_height_;
+    }
+    if (end > info.head_height_)
+    {
+        end = info.head_height_;
+    }
+
+    if (height - start < end - height)
+    {
+        rai::BlockHash hash(info.tail_);
+        if (start != info.tail_height_)
+        {
+            error = BlockIndexGet_(transaction, account, start, hash);
+            assert(error == false);
+            IF_ERROR_RETURN(error, error);
+        }
+
+        for (uint64_t i = start; i <= height; ++i)
+        {
+            std::shared_ptr<rai::Block> block_l(nullptr);
+            error = BlockGet(transaction, hash, block_l, hash);
+            assert(error == false);
+            IF_ERROR_RETURN(error, true);
+            if (height == block_l->Height() && account == block_l->Account())
+            {
+                block = block_l;
+                successor = hash;
+                return false;
+            }
+        }
+    }
+    else
+    {
+        rai::BlockHash hash(info.head_);
+        if (end != info.head_height_)
+        {
+            error = BlockIndexGet_(transaction, account, end, hash);
+            assert(error == false);
+            IF_ERROR_RETURN(error, error);
+        }
+
+        for (uint64_t i = height; i <= end; ++i)
+        {
+            std::shared_ptr<rai::Block> block_l(nullptr);
+            error = BlockGet(transaction, hash, block_l, hash);
+            assert(error == false);
+            IF_ERROR_RETURN(error, error);
+            if (height == block_l->Height() && account == block_l->Account())
+            {
+                block = block_l;
+                successor = hash;
                 return false;
             }
             hash = block_l->Previous();
@@ -982,6 +1071,135 @@ bool rai::Ledger::ReceivableInfoGet(const rai::Iterator& it,
     return false;
 }
 
+bool rai::Ledger::ReceivableInfosGet(rai::Transaction& transaction,
+                                     rai::ReceivableInfosType type,
+                                     rai::ReceivableInfosAll& receivables,
+                                     size_t max_size)
+{
+    rai::StoreIterator store_i(transaction.mdb_transaction_,
+                               store_.receivables_);
+    rai::Iterator i(std::move(store_i));
+    rai::Iterator n(rai::StoreIterator(nullptr));
+    for (; i != n; ++i)
+    {
+        rai::Account account;
+        rai::BlockHash hash;
+        rai::ReceivableInfo info;
+        bool error = ReceivableInfoGet(i, account, hash, info);
+        if (error)
+        {
+            // log
+            return true;
+        }
+
+        if (type != rai::ReceivableInfosType::ALL)
+        {
+            std::shared_ptr<rai::Block> block;
+            error = BlockGet(transaction, hash, block);
+            if (error || block == nullptr)
+            {
+                // log
+                return true;
+            }
+
+            rai::AccountInfo account_info;
+            error = AccountInfoGet(transaction, block->Account(), account_info);
+            if (error || !account_info.Valid())
+            {
+                // log
+                return true;
+            }
+
+            if (account_info.Confirmed(block->Height()))
+            {
+                if (type != rai::ReceivableInfosType::CONFIRMED)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                if (type != rai::ReceivableInfosType::NOT_CONFIRMED)
+                {
+                    continue;
+                }
+            }
+        }
+
+        receivables.emplace(info, std::make_pair(account, hash));
+        if (receivables.size() > max_size)
+        {
+            receivables.erase(std::prev(receivables.end()));
+        }
+    }
+
+    return false;
+}
+
+bool rai::Ledger::ReceivableInfosGet(rai::Transaction& transaction,
+                                     const rai::Account& account,
+                                     rai::ReceivableInfosType type,
+                                     rai::ReceivableInfos& receivables,
+                                     size_t max_size)
+{
+    rai::Iterator i = ReceivableInfoLowerBound(transaction, account);
+    rai::Iterator n = ReceivableInfoUpperBound(transaction, account);
+    for (; i != n; ++i)
+    {
+        rai::Account ignore;
+        rai::BlockHash hash;
+        rai::ReceivableInfo info;
+        bool error = ReceivableInfoGet(i, ignore, hash, info);
+        if (error)
+        {
+            // log
+            return true;
+        }
+
+        if (type != rai::ReceivableInfosType::ALL)
+        {
+            std::shared_ptr<rai::Block> block;
+            error = BlockGet(transaction, hash, block);
+            if (error || block == nullptr)
+            {
+                // log
+                return true;
+            }
+
+            rai::AccountInfo account_info;
+            error = AccountInfoGet(transaction, block->Account(), account_info);
+            if (error || !account_info.Valid())
+            {
+                // log
+                return true;
+            }
+
+            if (account_info.Confirmed(block->Height()))
+            {
+                if (type != rai::ReceivableInfosType::CONFIRMED)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                if (type != rai::ReceivableInfosType::NOT_CONFIRMED)
+                {
+                    continue;
+                }
+            }
+        }
+
+        receivables.emplace(info, hash);
+        if (receivables.size() > max_size)
+        {
+            receivables.erase(std::prev(receivables.end()));
+        }
+    }
+
+    return false;
+}
+
 bool rai::Ledger::ReceivableInfoDel(rai::Transaction& transaction,
                                     const rai::Account& destination,
                                     const rai::BlockHash& hash)
@@ -1103,6 +1321,37 @@ bool rai::Ledger::RewardableInfoGet(rai::Transaction& transaction,
     return info.Deserialize(stream);
 }
 
+
+bool rai::Ledger::RewardableInfoGet(const rai::Iterator& it,
+                                    rai::Account& destination,
+                                    rai::BlockHash& hash,
+                                    rai::RewardableInfo& info) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, destination.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, hash.bytes);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = info.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
 bool rai::Ledger::RewardableInfoDel(rai::Transaction& transaction,
                                     const rai::Account& representative,
                                     const rai::BlockHash& hash)
@@ -1121,6 +1370,39 @@ bool rai::Ledger::RewardableInfoDel(rai::Transaction& transaction,
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     return store_.Del(transaction.mdb_transaction_, store_.rewardables_, key,
                       nullptr);
+}
+
+
+rai::Iterator rai::Ledger::RewardableInfoLowerBound(
+    rai::Transaction& transaction, const rai::Account& account)
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::BlockHash hash(0);
+        rai::Write(stream, hash.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.rewardables_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::RewardableInfoUpperBound(
+    rai::Transaction& transaction, const rai::Account& account)
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::BlockHash hash(std::numeric_limits<rai::uint256_t>::max());
+        rai::Write(stream, hash.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.rewardables_, key);
+    return rai::Iterator(std::move(store_it));
 }
 
 bool rai::Ledger::RollbackBlockPut(rai::Transaction& transaction,
@@ -1158,7 +1440,7 @@ bool rai::Ledger::RollbackBlockGet(rai::Transaction& transaction,
 
     rai::BufferStream stream(value.Data(), value.Size());
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block                     = rai::DeserializeBlock(error_code, stream);
+    block = rai::DeserializeBlock(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;

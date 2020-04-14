@@ -1,5 +1,28 @@
 #include <rai/common/parameters.hpp>
 
+std::string rai::NetworkString()
+{
+    switch (rai::RAI_NETWORK)
+    {
+        case rai::RaiNetworks::TEST:
+        {
+            return "Test";
+        }
+        case rai::RaiNetworks::BETA:
+        {
+            return "Beta";
+        }
+        case rai::RaiNetworks::LIVE:
+        {
+            return "Live";
+        }
+        default:
+        {
+            throw std::runtime_error("Unknown rai::RAI_NETWORK");
+        }
+    }
+}
+
 uint64_t rai::EpochTimestamp()
 {
     switch (rai::RAI_NETWORK)

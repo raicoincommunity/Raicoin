@@ -82,12 +82,14 @@ class ReceivableInfo
 {
 public:
     ReceivableInfo() = default;
-    ReceivableInfo(const rai::Account&, const rai::Amount&);
+    ReceivableInfo(const rai::Account&, const rai::Amount&, uint64_t);
+    bool operator>(const rai::ReceivableInfo&) const;
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
     rai::Account source_;
     rai::Amount amount_;
+    uint64_t timestamp_;
 };
 
 class RewardableInfo
@@ -132,7 +134,24 @@ public:
 
 enum class MetaKey : uint32_t
 {
-    SELECTED_WALLET_ID = 0,
+    VERSION            = 0,
+    SELECTED_WALLET_ID = 1,
+};
+
+typedef std::multimap<rai::ReceivableInfo, rai::BlockHash,
+                      std::greater<rai::ReceivableInfo>>
+    ReceivableInfos;
+
+typedef std::multimap<rai::ReceivableInfo,
+                      std::pair<rai::Account, rai::BlockHash>,
+                      std::greater<rai::ReceivableInfo>>
+    ReceivableInfosAll;
+
+enum class ReceivableInfosType
+{
+    CONFIRMED     = 0,
+    NOT_CONFIRMED = 1,
+    ALL           = 2
 };
 
 class Ledger
@@ -161,6 +180,8 @@ public:
                   std::shared_ptr<rai::Block>&, rai::BlockHash&) const;
     bool BlockGet(rai::Transaction&, const rai::Account&, uint64_t,
                   std::shared_ptr<rai::Block>&) const;
+    bool BlockGet(rai::Transaction&, const rai::Account&, uint64_t,
+                  std::shared_ptr<rai::Block>&, rai::BlockHash&) const;
     bool BlockDel(rai::Transaction&, const rai::BlockHash&);
     bool BlockCount(rai::Transaction&, size_t&) const;
     bool BlockExists(rai::Transaction&, const rai::BlockHash&) const;
@@ -190,6 +211,13 @@ public:
                            const rai::BlockHash&, rai::ReceivableInfo&) const;
     bool ReceivableInfoGet(const rai::Iterator&, rai::Account&, rai::BlockHash&,
                            rai::ReceivableInfo&) const;
+
+    bool ReceivableInfosGet(rai::Transaction&, rai::ReceivableInfosType,
+                            rai::ReceivableInfosAll&,
+                            size_t = std::numeric_limits<size_t>::max());
+    bool ReceivableInfosGet(rai::Transaction&, const rai::Account&,
+                            rai::ReceivableInfosType, rai::ReceivableInfos&,
+                            size_t = std::numeric_limits<size_t>::max());
     bool ReceivableInfoDel(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&);
     bool ReceivableInfoCount(rai::Transaction&, size_t&) const;
@@ -201,8 +229,14 @@ public:
                            const rai::BlockHash&, const rai::RewardableInfo&);
     bool RewardableInfoGet(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&, rai::RewardableInfo&) const;
+    bool RewardableInfoGet(const rai::Iterator&, rai::Account&, rai::BlockHash&,
+                           rai::RewardableInfo&) const;
     bool RewardableInfoDel(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&);
+    rai::Iterator RewardableInfoLowerBound(rai::Transaction&,
+                                           const rai::Account&);
+    rai::Iterator RewardableInfoUpperBound(rai::Transaction&,
+                                           const rai::Account&);
     bool RollbackBlockPut(rai::Transaction&, const rai::BlockHash&,
                           const rai::Block&);
     bool RollbackBlockGet(rai::Transaction&, const rai::BlockHash&,
