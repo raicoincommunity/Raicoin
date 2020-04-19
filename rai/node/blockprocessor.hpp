@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <condition_variable>
+#include <unordered_set>
 #include <stack>
 #include <thread>
 #include <boost/multi_index/hashed_index.hpp>
@@ -57,6 +58,9 @@ class BlockProcessResult
 public:
     rai::BlockOperation operation_;
     rai::ErrorCode error_code_;
+
+    // block confirm extra info
+    uint64_t last_confirm_height_;
 };
 
 class Node;
@@ -74,7 +78,7 @@ public:
 
     static size_t constexpr MAX_BLOCKS = 256 * 1024;
     static size_t constexpr MAX_BLOCKS_FORK = 128 * 1024;
-    static size_t constexpr BUSY_SIZE = MAX_BLOCKS * 2 / 3;
+    static size_t constexpr BUSY_PERCENTAGE = 60;
 
     class OrderedKey
     {
@@ -112,8 +116,8 @@ private:
     static uint32_t Priority_(const std::shared_ptr<rai::Block>&);
     uint64_t DynamicOpration_();
     void ProcessBlock_(const std::shared_ptr<rai::Block>&, bool);
-    void ProcessBlockFork(const std::shared_ptr<rai::Block>&,
-                          const std::shared_ptr<rai::Block>&);
+    void ProcessBlockFork_(const std::shared_ptr<rai::Block>&,
+                           const std::shared_ptr<rai::Block>&);
     void ProcessBlockForced_(uint64_t, const std::shared_ptr<rai::Block>&);
     void ProcessBlockDynamic_(uint64_t);
     rai::ErrorCode ProcessBlockDynamicAppend_(
@@ -127,7 +131,7 @@ private:
         const std::shared_ptr<rai::Block>&);
     rai::ErrorCode ProcessBlockDynamicConfirm_(
         uint64_t, std::stack<rai::BlockDynamic>&,
-        const std::shared_ptr<rai::Block>&);
+        const std::shared_ptr<rai::Block>&, uint64_t&);
     rai::ErrorCode AppendBlock_(rai::Transaction&,
                                 const std::shared_ptr<rai::Block>&);
     rai::ErrorCode PrependBlock_(rai::Transaction&,
@@ -135,16 +139,19 @@ private:
     rai::ErrorCode RollbackBlock_(rai::Transaction&,
                                   const std::shared_ptr<rai::Block>&);
     rai::ErrorCode ConfirmBlock_(rai::Transaction&,
-                                 const std::shared_ptr<rai::Block>&);
+                                 const std::shared_ptr<rai::Block>&, uint64_t&);
     rai::QueryCallback QueryCallback_(uint64_t);
     bool QueryPrevious_(uint64_t, const std::shared_ptr<rai::Block>&);
     bool QueryPrevious_(rai::Transaction&, uint64_t, const rai::Account&);
     void QuerySource_(uint64_t, const rai::BlockHash&);
+    void UpdateForks_(const std::unordered_set<rai::Account>&);
 
     rai::Node& node_;
     rai::Ledger& ledger_;
     std::atomic<uint64_t> operation_;
     std::unordered_map<uint64_t, std::stack<rai::BlockDynamic>> blocks_dynamic_;
+    std::unordered_map<uint64_t, std::unordered_set<rai::Account>>
+        accounts_dynamic_;
 
     // mutex begin
     mutable std::mutex mutex_;
