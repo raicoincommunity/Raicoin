@@ -290,6 +290,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Http post failed";
         }
+        case rai::ErrorCode::LOGIC_ERROR:
+        {
+            return "Logic error";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

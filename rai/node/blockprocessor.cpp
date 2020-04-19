@@ -32,7 +32,7 @@ rai::BlockProcessor::~BlockProcessor()
 void rai::BlockProcessor::Add(const std::shared_ptr<rai::Block>& block)
 {
     uint32_t priority = Priority_(block);
-    auto now          = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
     OrderedKey key{priority, now};
     BlockInfo block_info{key, block->Hash(), block};
 
@@ -47,7 +47,7 @@ void rai::BlockProcessor::Add(const std::shared_ptr<rai::Block>& block)
     {
         auto it = blocks_.rbegin();
         rai::BlockProcessResult result{rai::BlockOperation::DROP,
-                                    rai::ErrorCode::SUCCESS};
+                                       rai::ErrorCode::SUCCESS, 0};
         observer_(result, it->block_);
         blocks_.erase((++it).base());
     }
@@ -76,7 +76,17 @@ void rai::BlockProcessor::AddFork(const rai::BlockFork& fork)
 bool rai::BlockProcessor::Busy() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    return blocks_.size() >= rai::BlockProcessor::BUSY_SIZE;
+    if (blocks_.size() * 100 >= rai::BlockProcessor::MAX_BLOCKS
+                                    * rai::BlockProcessor::BUSY_PERCENTAGE)
+    {
+        return true;
+    }
+    if (blocks_fork_.size() * 100 >= rai::BlockProcessor::MAX_BLOCKS_FORK
+                                    * rai::BlockProcessor::BUSY_PERCENTAGE)
+    {
+        return true;
+    }
+    return false;
 }
 
 void rai::BlockProcessor::Run()
@@ -96,7 +106,7 @@ void rai::BlockProcessor::Run()
                 ProcessBlock_(fork.first_, true);
                 ProcessBlock_(fork.second_, true);
             }
-            //ProcessBlockFork_(fork.first_, fork.second_);
+            ProcessBlockFork_(fork.first_, fork.second_);
             lock.lock();
         }
         else if (!blocks_forced_.empty())
@@ -152,6 +162,11 @@ uint32_t rai::BlockProcessor::Priority_(
         return max_priority;
     }
 
+    if (block->Opcode() == rai::BlockOpcode::REWARD)
+    {
+        return max_priority / 2;
+    }
+
     uint16_t credit  = block->Credit();
     uint32_t counter = block->Counter();
     if (counter == 0 || credit == 0)
@@ -182,113 +197,131 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
                                         bool ignore_fork)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    rai::Transaction transaction(error_code, ledger_, true);
-    if (error_code != rai::ErrorCode::SUCCESS)
     {
-        // log
-        rai::BlockProcessResult result{rai::BlockOperation::DROP, error_code};
-        observer_(result, block);
-        return;
-    }
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            rai::BlockProcessResult result{rai::BlockOperation::DROP,
+                                           error_code, 0};
+            observer_(result, block);
+            return;
+        }
 
-    error_code = AppendBlock_(transaction, block);
-    if (error_code != rai::ErrorCode::SUCCESS)
-    {
-        transaction.Abort();
-    }
-
-    switch (error_code)
-    {
-        case rai::ErrorCode::SUCCESS:
+        error_code = AppendBlock_(transaction, block);
+        switch (error_code)
         {
-            node_.QueueGapCaches(block->Hash());
-            node_.Publish(block);
-            break;
-        }
-        case rai::ErrorCode::BLOCK_PROCESS_SIGNATURE:
-        case rai::ErrorCode::BLOCK_PROCESS_EXISTS:
-        case rai::ErrorCode::BLOCK_PROCESS_PREVIOUS:
-        case rai::ErrorCode::BLOCK_PROCESS_OPCODE:
-        case rai::ErrorCode::BLOCK_PROCESS_CREDIT:
-        case rai::ErrorCode::BLOCK_PROCESS_COUNTER:
-        case rai::ErrorCode::BLOCK_PROCESS_TIMESTAMP:
-        case rai::ErrorCode::BLOCK_PROCESS_BALANCE:
-        case rai::ErrorCode::BLOCK_PROCESS_UNRECEIVABLE:
-        case rai::ErrorCode::BLOCK_PROCESS_UNREWARDABLE:
-        case rai::ErrorCode::BLOCK_PROCESS_PRUNED:
-        case rai::ErrorCode::BLOCK_PROCESS_TYPE_MISMATCH:
-        case rai::ErrorCode::BLOCK_PROCESS_REPRESENTATIVE:
-        case rai::ErrorCode::BLOCK_PROCESS_LINK:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_PUT:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_SUCCESSOR_SET:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_GET:
-        case rai::ErrorCode::BLOCK_PROCESS_TYPE_UNKNOWN:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_RECEIVABLE_INFO_PUT:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_RECEIVABLE_INFO_DEL:
-        case rai::ErrorCode::BLOCK_PROCESS_ACCOUNT_EXCEED_TRANSACTIONS:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_PUT:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_DEL:
-        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT:
-        {
-            break;
-        }
-        case rai::ErrorCode::BLOCK_PROCESS_GAP_PREVIOUS:
-        {
-            rai::GapInfo gap(block->Previous(), block);
-            node_.previous_gap_cache_.Insert(gap);
-            break;
-        }
-        case rai::ErrorCode::BLOCK_PROCESS_GAP_RECEIVE_SOURCE:
-        {
-            rai::GapInfo gap(block->Link(), block);
-            node_.receive_source_gap_cache_.Insert(gap);
-            break;
-        }
-        case rai::ErrorCode::BLOCK_PROCESS_GAP_REWARD_SOURCE:
-        {
-            rai::GapInfo gap(block->Link(), block);
-            node_.reward_source_gap_cache_.Insert(gap);
-            break;
-        }
-        case rai::ErrorCode::BLOCK_PROCESS_FORK:
-        {
-            if (ignore_fork)
+            case rai::ErrorCode::SUCCESS:
+            {
+                node_.QueueGapCaches(block->Hash());
+                node_.Publish(block);
+                break;
+            }
+            case rai::ErrorCode::BLOCK_PROCESS_SIGNATURE:
+            case rai::ErrorCode::BLOCK_PROCESS_EXISTS:
+            case rai::ErrorCode::BLOCK_PROCESS_PREVIOUS:
+            case rai::ErrorCode::BLOCK_PROCESS_OPCODE:
+            case rai::ErrorCode::BLOCK_PROCESS_CREDIT:
+            case rai::ErrorCode::BLOCK_PROCESS_COUNTER:
+            case rai::ErrorCode::BLOCK_PROCESS_TIMESTAMP:
+            case rai::ErrorCode::BLOCK_PROCESS_BALANCE:
+            case rai::ErrorCode::BLOCK_PROCESS_UNRECEIVABLE:
+            case rai::ErrorCode::BLOCK_PROCESS_UNREWARDABLE:
+            case rai::ErrorCode::BLOCK_PROCESS_PRUNED:
+            case rai::ErrorCode::BLOCK_PROCESS_TYPE_MISMATCH:
+            case rai::ErrorCode::BLOCK_PROCESS_REPRESENTATIVE:
+            case rai::ErrorCode::BLOCK_PROCESS_LINK:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_PUT:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_SUCCESSOR_SET:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_GET:
+            case rai::ErrorCode::BLOCK_PROCESS_TYPE_UNKNOWN:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_RECEIVABLE_INFO_PUT:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_RECEIVABLE_INFO_DEL:
+            case rai::ErrorCode::BLOCK_PROCESS_ACCOUNT_EXCEED_TRANSACTIONS:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_PUT:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_DEL:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT:
             {
                 break;
             }
-            std::shared_ptr<rai::Block> block_l(nullptr);
-            bool error = ledger_.BlockGet(transaction, block->Account(),
-                                          block->Height(), block_l);
-            if (error)
+            case rai::ErrorCode::BLOCK_PROCESS_GAP_PREVIOUS:
             {
-                error_code = rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+                rai::GapInfo gap(block->Previous(), block);
+                node_.previous_gap_cache_.Insert(gap);
                 break;
             }
-            rai::BlockFork fork{block_l, block, true};
-            AddFork(fork);
-            break;
+            case rai::ErrorCode::BLOCK_PROCESS_GAP_RECEIVE_SOURCE:
+            {
+                rai::GapInfo gap(block->Link(), block);
+                node_.receive_source_gap_cache_.Insert(gap);
+                break;
+            }
+            case rai::ErrorCode::BLOCK_PROCESS_GAP_REWARD_SOURCE:
+            {
+                rai::GapInfo gap(block->Link(), block);
+                node_.reward_source_gap_cache_.Insert(gap);
+                break;
+            }
+            case rai::ErrorCode::BLOCK_PROCESS_FORK:
+            {
+                if (ignore_fork)
+                {
+                    break;
+                }
+                rai::Stats::AddDetail(
+                    error_code, "account=", block->Account().StringAccount(),
+                    ", height=", block->Height(),
+                    ", hash=", block->Hash().StringHex());
+                std::shared_ptr<rai::Block> block_l(nullptr);
+                bool error = ledger_.BlockGet(transaction, block->Account(),
+                                              block->Height(), block_l);
+                if (error)
+                {
+                    error_code =
+                        rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+                    rai::Stats::AddDetail(
+                        error_code,
+                        "BlockProcessor::ProcessBlock_: get block by account=",
+                        block->Account().StringAccount(),
+                        ", height=", block->Height());
+                    break;
+                }
+                rai::BlockFork fork{block_l, block, true};
+                AddFork(fork);
+                break;
+            }
+            default:
+            {
+                assert(0);
+            }
         }
-        default:
+
+        if (error_code != rai::ErrorCode::SUCCESS)
         {
-            assert(0);
+            transaction.Abort();
         }
     }
 
+    
     // stat
     if (error_code == rai::ErrorCode::SUCCESS)
     {
     }
     else
     {
+        rai::Stats::Add(error_code);
+        if (error_code != rai::ErrorCode::BLOCK_PROCESS_EXISTS)
+        {
+            std::cout << rai::ErrorString(error_code) << std::endl;
+        }
     }
 
-    rai::BlockProcessResult result{rai::BlockOperation::APPEND, error_code};
+    rai::BlockProcessResult result{rai::BlockOperation::APPEND, error_code, 0};
     observer_(result, block);
 
-    std::cout << "!!!!!!!!" << rai::ErrorString(error_code) << std::endl;
 }
 
-void rai::BlockProcessor::ProcessBlockFork(
+void rai::BlockProcessor::ProcessBlockFork_(
     const std::shared_ptr<rai::Block>& first,
     const std::shared_ptr<rai::Block>& second)
 {
@@ -297,82 +330,85 @@ void rai::BlockProcessor::ProcessBlockFork(
         return;
     }
 
-    rai::Account account = first->Account();
-    uint64_t height = first->Height();
-    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    rai::Transaction transaction(error_code, ledger_, true);
-    if (error_code != rai::ErrorCode::SUCCESS)
     {
-        return;
-    }
-
-    if (ledger_.ForkExists(transaction, account, height))
-    {
-        return;
-    }
-
-    rai::AccountInfo info;
-    bool error = ledger_.AccountInfoGet(transaction, account, info);
-    if (error || height > info.head_height_)
-    {
-        return;
-    }
-
-    if (info.forks_ <= rai::MaxAllowedForks(rai::CurrentTimestamp()))
-    {
-        error = ledger_.ForkPut(transaction, account, height, *first, *second);
-        if (error)
+        rai::Account account = first->Account();
+        uint64_t height = first->Height();
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
         {
-            transaction.Abort();
             return;
         }
-        info.forks_++;
-        error = ledger_.AccountInfoPut(transaction, account, info);
-        if (error)
+
+        if (ledger_.ForkExists(transaction, account, height))
         {
-            transaction.Abort();
             return;
         }
-    }
-    else
-    {
-        uint64_t max_height = height;
-        rai::Iterator i = ledger_.ForkLowerBound(transaction, account);
-        rai::Iterator n = ledger_.ForkUpperBound(transaction, account);
-        for (; i != n; ++i)
+
+        rai::AccountInfo info;
+        bool error = ledger_.AccountInfoGet(transaction, account, info);
+        if (error || !info.Valid() || height > info.head_height_)
         {
-            std::shared_ptr<rai::Block> first(nullptr);
-            std::shared_ptr<rai::Block> second(nullptr);
-            error = ledger_.ForkGet(i, first, second);
-            if (error || first->Account() != account)
+            return;
+        }
+
+        if (info.forks_ < rai::MaxAllowedForks(rai::CurrentTimestamp()) + 2)
+        {
+            error =
+                ledger_.ForkPut(transaction, account, height, *first, *second);
+            if (error)
             {
-                assert(0);
                 transaction.Abort();
                 return;
             }
-            if (first->Height() > max_height)
+            info.forks_++;
+            error = ledger_.AccountInfoPut(transaction, account, info);
+            if (error)
             {
-                max_height = first->Height();
+                transaction.Abort();
+                return;
             }
         }
-        if (max_height == height)
+        else
         {
-            return;
-        }
-        error = ledger_.ForkDel(transaction, account, max_height);
-        if (error)
-        {
-            transaction.Abort();
-            return;
-        }
-        error = ledger_.ForkPut(transaction, account, height, *first, *second);
-        if (error)
-        {
-            transaction.Abort();
-            return;
+            uint64_t max_height = height;
+            rai::Iterator i = ledger_.ForkLowerBound(transaction, account);
+            rai::Iterator n = ledger_.ForkUpperBound(transaction, account);
+            for (; i != n; ++i)
+            {
+                std::shared_ptr<rai::Block> first(nullptr);
+                std::shared_ptr<rai::Block> second(nullptr);
+                error = ledger_.ForkGet(i, first, second);
+                if (error || first->Account() != account)
+                {
+                    assert(0);
+                    transaction.Abort();
+                    return;
+                }
+                if (first->Height() > max_height)
+                {
+                    max_height = first->Height();
+                }
+            }
+            if (max_height == height)
+            {
+                return;
+            }
+            error = ledger_.ForkDel(transaction, account, max_height);
+            if (error)
+            {
+                transaction.Abort();
+                return;
+            }
+            error =
+                ledger_.ForkPut(transaction, account, height, *first, *second);
+            if (error)
+            {
+                transaction.Abort();
+                return;
+            }
         }
     }
-
     node_.BroadcastFork(first, second);
     node_.StartElection(first, second);
 }
@@ -387,12 +423,15 @@ void rai::BlockProcessor::ProcessBlockForced_(
         {
             return;
         }
+        accounts_dynamic_[operation].insert(block->Account());
         it->second.top().block_ = block;
         ProcessBlockDynamic_(operation);
     }
     else if (operation == static_cast<uint64_t>(rai::BlockOperation::APPEND))
     {
         uint64_t operation_new = DynamicOpration_();
+        accounts_dynamic_[operation_new] = std::unordered_set<rai::Account>();
+        accounts_dynamic_[operation_new].insert(block->Account());
         blocks_dynamic_[operation_new] = std::stack<rai::BlockDynamic>();
         blocks_dynamic_[operation_new].push(
             rai::BlockDynamic{rai::BlockOperation::APPEND, block});
@@ -401,6 +440,8 @@ void rai::BlockProcessor::ProcessBlockForced_(
     else if (operation == static_cast<uint64_t>(rai::BlockOperation::CONFIRM))
     {
         uint64_t operation_new = DynamicOpration_();
+        accounts_dynamic_[operation_new] = std::unordered_set<rai::Account>();
+        accounts_dynamic_[operation_new].insert(block->Account());
         blocks_dynamic_[operation_new] = std::stack<rai::BlockDynamic>();
         blocks_dynamic_[operation_new].push(
             rai::BlockDynamic{rai::BlockOperation::CONFIRM, block});
@@ -421,6 +462,7 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
     }
 
     rai::ErrorCode error_code;
+    uint64_t last_confirm_height = 0;
     auto& stack(blocks_dynamic_[operation]);
     while (!stack.empty())
     {
@@ -432,8 +474,8 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
         }
         else if (top.operation_ == rai::BlockOperation::CONFIRM)
         {
-            error_code =
-                ProcessBlockDynamicConfirm_(operation, stack, top.block_);
+            error_code = ProcessBlockDynamicConfirm_(
+                operation, stack, top.block_, last_confirm_height);
         }
         else if (top.operation_ == rai::BlockOperation::PREPEND)
         {
@@ -452,8 +494,17 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
         }
 
         // stat
+        if (error_code == rai::ErrorCode::SUCCESS)
+        {
 
-        rai::BlockProcessResult result{top.operation_, error_code};
+        }
+        else
+        {
+            rai::Stats::Add(error_code);
+        }
+
+        rai::BlockProcessResult result{top.operation_, error_code,
+                                       last_confirm_height};
         observer_(result, top.block_);
 
         if (error_code == rai::ErrorCode::SUCCESS)
@@ -496,6 +547,8 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
     }
 
     blocks_dynamic_.erase(operation);
+    UpdateForks_(accounts_dynamic_[operation]);
+    accounts_dynamic_.erase(operation);
 }
 
 rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicAppend_(
@@ -547,6 +600,7 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicAppend_(
                                           block->Height(), fork_block);
             IF_ERROR_RETURN(error,
                             rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_GET);
+            accounts_dynamic_[operation].insert(fork_block->Account());
             stack.push(
                 rai::BlockDynamic{rai::BlockOperation::ROLLBACK, fork_block});
             return rai::ErrorCode::BLOCK_PROCESS_CONTINUE;
@@ -655,6 +709,7 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicRollback_(
             std::shared_ptr<rai::Block> successor(nullptr);
             error = ledger_.BlockGet(transaction, hash, successor);
             IF_ERROR_RETURN(error, error_code);
+            accounts_dynamic_[operation].insert(successor->Account());
             stack.push(
                 rai::BlockDynamic{rai::BlockOperation::ROLLBACK, successor});
             return rai::ErrorCode::BLOCK_PROCESS_CONTINUE;
@@ -672,6 +727,7 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicRollback_(
             std::shared_ptr<rai::Block> head(nullptr);
             error = ledger_.BlockGet(transaction, info.head_, head);
             IF_ERROR_RETURN(error, error_code);
+            accounts_dynamic_[operation].insert(head->Account());
             stack.push(rai::BlockDynamic{rai::BlockOperation::ROLLBACK, head});
             return rai::ErrorCode::BLOCK_PROCESS_CONTINUE;
         }
@@ -684,6 +740,7 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicRollback_(
             std::shared_ptr<rai::Block> head(nullptr);
             error = ledger_.BlockGet(transaction, info.head_, head);
             IF_ERROR_RETURN(error, error_code);
+            accounts_dynamic_[operation].insert(head->Account());
             stack.push(rai::BlockDynamic{rai::BlockOperation::ROLLBACK, head});
             return rai::ErrorCode::BLOCK_PROCESS_CONTINUE;
         }
@@ -719,13 +776,13 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicRollback_(
 
 rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicConfirm_(
     uint64_t operation, std::stack<rai::BlockDynamic>& stack,
-    const std::shared_ptr<rai::Block>& block)
+    const std::shared_ptr<rai::Block>& block, uint64_t& last_confirm_height)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, ledger_, true);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = ConfirmBlock_(transaction, block);
+    error_code = ConfirmBlock_(transaction, block, last_confirm_height);
     switch (error_code)
     {
         case rai::ErrorCode::SUCCESS:
@@ -734,6 +791,7 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicConfirm_(
         }
         case rai::ErrorCode::BLOCK_PROCESS_CONFIRM_BLOCK_MISS:
         {
+            accounts_dynamic_[operation].insert(block->Account());
             stack.push(rai::BlockDynamic{rai::BlockOperation::APPEND, block});
             return rai::ErrorCode::BLOCK_PROCESS_CONTINUE;
         }
@@ -767,7 +825,8 @@ public:
     {
         rai::BlockType type  = block.Type();
         if (type != rai::BlockType::TX_BLOCK
-            && type != rai::BlockType::REP_BLOCK)
+            && type != rai::BlockType::REP_BLOCK
+            && type != rai::BlockType::AD_BLOCK)
         {
             return rai::ErrorCode::BLOCK_PROCESS_TYPE_UNKNOWN;
         }
@@ -776,7 +835,7 @@ public:
         IF_ERROR_RETURN(error, rai::ErrorCode::BLOCK_PROCESS_SIGNATURE);
 
         uint64_t timestamp = block.Timestamp();
-        if (timestamp < rai::EPOCH_TIMESTAMP
+        if (timestamp < rai::EpochTimestamp()
             || timestamp > rai::CurrentTimestamp() + rai::MAX_TIMESTAMP_DIFF)
         {
             return rai::ErrorCode::BLOCK_PROCESS_TIMESTAMP;
@@ -909,22 +968,6 @@ public:
         return rai::ErrorCode::BLOCK_PROCESS_REPRESENTATIVE;
     }
 
-    rai::ErrorCode CheckRepresentativeChange(const rai::Block& previous,
-                                             const rai::Block& block)
-    {
-        if (!block.HasRepresentative())
-        {
-            return rai::ErrorCode::SUCCESS;
-        }
-
-        if (previous.Representative() != block.Representative())
-        {
-            return rai::ErrorCode::SUCCESS;
-        }
-
-        return rai::ErrorCode::BLOCK_PROCESS_REPRESENTATIVE;
-    }
-
     rai::ErrorCode PutRewardableInfo(const rai::Block& block,
                                      const rai::Block& successor)
     {
@@ -969,7 +1012,7 @@ public:
     {
         rai::AccountInfo info_l(info);
         info_l.head_height_ = block.Height();
-        info_l.head_        = block.Hash();
+        info_l.head_ = block.Hash();
         bool error =
             ledger_.AccountInfoPut(transaction_, block.Account(), info_l);
         IF_ERROR_RETURN(error,
@@ -1039,11 +1082,13 @@ public:
         IF_NOT_SUCCESS_RETURN(error_code);
 
         UpdateRepWeight(*head_block, block);
+
         error_code = PutRewardableInfo(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
 
         rai::Amount send_amount(head_block->Balance() - block.Balance());
-        rai::ReceivableInfo receivable_info(block.Account(), send_amount);
+        rai::ReceivableInfo receivable_info(block.Account(), send_amount,
+                                            block.Timestamp());
         error = ledger_.ReceivableInfoPut(transaction_, block.Link(),
                                           block.Hash(), receivable_info);
         IF_ERROR_RETURN(
@@ -1169,6 +1214,7 @@ public:
             IF_NOT_SUCCESS_RETURN(error_code);
 
             UpdateRepWeight(*head_block, block);
+
             error_code = PutRewardableInfo(*head_block, block);
             IF_NOT_SUCCESS_RETURN(error_code);
 
@@ -1215,9 +1261,6 @@ public:
         error_code = CheckCounterIncrease(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
 
-        error_code = CheckRepresentativeChange(*head_block, block);
-        IF_NOT_SUCCESS_RETURN(error_code);
-
         if (block.Balance() != head_block->Balance())
         {
             return rai::ErrorCode::BLOCK_PROCESS_BALANCE;
@@ -1235,6 +1278,7 @@ public:
         IF_NOT_SUCCESS_RETURN(error_code);
 
         UpdateRepWeight(*head_block, block);
+
         error_code = PutRewardableInfo(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
 
@@ -1431,6 +1475,63 @@ public:
         return rai::ErrorCode::SUCCESS;
     }
 
+    rai::ErrorCode Destroy(const rai::Block& block) override
+    {
+        // 1. check block
+        rai::ErrorCode error_code = CheckCommon(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        rai::AccountInfo account_info;
+        bool error =
+            ledger_.AccountInfoGet(transaction_, block.Account(), account_info);
+        bool account_exists = !error && account_info.Valid();
+        if (!account_exists)
+        {
+            if (block.Height() != 0)
+            {
+                return rai::ErrorCode::BLOCK_PROCESS_GAP_PREVIOUS;
+            }
+            return rai::ErrorCode::BLOCK_PROCESS_OPCODE;
+        }
+
+        std::shared_ptr<rai::Block> head_block(nullptr);
+        error = ledger_.BlockGet(transaction_, account_info.head_, head_block);
+        IF_ERROR_RETURN(error, rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_GET);
+
+        error_code = CheckSuccessorCommon(block, *head_block, account_info);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (block.Credit() != head_block->Credit())
+        {
+            return rai::ErrorCode::BLOCK_PROCESS_CREDIT;
+        }
+
+        error_code = CheckCounterIncrease(*head_block, block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = CheckRepresentativeSame(*head_block, block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (block.Balance() >= head_block->Balance())
+        {
+            return rai::ErrorCode::BLOCK_PROCESS_BALANCE;
+        }
+
+        // 2. update ledger
+        error_code = PutBlockSuccessor(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = UpdateAccountInfo(block, account_info);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        UpdateRepWeight(*head_block, block);
+
+        error_code = PutRewardableInfo(*head_block, block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        return rai::ErrorCode::SUCCESS;
+    }
+
     rai::Transaction& transaction_;
     rai::Ledger& ledger_;
 };
@@ -1503,12 +1604,21 @@ public:
                                             account_info_);
         if (error || !account_info_.Valid())
         {
+            rai::Stats::AddDetail(
+                rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+                "RollbackBlockVisitor::Check: failed to get account info, "
+                "account=",
+                block.Account().StringAccount());
             return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
         }
 
         if (block.Height() < account_info_.tail_height_
             || block.Height() > account_info_.head_height_)
         {
+            rai::Stats::AddDetail(
+                rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+                "RollbackBlockVisitor::Check: invalid block height, account=",
+                block.Account().StringAccount(), ", height=", block.Height());
             return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
         }
 
@@ -1524,12 +1634,22 @@ public:
         }
         if (block.Hash() != account_info_.head_)
         {
+            rai::Stats::AddDetail(
+                rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+                "RollbackBlockVisitor::Check: invalid block hash, hash=",
+                block.Hash().StringHex());
             return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
         }
         std::shared_ptr<rai::Block> head(nullptr);
         error = ledger_.BlockGet(transaction_, account_info_.head_, head);
-        IF_ERROR_RETURN(error,
-                        rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT);
+        if (error)
+        {
+            rai::Stats::AddDetail(
+                rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+                "RollbackBlockVisitor::Check: failed to get head block, hash=",
+                account_info_.head_.StringHex());
+            return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+        }
         if (block != *head)
         {
             return rai::ErrorCode::BLOCK_PROCESS_ROLLBACK_NOT_EQUAL_TO_HEAD;
@@ -1539,8 +1659,16 @@ public:
         if (block.Height() != 0)
         {
             error = ledger_.BlockGet(transaction_, block.Previous(), previous_);
-            IF_ERROR_RETURN(error,
-                            rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT);
+            if (error)
+            {
+                rai::Stats::AddDetail(
+                    rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+                    "RollbackBlockVisitor::Check: failed to get previous "
+                    "block, "
+                    "hash=",
+                    block.Previous().StringHex());
+                return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+            }
         }
 
         delete_rewardable_ = false;
@@ -1698,7 +1826,8 @@ public:
             rai::uint128_t price(price_amount.Number());
             amount = price * block.Credit() + balance;
         }
-        rai::ReceivableInfo receivable_info(source->Account(), amount);
+        rai::ReceivableInfo receivable_info(source->Account(), amount,
+                                            source->Timestamp());
         error = ledger_.ReceivableInfoPut(transaction_, block.Account(),
                                           block.Link(), receivable_info);
         IF_ERROR_RETURN(
@@ -1778,8 +1907,15 @@ public:
                         rai::ErrorCode::BLOCK_PROCESS_ROLLBACK_SOURCE_PRUNED);
         std::shared_ptr<rai::Block> successor(nullptr);
         error = ledger_.BlockGet(transaction_, successor_hash, successor);
-        IF_ERROR_RETURN(error,
-                        rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT);
+        if (error)
+        {
+            rai::Stats::AddDetail(
+                rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+                "RollbackBlockVisitor::Reward: failed to get successor block, "
+                "hash=",
+                successor_hash.StringHex());
+            return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+        }
 
         rai::Amount amount(0);
         if (block.Height() != 0)
@@ -1819,6 +1955,28 @@ public:
         return rai::ErrorCode::SUCCESS;
     }
 
+    rai::ErrorCode Destroy(const rai::Block& block) override
+    {
+        rai::ErrorCode error_code = Check(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = DeleteBlockSuccessor(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = PutRollbackBlock(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = UpdateAccountInfo(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = DeleteRewardableInfo(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        UpdateRepWeight(block);
+
+        return rai::ErrorCode::SUCCESS;
+    }
+
     rai::Transaction& transaction_;
     rai::Ledger& ledger_;
     std::shared_ptr<rai::Block> previous_;
@@ -1835,7 +1993,8 @@ rai::ErrorCode rai::BlockProcessor::RollbackBlock_(
 }
 
 rai::ErrorCode rai::BlockProcessor::ConfirmBlock_(
-    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block)
+    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
+    uint64_t& last_confirm_height)
 {
     if (!ledger_.BlockExists(transaction, block->Hash()))
     {
@@ -1845,8 +2004,17 @@ rai::ErrorCode rai::BlockProcessor::ConfirmBlock_(
     rai::AccountInfo account_info;
     bool error =
         ledger_.AccountInfoGet(transaction, block->Account(), account_info);
-    IF_ERROR_RETURN(error, rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT);
+    if (error)
+    {
+        rai::Stats::AddDetail(
+            rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT,
+            "BlockProcessor::ConfirmBlock_: failed to get account info, "
+            "account=",
+            block->Account().StringAccount());
+        return rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+    }
 
+    last_confirm_height = account_info.confirmed_height_;
     if (account_info.confirmed_height_ == rai::Block::INVALID_HEIGHT
         || block->Height() > account_info.confirmed_height_)
     {
@@ -1933,4 +2101,81 @@ void rai::BlockProcessor::QuerySource_(uint64_t operation,
     node_.block_queries_.QueryByHash(rai::Account(0),
                                      rai::Block::INVALID_HEIGHT, hash, false,
                                      QueryCallback_(operation));
+}
+
+void rai::BlockProcessor::UpdateForks_(
+    const std::unordered_set<rai::Account>& accounts)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, true);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code, "BlockProcessor::UpdateForks_");
+        return;
+    }
+
+    for (const auto& account : accounts)
+    {
+        rai::AccountInfo info;
+        bool error = ledger_.AccountInfoGet(transaction, account, info);
+        if (error || !info.Valid())
+        {
+            bool error = ledger_.ForkDel(transaction, account);
+            if (error)
+            {
+                // log
+                rai::Stats::Add(rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_DEL);
+            }
+            continue;
+        }
+
+        uint16_t count = 0;
+        std::vector<uint64_t> heights;
+        rai::Iterator i = ledger_.ForkLowerBound(transaction, account);
+        rai::Iterator n = ledger_.ForkUpperBound(transaction, account);
+        for (; i != n; ++i)
+        {
+            std::shared_ptr<rai::Block> first(nullptr);
+            std::shared_ptr<rai::Block> second(nullptr);
+            error = ledger_.ForkGet(i, first, second);
+            if (error || first->Account() != account)
+            {
+                // log
+                rai::Stats::Add(rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_GET,
+                                "BlockProcessor::UpdateForks_");
+                continue;
+            }
+            if (first->Height() > info.head_height_)
+            {
+                heights.push_back(first->Height());
+            }
+            else
+            {
+                ++count;
+            }
+        }
+
+        for (uint64_t height : heights)
+        {
+            bool error = ledger_.ForkDel(transaction, account, height);
+            if (error)
+            {
+                // log
+                rai::Stats::Add(rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_DEL);
+            }
+        }
+
+        if (count != info.forks_)
+        {
+            info.forks_ = count;
+            bool error = ledger_.AccountInfoPut(transaction, account, info);
+            if (error)
+            {
+                // log
+                rai::Stats::Add(
+                    rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT,
+                    "BlockProcessor::UpdateForks_");
+            }
+        }
+    }
 }

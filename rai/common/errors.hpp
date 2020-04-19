@@ -103,6 +103,7 @@ enum class ErrorCode : int
     SSL_HANDSHAKE                        = 93,
     WRITE_STREAM                         = 94,
     HTTP_GET                             = 95,
+    LOGIC_ERROR                          = 96,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC              = 200,
