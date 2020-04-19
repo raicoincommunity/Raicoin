@@ -674,10 +674,13 @@ rai::QueryMessage::QueryMessage(rai::ErrorCode& error_code, rai::Stream& stream,
         return;
     }
 
-    if (QueryStatus() == rai::QueryStatus::INVALID)
+    if (GetFlag(rai::MessageFlags::ACK))
     {
-        error_code = rai::ErrorCode::MESSAGE_QUERY_STATUS;
-        return;
+        if (QueryStatus() == rai::QueryStatus::INVALID)
+        {
+            error_code = rai::ErrorCode::MESSAGE_QUERY_STATUS;
+            return;
+        }
     }
 
     error_code = Deserialize(stream);
@@ -1081,6 +1084,66 @@ rai::BlockHash rai::ConflictMessage::Hash_(uint64_t timestamp,
     return result;
 }
 
+rai::BootstrapMessage::BootstrapMessage(rai::ErrorCode& error_code,
+                                        rai::Stream& stream,
+                                        const rai::MessageHeader& header)
+    : Message(header)
+{
+    error_code = Deserialize(stream);
+}
+
+rai::BootstrapMessage::BootstrapMessage(rai::BootstrapType type,
+                                        const rai::Account& start,
+                                        uint64_t height, uint16_t size)
+    : Message(rai::MessageType::BOOTSTRAP, size),
+      type_(type),
+      start_(start),
+      height_(height)
+{
+}
+
+void rai::BootstrapMessage::Serialize(rai::Stream& stream) const
+{
+    header_.Serialize(stream);
+    rai::Write(stream, type_);
+    rai::Write(stream, start_.bytes);
+    rai::Write(stream, height_);
+}
+
+rai::ErrorCode rai::BootstrapMessage::Deserialize(rai::Stream& stream)
+{
+    bool error = rai::Read(stream, type_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, start_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, height_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    
+    return Check_();
+}
+
+void rai::BootstrapMessage::Visit(rai::MessageVisitor& visitor)
+{
+}
+
+uint16_t rai::BootstrapMessage::MaxSize() const
+{
+    return header_.extension_;
+}
+
+rai::ErrorCode rai::BootstrapMessage::Check_() const
+{
+    if (type_ == rai::BootstrapType::INVALID || type_ >= rai::BootstrapType::MAX)
+    {
+        return rai::ErrorCode::BOOTSTRAP_TYPE;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+
 rai::MessageParser::MessageParser(rai::MessageVisitor& visitor)
     : visitor_(visitor)
 {
@@ -1112,9 +1175,21 @@ rai::ErrorCode rai::MessageParser::Parse(rai::Stream& stream)
         {
             return Parse<rai::PublishMessage>(stream, header);
         }
+        case rai::MessageType::CONFIRM:
+        {
+            return Parse<rai::ConfirmMessage>(stream, header);
+        }
         case rai::MessageType::QUERY:
         {
             return Parse<rai::QueryMessage>(stream, header);
+        }
+        case rai::MessageType::FORK:
+        {
+            return Parse<rai::ForkMessage>(stream, header);
+        }
+        case rai::MessageType::CONFLICT:
+        {
+            return Parse<rai::ConflictMessage>(stream, header);
         }
         default:
         {

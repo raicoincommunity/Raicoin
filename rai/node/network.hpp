@@ -13,6 +13,8 @@ using IP = boost::asio::ip::address_v4;
 using UdpEndpoint = boost::asio::ip::udp::endpoint;
 using Endpoint = UdpEndpoint;
 
+std::string ToString(const rai::Endpoint&);
+
 class Node;
 class UdpNetwork
 {
@@ -29,7 +31,7 @@ public:
                                     boost::asio::ip::udp::resolver::iterator)>);
 
     static uint16_t constexpr DEFAULT_PORT =
-        rai::RAI_NETWORK == rai::RaiNetworks::LIVE ? 7077 : 54300;
+        rai::RAI_NETWORK == rai::RaiNetworks::LIVE ? 7175 : 54300;
 
     typedef std::function<void(const rai::Endpoint&, rai::Stream&)> Handler;
     static void RegisterHandler(rai::Node&, const Handler&);
@@ -76,20 +78,21 @@ class TcpSocket : public std::enable_shared_from_this<rai::TcpSocket>
 {
 public:
     TcpSocket(const std::shared_ptr<rai::Node>&);
-    void AsyncConnect(const rai::TcpEndpoint&,
-                      std::function<void(const boost::system::error_code&)>&);
+    void AsyncConnect(
+        const rai::TcpEndpoint&,
+        const std::function<void(const boost::system::error_code&)>&);
     void AsyncRead(
-        std::shared_ptr<std::vector<uint8_t>>&, size_t,
-        std::function<void(const boost::system::error_code&, size_t)>&);
+        std::vector<uint8_t>&, size_t,
+        const std::function<void(const boost::system::error_code&, size_t)>&);
     void AsyncWrite(
-        std::shared_ptr<std::vector<uint8_t>>&,
-        std::function<void(const boost::system::error_code&, size_t)>&);
+        std::vector<uint8_t>&,
+        const std::function<void(const boost::system::error_code&, size_t)>&);
     void Start();
     void Stop();
     void Close();
     rai::TcpEndpoint Remote();
 
-    static std::chrono::seconds constexpr TIMEOUT = std::chrono::seconds(5);
+    static std::chrono::seconds constexpr TIMEOUT = std::chrono::seconds(16);
 
     std::atomic<uint32_t> ticket_;
     std::shared_ptr<rai::Node> node_;
@@ -118,3 +121,15 @@ struct hash<rai::UdpEndpoint>
     }
 };
 }  // namespace boost
+
+namespace std
+{
+template <>
+struct hash<rai::IP>
+{
+    size_t operator()(const rai::IP& data) const
+    {
+        return data.to_ulong();
+    }
+};
+}

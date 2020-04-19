@@ -25,6 +25,7 @@ enum class MessageType : uint8_t
     QUERY     = 5,
     FORK      = 6,
     CONFLICT  = 7,
+    BOOTSTRAP = 8,
 
     MAX
 };
@@ -282,6 +283,38 @@ private:
                          const rai::Block&) const;
 };
 
+enum class BootstrapType : uint8_t
+{
+    INVALID = 0,
+    FULL    = 1,
+    LIGHT   = 2,
+    FORK    = 3,
+
+    MAX
+};
+
+class BootstrapMessage : public Message
+{
+public:
+    BootstrapMessage(rai::ErrorCode&, rai::Stream&, const rai::MessageHeader&);
+    BootstrapMessage(rai::BootstrapType, const rai::Account&, uint64_t,
+                     uint16_t);
+    virtual ~BootstrapMessage() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void Visit(rai::MessageVisitor&) override;
+
+    uint16_t MaxSize() const;
+
+    rai::BootstrapType type_;
+    rai::Account start_;
+    uint64_t height_;
+
+private:
+    rai::ErrorCode Check_() const;
+};
+
 class MessageVisitor
 {
 public:
@@ -318,4 +351,5 @@ private:
 
     rai::MessageVisitor& visitor_;
 };
+
 }  // namespace rai
