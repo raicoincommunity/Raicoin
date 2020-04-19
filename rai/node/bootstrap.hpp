@@ -100,8 +100,7 @@ public:
     ~Bootstrap();
 
     uint32_t Count() const;
-    bool WaitSyncer() const;
-    boost::optional<rai::Peer> RandomPeer();
+    bool WaitingSyncer() const;
     void Run();
     void Stop();
     void Restart();
@@ -117,10 +116,11 @@ private:
     rai::ErrorCode RunFull_();
     rai::ErrorCode RunLight_();
     rai::ErrorCode RunFork_();
+    void Wait_();
 
     rai::Node& node_;
     std::atomic<bool> stopped_;
-    std::atomic<bool> wait_;
+    std::atomic<bool> waiting_;
     std::atomic<uint32_t> count_;
     std::chrono::steady_clock::time_point last_time_;
     std::thread thread_;

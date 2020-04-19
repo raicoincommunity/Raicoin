@@ -104,7 +104,6 @@ void rai::BlockQueries::Insert(const rai::BlockQuery& query)
 
 void rai::BlockQueries::ProcessQuery(rai::BlockQuery& query)
 {
-    std::cout << "===========> ProcessQuery 1\n";
     if (query.count_ == 0)
     {
         SendQuery_(query);
@@ -394,7 +393,6 @@ void rai::BlockQueries::SendQuery_(rai::BlockQuery& query)
 
     if (!peer)
     {
-        std::cout << "[DEBUG]===========> SendQuery_ 1\n";
         return;
     }
     boost::optional<rai::Endpoint> proxy_endpoint(boost::none);

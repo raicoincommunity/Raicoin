@@ -39,13 +39,29 @@ void rai::BootstrapAccount::ToBytes(std::vector<uint8_t>& bytes) const
 rai::ErrorCode rai::BootstrapAccount::Deserialize(rai::Stream& stream)
 {
     bool error = rai::Read(stream, account_.bytes);
-    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    if (error)
+    {
+        rai::Stats::AddDetail(rai::ErrorCode::STREAM,
+                              "BootstrapAccount::Deserialize::account");
+        return rai::ErrorCode::STREAM;
+    }
 
     error = rai::Read(stream, head_.bytes);
-    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    if (error)
+    {
+        rai::Stats::AddDetail(rai::ErrorCode::STREAM,
+                              "BootstrapAccount::Deserialize::head");
+        return rai::ErrorCode::STREAM;
+    }
 
     error = rai::Read(stream, height_);
-    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    if (error)
+    {
+        rai::Stats::AddDetail(rai::ErrorCode::STREAM,
+                              "BootstrapAccount::Deserialize::height");
+        return rai::ErrorCode::STREAM;
+    }
+
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -116,6 +132,11 @@ rai::ErrorCode rai::BootstrapClient::Connect()
                               this_s->ConnectCallback(ec);
                           });
     future.get();
+    
+    if (error_code_ == rai::ErrorCode::SUCCESS)
+    {
+        connected_ = true;
+    }
     return error_code_;
 }
 
@@ -127,7 +148,11 @@ bool rai::BootstrapClient::Finished() const
 rai::ErrorCode rai::BootstrapClient::Run()
 {
     rai::ErrorCode error_code = Connect();
-    IF_NOT_SUCCESS_RETURN(error_code);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::AddDetail(error_code, "Failed to connect to ", endpoint_);
+        return error_code;
+    }
 
     error_code_              = rai::ErrorCode::SUCCESS;
     promise_                 = std::promise<bool>();
@@ -184,15 +209,22 @@ rai::ErrorCode rai::BootstrapClient::Run()
                 });
             future.get();
             IF_NOT_SUCCESS_RETURN(error_code_);
+            if (finished_ || continue_ == false)
+            {
+                continue;
+            }
 
-            promise_ = std::promise<bool>();
-            future   = promise_.get_future();
-            socket_->AsyncRead(
-                receive_buffer_, forks_[curr_size_].length_,
-                [this_s](const boost::system::error_code& ec, size_t size) {
-                    this_s->ReadForkBlocks(ec, size);
-                });
-            future.get();
+            if (forks_[curr_size_].length_ > 0)
+            {
+                promise_ = std::promise<bool>();
+                future   = promise_.get_future();
+                socket_->AsyncRead(
+                    receive_buffer_, forks_[curr_size_].length_,
+                    [this_s](const boost::system::error_code& ec, size_t size) {
+                        this_s->ReadForkBlocks(ec, size);
+                    });
+                future.get();
+            }
         }
         else
         {
@@ -253,9 +285,19 @@ void rai::BootstrapClient::ReadAccount(const boost::system::error_code& ec,
 {
     do
     {
-        if (ec || size != rai::BootstrapAccount::Size())
+        if (ec)
         {
             error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+            rai::Stats::AddDetail(
+                error_code_, "BootstrapClient::ReadAccount: ec=", ec.message());
+            break;
+        }
+
+        if (size != rai::BootstrapAccount::Size())
+        {
+            error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+            rai::Stats::AddDetail(error_code_,
+                                "BootstrapClient::ReadAccount: bad size=", size);
             break;
         }
 
@@ -303,10 +345,22 @@ void rai::BootstrapClient::ReadForkLength(const boost::system::error_code& ec,
 {
     do
     {
-        auto length = forks_[0].length_;
-        if (ec || size != sizeof(length))
+        if (ec)
         {
             error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+            rai::Stats::AddDetail(
+                error_code_,
+                "BootstrapClient::ReadForkLength: ec=", ec.message());
+            break;
+        }
+
+        auto length = forks_[0].length_;
+        if (size != sizeof(length))
+        {
+            error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+            rai::Stats::AddDetail(
+                error_code_,
+                "BootstrapClient::ReadForkLength: bad size=", size);
             break;
         }
 
@@ -315,13 +369,17 @@ void rai::BootstrapClient::ReadForkLength(const boost::system::error_code& ec,
         if (error)
         {
             error_code_ = rai::ErrorCode::STREAM;
+            rai::Stats::AddDetail(error_code_,
+                                  "BootstrapClient::ReadForkLength");
             break;
         }
+
         if (length > rai::BootstrapClient::BUFFER_SIZE_)
         {
             error_code_ = rai::ErrorCode::BOOTSTRAP_FORK_LENGTH;
             break;
         }
+        
         if (length == 0)
         {
             if (curr_size_ == 0)
@@ -349,9 +407,21 @@ void rai::BootstrapClient::ReadForkBlocks(const boost::system::error_code& ec,
 {
     do
     {
-        if (ec || size != forks_[curr_size_].length_)
+        if (ec)
         {
             error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+            rai::Stats::AddDetail(
+                error_code_,
+                "BootstrapClient::ReadForkBlocks: ec=", ec.message());
+            break;
+        }
+
+        if (size != forks_[curr_size_].length_)
+        {
+            error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+            rai::Stats::AddDetail(
+                error_code_,
+                "BootstrapClient::ReadForkBlocks: bad size=", size);
             break;
         }
 
@@ -360,12 +430,16 @@ void rai::BootstrapClient::ReadForkBlocks(const boost::system::error_code& ec,
             rai::DeserializeBlock(error_code_, stream);
         if (error_code_ != rai::ErrorCode::SUCCESS)
         {
+            rai::Stats::AddDetail(error_code_,
+                                  "BootstrapClient::ReadForkBlocks::first");
             break;
         }
         std::shared_ptr<rai::Block> second =
             rai::DeserializeBlock(error_code_, stream);
         if (error_code_ != rai::ErrorCode::SUCCESS)
         {
+            rai::Stats::AddDetail(error_code_,
+                                  "BootstrapClient::ReadForkBlocks::second");
             break;
         }
 
@@ -466,7 +540,7 @@ uint16_t rai::BootstrapClient::MaxSize_() const
 rai::Bootstrap::Bootstrap(rai::Node& node)
     : node_(node),
       stopped_(false),
-      wait_(false),
+      waiting_(false),
       count_(0),
       last_time_(std::chrono::steady_clock::duration::zero()),
       thread_([this]() { this->Run(); })
@@ -483,21 +557,9 @@ uint32_t rai::Bootstrap::Count() const
     return count_;
 }
 
-bool rai::Bootstrap::WaitSyncer() const
+bool rai::Bootstrap::WaitingSyncer() const
 {
-    return wait_;
-}
-
-boost::optional<rai::Peer> rai::Bootstrap::RandomPeer()
-{
-    boost::optional<rai::Peer> peer = node_.peers_.RandomPeer();
-    if (!peer || peer->account_ == node_.account_
-        || !node_.peers_.Reachable(peer->Endpoint()))
-    {
-        return boost::none;
-    }
-
-    return peer;
+    return waiting_;
 }
 
 void rai::Bootstrap::Run()
@@ -538,32 +600,18 @@ void rai::Bootstrap::Run()
             // stat
             last_time_ = now;
             ++count_;
-            if (count_ == rai::Bootstrap::INITIAL_FULL_BOOTSTRAPS)
+            if (count_ <= rai::Bootstrap::INITIAL_FULL_BOOTSTRAPS)
             {
-                wait_ = true;
-                while (true)
+                Wait_();
+                if (count_ == rai::Bootstrap::INITIAL_FULL_BOOTSTRAPS)
                 {
-                    if (count_ == 0)
-                    {
-                        break;
-                    }
-
-                    if (!node_.syncer_.Empty())
-                    {
-                        std::this_thread::sleep_for(std::chrono::seconds(5));
-                        std::cout << "syncer busy\n";
-                        continue;
-                    }
-
                     node_.SetStatus(rai::NodeStatus::RUN);
-                    break;
                 }
-                wait_ = false;
             }
         }
         else
         {
-            rai::Stats::Add(error_code);
+            rai::Stats::Add(error_code, "Bootstrap::Run");
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
     }
@@ -611,18 +659,18 @@ void rai::Bootstrap::SyncGenesisAccount_()
         node_.ledger_.AccountInfoGet(transaction, account, account_info);
     if (error || !account_info.Valid())
     {
-        node_.syncer_.Add(account, 0, false);
+        node_.syncer_.Add(account, 0, false, count_);
     }
     else
     {
         node_.syncer_.Add(account, account_info.head_height_ + 1,
-                          account_info.head_, false);
+                          account_info.head_, false, count_);
     }
 }
 
 rai::ErrorCode rai::Bootstrap::RunFull_()
 {
-    boost::optional<rai::Peer> peer = RandomPeer();
+    boost::optional<rai::Peer> peer = node_.peers_.RandomPeer();
     if (!peer)
     {
         return rai::ErrorCode::BOOTSTRAP_PEER;
@@ -686,7 +734,7 @@ rai::ErrorCode rai::Bootstrap::RunFull_()
             bool account_exists = !error && account_info.Valid();
             if (!account_exists)
             {
-                node_.syncer_.Add(data[i].account_, 0);
+                node_.syncer_.Add(data[i].account_, 0, true, count);
                 continue;
             }
 
@@ -696,7 +744,7 @@ rai::ErrorCode rai::Bootstrap::RunFull_()
             {
                 node_.syncer_.Add(data[i].account_,
                                   account_info.head_height_ + 1,
-                                  account_info.head_);
+                                  account_info.head_, true, count);
             }
         }
 
@@ -709,7 +757,7 @@ rai::ErrorCode rai::Bootstrap::RunFull_()
 
 rai::ErrorCode rai::Bootstrap::RunFork_()
 {
-    boost::optional<rai::Peer> peer = RandomPeer();
+    boost::optional<rai::Peer> peer = node_.peers_.RandomPeer();
     if (!peer)
     {
         return rai::ErrorCode::BOOTSTRAP_PEER;
@@ -780,6 +828,35 @@ rai::ErrorCode rai::Bootstrap::RunFork_()
     }
 }
 
+void rai::Bootstrap::Wait_()
+{
+    waiting_ = true;
+    while (true)
+    {
+        if (stopped_)
+        {
+            break;
+        }
+
+        bool finished = true;
+        for (uint32_t count = 0; count < count_; ++count)
+        {
+            if (!node_.syncer_.Finished(count))
+            {
+                finished = false;
+                break;
+            }
+        }
+        if (finished)
+        {
+            break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+    }
+    waiting_ = false;
+}
+
 rai::BootstrapServer::BootstrapServer(
     const std::shared_ptr<rai::Node>& node,
     const std::shared_ptr<rai::Socket>& socket, const rai::IP& ip)
@@ -820,7 +897,7 @@ void rai::BootstrapServer::Run(const boost::system::error_code& ec, size_t size)
     ReadMessage_(ec, size);
     if (error_code_ != rai::ErrorCode::SUCCESS)
     {
-        rai::Stats::Add(error_code_);
+        rai::Stats::Add(error_code_, "BootstrapServer::Run");
         return;
     }
 
@@ -849,9 +926,19 @@ void rai::BootstrapServer::Run(const boost::system::error_code& ec, size_t size)
 void rai::BootstrapServer::ReadMessage_(const boost::system::error_code& ec,
                                        size_t size)
 {
-    if (ec || size != BootstrapMessageSize())
+    if (ec)
     {
         error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+        rai::Stats::AddDetail(error_code_,
+                              "BootstrapServer::ReadMessage_:ec=", ec.message());
+        return;
+    }
+
+    if (size != BootstrapMessageSize())
+    {
+        error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
+        rai::Stats::AddDetail(error_code_,
+                              "BootstrapServer::ReadMessage_: bad size=", size);
         return;
     }
 
@@ -870,6 +957,7 @@ void rai::BootstrapServer::ReadMessage_(const boost::system::error_code& ec,
     if (!rai::StreamEnd(stream))
     {
         error_code_ = rai::ErrorCode::STREAM;
+        rai::Stats::AddDetail(error_code_, "BootstrapServer::ReadMessage_");
         return;
     }
 
@@ -1006,7 +1094,7 @@ void rai::BootstrapServer::Send_(const std::function<void()>& callback)
                                 // stat
                                 return;
                             }
-                            callback();
+                            callback(); 
                         });
 }
 
