@@ -5,6 +5,14 @@
 
 std::chrono::seconds constexpr rai::Socket::TIMEOUT;
 
+std::string rai::ToString(const rai::Endpoint& endpoint)
+{
+    std::stringstream stream;
+    stream << endpoint;
+    stream.flush();
+    return stream.str();
+}
+
 rai::UdpNetwork::UdpNetwork(rai::Node& node, uint16_t port)
     : socket_(node.service_,
               rai::Endpoint(boost::asio::ip::address_v4::any(), port)),
@@ -74,10 +82,7 @@ void rai::UdpNetwork::Process(const boost::system::error_code& error, size_t siz
         return;
     }
 
-    std::cout << "<<< Receive message from " << remote_ << ", size " << size << std::endl;
-    std::cout << "----------message begin-------------" << std::endl;
-    rai::DumpBytes(buffer_.data(), size);
-    std::cout << "----------message end---------------" << std::endl;
+    node_.dumpers_.message_.Dump(false, remote_, buffer_.data(), size);
 
     if (handler_)
     {
@@ -93,11 +98,6 @@ void rai::UdpNetwork::Send(
     std::function<void(const boost::system::error_code&, size_t)> callback)
 {
     std::unique_lock<std::mutex> lock(socket_mutex_);
-
-    std::cout << ">>> Send message to " << remote << ", size " << size << std::endl;
-    std::cout << "----------message begin:-------------" << std::endl;
-    rai::DumpBytes(data, size);
-    std::cout << "----------message end----------------" << std::endl;
 
     rai::Log::NetworkSend(
         node_, boost::str(boost::format("Sending packet, size %1%") % size));
@@ -185,7 +185,7 @@ rai::TcpSocket::TcpSocket(const std::shared_ptr<rai::Node>& node)
 
 void rai::TcpSocket::AsyncConnect(
     const rai::TcpEndpoint& remote,
-    std::function<void(const boost::system::error_code&)>& callback)
+    const std::function<void(const boost::system::error_code&)>& callback)
 {
     std::shared_ptr<rai::TcpSocket> this_s = shared_from_this();
     Start();
@@ -197,14 +197,14 @@ void rai::TcpSocket::AsyncConnect(
 }
 
 void rai::TcpSocket::AsyncRead(
-    std::shared_ptr<std::vector<uint8_t>>& buffer, size_t size,
-    std::function<void(const boost::system::error_code&, size_t)>& callback)
+    std::vector<uint8_t>& buffer, size_t size,
+    const std::function<void(const boost::system::error_code&, size_t)>& callback)
 {
-    assert(size <= buffer->size());
+    assert(size <= buffer.size());
     std::shared_ptr<rai::TcpSocket> this_s = shared_from_this();
     Start();
     boost::asio::async_read(
-        socket_, boost::asio::buffer(buffer->data(), size),
+        socket_, boost::asio::buffer(buffer.data(), size),
         [this_s, callback](const boost::system::error_code& ec, size_t size) {
             this_s->Stop();
             callback(ec, size);
@@ -212,14 +212,16 @@ void rai::TcpSocket::AsyncRead(
 }
 
 void rai::TcpSocket::AsyncWrite(
-    std::shared_ptr<std::vector<uint8_t>>& buffer,
-    std::function<void(const boost::system::error_code&, size_t)>& callback)
+    std::vector<uint8_t>& buffer,
+    const std::function<void(const boost::system::error_code&, size_t)>&
+        callback)
 {
     std::shared_ptr<rai::TcpSocket> this_s = shared_from_this();
     Start();
     boost::asio::async_write(
-        socket_, boost::asio::buffer(buffer->data(), buffer->size()),
-        [this_s, callback](const boost::system::error_code& ec, size_t size) {
+        socket_, boost::asio::buffer(buffer.data(), buffer.size()),
+        [this_s, callback](const boost::system::error_code& ec,
+                                   size_t size) {
             this_s->Stop();
             callback(ec, size);
         });
@@ -237,9 +239,9 @@ void rai::TcpSocket::Start()
             {
                 return;
             }
-            this_l->socket_.close();
+            this_l->Close();
             //TODO:log
-        });
+        }); 
 }
 
 void rai::TcpSocket::Stop()
@@ -249,7 +251,13 @@ void rai::TcpSocket::Stop()
 
 void rai::TcpSocket::Close()
 {
-    socket_.close();
+    try
+    {
+        socket_.close();
+    }
+    catch(...)
+    {
+    }
 }
 
 rai::TcpEndpoint rai::TcpSocket::Remote()
