@@ -20,6 +20,8 @@ rai::UdpNetwork::UdpNetwork(rai::Node& node, uint16_t port)
       node_(node),
       on_(true)
 {
+    boost::asio::socket_base::receive_buffer_size option(8*1024*1024);
+    socket_.set_option(option);
 }
 
 void rai::UdpNetwork::Receive()
@@ -52,7 +54,8 @@ void rai::UdpNetwork::Stop()
     resolver_.cancel();
 }
 
-void rai::UdpNetwork::Process(const boost::system::error_code& error, size_t size)
+void rai::UdpNetwork::Process(const boost::system::error_code& error,
+                              size_t size)
 {
     if (!on_)
     {
@@ -64,20 +67,22 @@ void rai::UdpNetwork::Process(const boost::system::error_code& error, size_t siz
         rai::Log::Network(node_,
                           boost::str(boost::format("UDP Receive error: %1%")
                                      % error.message()));
+        rai::Stats::Add(rai::ErrorCode::UDP_RECEIVE, "ec=", error.message());
         Receive();
         return;
     }
 
     if (size == 0 || size > 1024)
     {
-        // TODO: stat
+        rai::Stats::Add(rai::ErrorCode::UDP_RECEIVE, "bad size=", size);
         Receive();
         return;
     }
 
     if (rai::IsReservedIp(remote_.address().to_v4()))
     {
-        // TODO: stat
+        rai::Stats::Add(rai::ErrorCode::RESERVED_IP,
+                        "ip=", remote_.address().to_v4().to_string());
         Receive();
         return;
     }

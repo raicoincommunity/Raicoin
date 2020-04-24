@@ -891,7 +891,6 @@ void rai::BootstrapServer::Receive()
         });
 }
 
-
 void rai::BootstrapServer::Run(const boost::system::error_code& ec, size_t size)
 {
     ReadMessage_(ec, size);
