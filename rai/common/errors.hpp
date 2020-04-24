@@ -104,6 +104,10 @@ enum class ErrorCode : int
     WRITE_STREAM                         = 94,
     HTTP_GET                             = 95,
     LOGIC_ERROR                          = 96,
+    MESSAGE_CONFIRM_TIMESTAMP            = 97,
+    ELECTION_TALLY                       = 98,
+    UDP_RECEIVE                          = 99,
+    RESERVED_IP                          = 100,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC              = 200,
@@ -226,6 +230,7 @@ enum class ErrorCode : int
     BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_DEL     = 432,
     BLOCK_PROCESS_LEDGER_FORK_DEL             = 433,
     BLOCK_PROCESS_LEDGER_FORK_GET             = 434,
+    BLOCK_PROCESS_LEDGER_FORK_PUT             = 435,
 
     BLOCK_PROCESS_ROLLBACK_REWARDED          = 488,
     BLOCK_PROCESS_CONFIRM_BLOCK_MISS         = 489,

@@ -76,6 +76,10 @@ public:
     bool error_;
     bool win_;
     bool confirm_;
+    rai::Amount valid_;
+    rai::Amount invalid_;
+    rai::Amount conflict_;
+    rai::Amount not_voting_;
     std::shared_ptr<rai::Block> block_;
 };
 
@@ -91,7 +95,7 @@ public:
     bool Get(const rai::Account&, rai::Ptree&) const;
     void Run();
     void Stop();
-    void ProcessElection(const rai::Election& election);
+    void ProcessElection(const rai::Election&, std::unique_lock<std::mutex>&);
     void ProcessConfirm(const rai::Account&, uint64_t, const rai::Signature&,
                         const std::shared_ptr<rai::Block>&, const rai::Amount&);
     void ProcessConflict(const rai::Account&, uint64_t, uint64_t,
@@ -99,6 +103,7 @@ public:
                          const std::shared_ptr<rai::Block>&,
                          const std::shared_ptr<rai::Block>&,
                          const rai::Amount&);
+    size_t Size() const;
 
     static std::chrono::seconds constexpr FORK_ELECTION_DELAY =
         std::chrono::seconds(16);
@@ -129,16 +134,22 @@ private:
     void ModifyWakeup_(const rai::Election&,
                        const std::chrono::steady_clock::time_point&);
     bool CheckConflict_(const rai::Vote&, const rai::Vote&) const;
-    rai::ElectionStatus Tally_(
-        const rai::Election&, const rai::Amount&,
-        const std::unordered_map<rai::Account, rai::Amount>&) const;
+    rai::ElectionStatus Tally_(const rai::Election&) const;
     void RequestConfirms_(const rai::Election&);
     void BroadcastConfirms_(const rai::Election&);
     std::chrono::steady_clock::time_point NextWakeup_(
         const rai::Election&) const;
+    void UpdateWeightInfo_(std::unique_lock<std::mutex>&);
+    bool EnoughOnlineWeight_() const;
 
     rai::Node& node_;
     mutable std::mutex mutex_;
+    uint64_t last_update_;
+    std::unordered_set<rai::Account> online_reps_;
+    rai::Amount weight_total_;
+    rai::Amount weight_online_;
+    std::unordered_map<rai::Account, rai::Amount> weights_;
+
     boost::multi_index_container<
         Election,
         boost::multi_index::indexed_by<

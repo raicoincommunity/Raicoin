@@ -127,12 +127,22 @@ bool rai::Election::ForkFound() const
 }
 
 rai::ElectionStatus::ElectionStatus()
-    : error_(false), win_(false), confirm_(false), block_(nullptr)
+    : error_(false),
+      win_(false),
+      confirm_(false),
+      valid_(0),
+      invalid_(0),
+      conflict_(0),
+      not_voting_(0),
+      block_(nullptr)
 {
 }
 
 rai::Elections::Elections(rai::Node& node)
-    : node_(node), stopped_(false), thread_([this]() { this->Run(); })
+    : node_(node),
+      last_update_(0),
+      stopped_(false),
+      thread_([this]() { this->Run(); })
 
 {
 }
@@ -238,7 +248,7 @@ bool rai::Elections::Get(const rai::Account& account, rai::Ptree& ptree) const
     ptree.put("winner", it->winner_.StringHex());
 
     uint64_t wakeup = 0;
-    auto now = std::chrono::steady_clock::now();
+    auto now        = std::chrono::steady_clock::now();
     if (it->wakeup_ > now)
     {
         wakeup =
@@ -247,13 +257,66 @@ bool rai::Elections::Get(const rai::Account& account, rai::Ptree& ptree) const
     }
     ptree.put("wakeup", std::to_string(wakeup) + " seconds later");
 
+    rai::ElectionStatus status = Tally_(*it);
+    rai::Ptree tally;
+    tally.put("error", status.error_ ? "true" : "false");
+    tally.put("win", status.win_ ? "true" : "false");
+    tally.put("confirm", status.confirm_ ? "true" : "false");
+
+    rai::Ptree weights;
+    weights.put("total", weight_total_.StringBalance(rai::RAI) + " RAI(100%)");
+    uint32_t online_percentage = static_cast<uint32_t>(
+        rai::uint256_t(weight_online_.Number()) * 100 / weight_total_.Number());
+    weights.put("online", weight_online_.StringBalance(rai::RAI) + " RAI("
+                              + std::to_string(online_percentage) + "%)");
+
+    uint32_t valid_percentage = static_cast<uint32_t>(
+        rai::uint256_t(status.valid_.Number()) * 100 / weight_total_.Number());
+    weights.put("voting_valid", status.valid_.StringBalance(rai::RAI) + " RAI("
+                                    + std::to_string(valid_percentage) + "%)");
+
+    uint32_t invalid_percentage =
+        static_cast<uint32_t>(rai::uint256_t(status.invalid_.Number()) * 100
+                              / weight_total_.Number());
+    weights.put("voting_invalid",
+                status.invalid_.StringBalance(rai::RAI) + " RAI("
+                    + std::to_string(invalid_percentage) + "%)");
+
+    uint32_t conflict_percentage =
+        static_cast<uint32_t>(rai::uint256_t(status.conflict_.Number()) * 100
+                              / weight_total_.Number());
+    weights.put("voting_conflict",
+                status.conflict_.StringBalance(rai::RAI) + " RAI("
+                    + std::to_string(conflict_percentage) + "%)");
+
+    uint32_t not_voting_percentage =
+        static_cast<uint32_t>(rai::uint256_t(status.not_voting_.Number()) * 100
+                              / weight_total_.Number());
+    weights.put("online_not_voting",
+                status.not_voting_.StringBalance(rai::RAI) + " RAI("
+                    + std::to_string(not_voting_percentage) + "%)");
+    tally.put_child("weights", weights);
+
+    if (status.block_)
+    {
+        rai::Ptree block;
+        status.block_->SerializeJson(block);
+        tally.put_child("block", block);
+    }
+    else
+    {
+        tally.put("block", "");
+    }
+    ptree.put_child("tally", tally);
+
     rai::Ptree votes;
     for (const auto& vote : it->votes_)
     {
         rai::Ptree entry;
         entry.put("representative", vote.first.StringAccount());
         entry.put("conflict", vote.second.conflict_found_ ? "true" : "false");
-        entry.put("weight", vote.second.weight_.StringDec());
+        entry.put("weight",
+                  vote.second.weight_.StringBalance(rai::RAI) + " RAI");
 
         rai::Ptree last_vote;
         last_vote.put("timestamp",
@@ -313,10 +376,12 @@ void rai::Elections::Run()
             continue;
         }
 
+        UpdateWeightInfo_(lock);
+
         auto it = elections_.get<1>().begin();
         if (it->wakeup_ <= std::chrono::steady_clock::now())
         {
-            ProcessElection(*it);
+            ProcessElection(*it, lock);
             lock.unlock();
             lock.lock();
         }
@@ -345,14 +410,15 @@ void rai::Elections::Stop()
 }
 
 // lock acquired in Run()
-void rai::Elections::ProcessElection(const rai::Election& election)
+void rai::Elections::ProcessElection(const rai::Election& election,
+                                     std::unique_lock<std::mutex>& lock)
 {
-    rai::RepWeights reps;
-    node_.RepWeights(reps);
-    rai::ElectionStatus status = Tally_(election, reps.total_, reps.weights_);
+    rai::ElectionStatus status = Tally_(election);
     if (status.error_)
     {
-        // stat
+        rai::Stats::Add(rai::ErrorCode::ELECTION_TALLY,
+                        "account=", election.account_.StringAccount(),
+                        ", height=", election.height_);
         elections_.erase(election.account_);
         return;
     }
@@ -365,9 +431,20 @@ void rai::Elections::ProcessElection(const rai::Election& election)
             elections_.erase(election.account_);
             return;
         }
-        RequestConfirms_(election);
-        ModifyRounds_(election, election.rounds_ + 1);
-        ModifyWakeup_(election, NextWakeup_(election));
+
+        if (election.broadcast_)
+        {
+            ModifyBroadcast_(election, false);
+            RequestConfirms_(election);
+            ModifyWakeup_(election, std::chrono::steady_clock::now()
+                                        + std::chrono::seconds(1));
+        }
+        else
+        {
+            ModifyBroadcast_(election, true);
+            ModifyRounds_(election, election.rounds_ + 1);
+            ModifyWakeup_(election, NextWakeup_(election));
+        }
         return;
     }
 
@@ -387,7 +464,6 @@ void rai::Elections::ProcessElection(const rai::Election& election)
     {
         ModifyBroadcast_(election, true);
     }
-    
 
     if (status.win_)
     {
@@ -554,6 +630,12 @@ void rai::Elections::ProcessConflict(
                                 timestamp_second, signature_first,
                                 signature_second, block_first, block_second);
     }
+}
+
+size_t rai::Elections::Size() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return elections_.size();
 }
 
 void rai::Elections::AddBlock_(const rai::Election& election,
@@ -742,28 +824,29 @@ bool rai::Elections::CheckConflict_(const rai::Vote& first,
     return false;
 }
 
-rai::ElectionStatus rai::Elections::Tally_(
-    const rai::Election& election, const rai::Amount& rep_total,
-    const std::unordered_map<rai::Account, rai::Amount>& rep_weights) const
+rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election) const
 {
     rai::ElectionStatus result;
-    rai::Amount voting_total(0);
-    rai::Amount conflict_total(0);
-    rai::Amount loss_total(0);
+    std::unordered_set<rai::Account> reps_not_voting(online_reps_);
     std::unordered_map<rai::BlockHash, rai::Amount> candidates;
 
     for (const auto& vote : election.votes_)
     {
-        auto it = rep_weights.find(vote.first);
-        if (it == rep_weights.end())
+        reps_not_voting.erase(vote.first);
+
+        auto it = weights_.find(vote.first);
+        if (it == weights_.end())
         {
             continue;
         }
+
         if (vote.second.conflict_found_)
         {
-            conflict_total += it->second;
+            result.conflict_ += it->second;
+            result.invalid_ += it->second;
             continue;
         }
+
         uint64_t factor = vote.second.WeightFactor();
         rai::uint256_t weight(it->second.Number());
         weight = weight * factor / 100;
@@ -773,28 +856,29 @@ rai::ElectionStatus rai::Elections::Tally_(
         if (!adjust.IsZero())
         {
             candidates[vote.second.last_vote_.hash_] += adjust;
-            voting_total += adjust;
+            result.valid_ += adjust;
         }
 
         if (!loss.IsZero())
         {
-            loss_total += loss;
+            result.invalid_ += loss;
         }
+    }
+
+    for (const auto& i : reps_not_voting)
+    {
+        auto it = weights_.find(i);
+        if (it == weights_.end())
+        {
+            continue;
+        }
+        result.not_voting_ += it->second;
     }
 
     if (candidates.empty())
     {
         return result;
     }
-
-    if (voting_total + conflict_total + loss_total > rep_total)
-    {
-        assert(0);
-        result.error_ = true;
-        return result;
-    }
-    rai::Amount not_voting =
-        rep_total - voting_total - conflict_total - loss_total;
 
     std::vector<std::pair<rai::BlockHash, rai::Amount>> vec(candidates.begin(),
                                                             candidates.end());
@@ -814,9 +898,9 @@ rai::ElectionStatus rai::Elections::Tally_(
     {
         second_s = vec[1].second.Number();
     }
-    rai::uint256_t total_s(rep_total.Number());
-    result.win_ = first_s > second_s + not_voting.Number();
+    rai::uint256_t total_s(weight_total_.Number());
     result.confirm_ = first_s * 100 > total_s * rai::CONFIRM_WEIGHT_PERCENTAGE;
+    result.win_ = result.confirm_ || (EnoughOnlineWeight_() && first_s > second_s + result.not_voting_.Number());
 
     auto it = election.blocks_.find(vec[0].first);
     if (it == election.blocks_.end())
@@ -842,7 +926,7 @@ void rai::Elections::RequestConfirms_(const rai::Election& election)
     std::unordered_set<rai::Account> reps;
     for (const auto& vote : election.votes_)
     {
-        if (vote.second.last_vote_.timestamp_ > now - rai::MAX_TIMESTAMP_DIFF)
+        if (vote.second.last_vote_.timestamp_ >= now - 5)
         {
             reps.insert(vote.first);
         }
@@ -916,5 +1000,49 @@ std::chrono::steady_clock::time_point rai::Elections::NextWakeup_(
         shift = 8;
     }
     auto base = rai::Elections::NON_FORK_ELECTION_INTERVAL.count();
-    return now + std::chrono::seconds(base << shift);
+    auto delay = base << shift;
+    if (delay > 1)
+    {
+        delay = rai::Random(1, delay);
+    }
+    return now + std::chrono::seconds(delay);
 }
+
+void rai::Elections::UpdateWeightInfo_(std::unique_lock<std::mutex>& lock)
+{
+    uint64_t now = rai::CurrentTimestamp();
+    if (now < last_update_ + 3)
+    {
+        return;
+    }
+    last_update_ = now;
+    lock.unlock();
+
+    auto online_reps = node_.peers_.Accounts(false);
+    rai::RepWeights rep_weights;
+    node_.RepWeights(rep_weights);
+    rai::Amount weight_total = rep_weights.total_;
+    rai::Amount weight_online(0);
+    for (const auto& i : online_reps)
+    {
+        auto it = rep_weights.weights_.find(i);
+        if (it != rep_weights.weights_.end())
+        {
+            weight_online += it->second;
+        }
+    }
+
+    lock.lock();
+    online_reps_ = std::move(online_reps);
+    weight_total_ = rep_weights.total_;
+    weight_online_ = weight_online;
+    weights_ = std::move(rep_weights.weights_);
+}
+
+bool rai::Elections::EnoughOnlineWeight_() const
+{
+    rai::uint256_t online(weight_online_.Number());
+    rai::uint256_t total(weight_total_.Number());
+    return online * 100 > total * rai::CONFIRM_WEIGHT_PERCENTAGE;
+}
+

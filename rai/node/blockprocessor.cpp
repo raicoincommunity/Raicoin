@@ -266,7 +266,8 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
             {
                 if (ignore_fork)
                 {
-                    break;
+                    transaction.Abort();
+                    return;
                 }
                 rai::Stats::AddDetail(
                     error_code, "account=", block->Account().StringAccount(),
@@ -302,7 +303,6 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
         }
     }
 
-    
     // stat
     if (error_code == rai::ErrorCode::SUCCESS)
     {
@@ -330,17 +330,15 @@ void rai::BlockProcessor::ProcessBlockFork_(
         return;
     }
 
+    bool broadcast = false;
+    bool election = false;
+    do
     {
         rai::Account account = first->Account();
         uint64_t height = first->Height();
         rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
         rai::Transaction transaction(error_code, ledger_, true);
         if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            return;
-        }
-
-        if (ledger_.ForkExists(transaction, account, height))
         {
             return;
         }
@@ -352,12 +350,24 @@ void rai::BlockProcessor::ProcessBlockFork_(
             return;
         }
 
+        if (info.confirmed_height_ == rai::Block ::INVALID_HEIGHT
+            || info.confirmed_height_ < height)
+        {
+            election = true;
+        }
+
+        if (ledger_.ForkExists(transaction, account, height))
+        {
+            break;
+        }
+
         if (info.forks_ < rai::MaxAllowedForks(rai::CurrentTimestamp()) + 2)
         {
             error =
                 ledger_.ForkPut(transaction, account, height, *first, *second);
             if (error)
             {
+                rai::Stats::Add(rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_PUT);
                 transaction.Abort();
                 return;
             }
@@ -365,6 +375,9 @@ void rai::BlockProcessor::ProcessBlockFork_(
             error = ledger_.AccountInfoPut(transaction, account, info);
             if (error)
             {
+                rai::Stats::Add(
+                    rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT,
+                    "BlockProcessor::ProcessBlockFork_");
                 transaction.Abort();
                 return;
             }
@@ -382,6 +395,8 @@ void rai::BlockProcessor::ProcessBlockFork_(
                 if (error || first->Account() != account)
                 {
                     assert(0);
+                    rai::Stats::Add(
+                        rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_GET);
                     transaction.Abort();
                     return;
                 }
@@ -397,6 +412,7 @@ void rai::BlockProcessor::ProcessBlockFork_(
             error = ledger_.ForkDel(transaction, account, max_height);
             if (error)
             {
+                rai::Stats::Add(rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_DEL);
                 transaction.Abort();
                 return;
             }
@@ -404,13 +420,24 @@ void rai::BlockProcessor::ProcessBlockFork_(
                 ledger_.ForkPut(transaction, account, height, *first, *second);
             if (error)
             {
+                rai::Stats::Add(rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_PUT,
+                                "replace");
                 transaction.Abort();
                 return;
             }
         }
+        broadcast = true;
+    } while(0);
+
+    if (broadcast)
+    {
+        node_.BroadcastFork(first, second);
     }
-    node_.BroadcastFork(first, second);
-    node_.StartElection(first, second);
+
+    if (election)
+    {
+        node_.StartElection(first, second);
+    }
 }
 
 void rai::BlockProcessor::ProcessBlockForced_(

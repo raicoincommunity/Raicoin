@@ -294,6 +294,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Logic error";
         }
+        case rai::ErrorCode::MESSAGE_CONFIRM_TIMESTAMP:
+        {
+            return "Confirm message with invalid timestamp";
+        }
+        case rai::ErrorCode::ELECTION_TALLY:
+        {
+            return "Election tally failed";
+        }
+        case rai::ErrorCode::UDP_RECEIVE:
+        {
+            return "Failed to receive udp packet";
+        }
+        case rai::ErrorCode::RESERVED_IP:
+        {
+            return "Message from reserved ip";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";
@@ -852,6 +868,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_GET:
         {
             return "Failed to get fork entry from ledger";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_PUT:
+        {
+            return "Failed to put fork to ledger";
         }
         case rai::ErrorCode::BLOCK_PROCESS_ROLLBACK_REWARDED:
         {
