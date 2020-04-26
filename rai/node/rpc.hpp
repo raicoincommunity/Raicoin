@@ -72,6 +72,7 @@ public:
     void Response();
 
     void AccountCount();
+    void AccountForks();
     void AccountInfo();
     void AccountSubscribe();
     void AccountUnsubscribe();
@@ -81,8 +82,11 @@ public:
     void BlockQueryByPrevious();
     void BlockQueryByHash();
     void BootstrapStatus();
+    void ConfirmManagerStatus();
+    void ElectionCount();
     void ElectionInfo();
     void Elections();
+    void Forks();
     void MessageDump();
     void MessageDumpOff();
     void MessageDumpOn();
@@ -92,10 +96,12 @@ public:
     void ReceivableCount();
     void Receivables();
     void Rewardables();
+    void RewarderStatus();
     void Stats();
     void StatsVerbose();
     void StatsClear();
     void Stop();
+    void SubscriberCount();
     void SyncerStatus();
 
     static int constexpr MAX_JSON_DEPTH = 20;

@@ -12,24 +12,25 @@ std::chrono::seconds constexpr rai::RecentBlocks::AGE_TIME;
 
 rai::NodeConfig::NodeConfig()
     : port_(rai::Network::DEFAULT_PORT),
-      io_threads_(std::max<uint32_t>(4, std::thread::hardware_concurrency()))
+      io_threads_(std::max<uint32_t>(4, std::thread::hardware_concurrency())),
+      daily_reward_times_(rai::NodeConfig::DEFAULT_DAILY_REWARD_TIMES)
 
 {
     switch (rai::RAI_NETWORK)
     {
         case rai::RaiNetworks::TEST:
         {
-            preconfigured_peers_.push_back("peers.test.raicoin.org");
+            preconfigured_peers_.push_back("peers-test.raicoin.org");
             return;
         }
         case rai::RaiNetworks::BETA:
         {
-            preconfigured_peers_.push_back("peers.beta.raicoin.org");
+            preconfigured_peers_.push_back("peers-beta.raicoin.org");
             break;
         }
         case rai::RaiNetworks::LIVE:
         {
-            preconfigured_peers_.push_back("peers.live.raicoin.org");
+            preconfigured_peers_.push_back("peers.raicoin.org");
             break;
         }
         default:
@@ -81,6 +82,21 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
            bool error = callback_url_.Parse(*callback_url);
            IF_ERROR_RETURN(error, error_code);
         }
+
+        error_code = rai::ErrorCode::JSON_CONFIG_REWARD_TO;
+        std::string reward_to = ptree.get<std::string>("reward_to");
+        error = reward_to_.DecodeAccount(reward_to);
+        IF_ERROR_RETURN(error, error_code);
+        if (reward_to_.IsZero())
+        {
+            return rai::ErrorCode::REWARD_TO_ACCOUNT;
+        }
+        
+        error_code = rai::ErrorCode::JSON_CONFIG_DAILY_REWARD_TIMES;
+        auto reward_times = ptree.get_optional<uint32_t>("daily_reward_times");
+        daily_reward_times_ = reward_times
+                                  ? *reward_times
+                                  : rai::NodeConfig::DEFAULT_DAILY_REWARD_TIMES;
     }
     catch (const std::exception&)
     {
@@ -106,6 +122,8 @@ void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
     }
     ptree.add_child("preconfigured_peers", preconfigured_peers);
     ptree.put("callback_url", callback_url_.String());
+    ptree.put("reward_to", reward_to_.StringAccount());
+    ptree.put("daily_reward_times", std::to_string(daily_reward_times_));
 }
 
 rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
@@ -244,6 +262,20 @@ bool rai::ConfirmRequests::Append(const rai::BlockHash& hash,
     return Insert_(hash, account);
 }
 
+bool rai::ConfirmRequests::Insert(const rai::BlockHash& hash)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = items_.find(hash);
+    if (it != items_.end())
+    {
+        return true;
+    }
+
+    std::vector<rai::Account> accounts;
+    auto ret = items_.emplace(hash,accounts);
+    return !ret.second;
+}
+
 bool rai::ConfirmRequests::Insert(const rai::BlockHash& hash,
                                   const rai::Account& account)
 {
@@ -343,6 +375,27 @@ void rai::ConfirmManager::Age()
     confirms_.erase(confirms_.begin(), confirms_.lower_bound(cutoff));
 }
 
+rai::Ptree rai::ConfirmManager::Status() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    rai::Ptree status;
+    rai::Ptree confirms;
+    for (auto i = confirms_.begin(), n = confirms_.end(); i != n; ++i)
+    {
+        rai::Ptree confirm;
+        confirm.put("account", i->account_.StringAccount());
+        confirm.put("height", std::to_string(i->height_));
+        confirm.put("timestamp", std::to_string(i->timestamp_));
+        confirm.put("hash", i->hash_.StringHex());
+        confirms.push_back(std::make_pair("", confirm));
+    }
+    status.put_child("confirms", confirms);
+    status.put("count", std::to_string(confirms_.size()));
+    
+    return status;
+}
+
 rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
                 const boost::filesystem::path& data_path, rai::Alarm& alarm,
                 const rai::NodeConfig& config, rai::Fan& key)
@@ -362,7 +415,8 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       syncer_(*this),
       bootstrap_(*this),
       bootstrap_listener_(*this, service, config.port_),
-      subscriptions_(*this)
+      subscriptions_(*this),
+      rewarder_(*this, config_.reward_to_, config_.daily_reward_times_)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -388,6 +442,11 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
             observers_.block_.Notify(result, block);
         });
     };
+
+    observers_.block_.Add([this](const rai::BlockProcessResult& result,
+                                 const std::shared_ptr<rai::Block>& block) {
+            this->OnBlockProcessed(result, block);
+    });
 }
 
 rai::Node::~Node()
@@ -418,6 +477,7 @@ void rai::Node::Start()
     RegisterNetworkHandler();
     network_.Start();
     bootstrap_listener_.Start();
+    rewarder_.Start();
     Ongoing(std::bind(&rai::Node::ResolvePreconfiguredPeers, this),
             std::chrono::seconds(300));
     Ongoing(std::bind(&rai::Peers::SynCookies, &peers_),
@@ -426,13 +486,14 @@ void rai::Node::Start()
                       rai::KeepliveMessage::MAX_PEERS),
             rai::Peers::KEEPLIVE_PERIOD);
     Ongoing(std::bind(&rai::Node::UpdatePeerWeights, this),
-            std::chrono::seconds(300));
+            std::chrono::seconds(60));
     Ongoing(std::bind(&rai::RecentBlocks::Age, &recent_blocks_),
             std::chrono::seconds(5));
     Ongoing(std::bind(&rai::RecentForks::Age, &recent_forks_),
             std::chrono::seconds(5));
     Ongoing(std::bind(&rai::ConfirmManager::Age, &confirm_manager_),
             std::chrono::seconds(1));
+    Ongoing(std::bind(&rai::Node::AgeGapCaches, this), std::chrono::seconds(1));
     Ongoing(std::bind(&rai::Subscriptions::Cutoff, &subscriptions_),
             std::chrono::seconds(60));
     if (rewarder_.SendInterval() > 0)
@@ -440,6 +501,8 @@ void rai::Node::Start()
         Ongoing(std::bind(&rai::Rewarder::Send, &rewarder_),
                 std::chrono::seconds(rewarder_.SendInterval()));
     }
+    Ongoing(std::bind(&rai::Rewarder::Sync, &rewarder_),
+            std::chrono::seconds(600));
     std::cout << "Node start: " << account_.StringAccount() << std::endl;
 
 #if 0
@@ -480,6 +543,7 @@ void rai::Node::Stop()
     bootstrap_listener_.Stop();
     alarm_.Stop();
     network_.Stop();
+    rewarder_.Stop();
     block_processor_.Stop();
     block_queries_.Stop();
     elections_.Stop();
@@ -677,10 +741,6 @@ public:
         uint64_t constexpr day = 24 * 60 * 60;
         if (message.block_->Timestamp() < rai::CurrentTimestamp() - day)
         {
-            if (!message.NeedConfirm())
-            {
-                rai::Stats::Add(rai::ErrorCode::BLOCK_TIMESTAMP);
-            }
             return;
         }
 
@@ -692,7 +752,8 @@ public:
             if (account_info.forks_
                 > rai::MaxAllowedForks(rai::CurrentTimestamp()))
             {
-                // stat
+                rai::Stats::Add(rai::ErrorCode::ACCOUNT_LIMITED,
+                                message.block_->Account().StringAccount());
                 return;
             }
         }
@@ -734,7 +795,7 @@ public:
         if (message.timestamp_ > now + rai::MAX_TIMESTAMP_DIFF * 2
             || message.timestamp_ < now - rai::MAX_TIMESTAMP_DIFF * 2)
         {
-            // stat
+            rai::Stats::Add(rai::ErrorCode::MESSAGE_CONFIRM_TIMESTAMP);
             return;
         }
 
@@ -1107,10 +1168,16 @@ bool rai::Node::Busy() const
 void rai::Node::Confirm(const rai::Account& to,
                         const std::shared_ptr<rai::Block>& block)
 {
-    boost::optional<rai::Peer> peer = peers_.Query(to);
-    if (!peer)
+    std::vector<rai::Account> vec;
+    vec.push_back(to);
+    Confirm(vec, block);
+}
+
+void rai::Node::Confirm(const std::vector<rai::Account>& to,
+                        const std::shared_ptr<rai::Block>& block)
+{
+    if (to.empty())
     {
-        // TODO: stat
         return;
     }
 
@@ -1118,7 +1185,18 @@ void rai::Node::Confirm(const rai::Account& to,
         block->Account(), block->Height(), block->Hash());
     rai::ConfirmMessage message(timestamp, account_, block);
     message.SetSignature(Sign(message.Hash()));
-    SendToPeer(*peer, message);
+
+    for (const auto& i : to)
+    {
+        boost::optional<rai::Peer> peer = peers_.Query(i);
+        if (!peer)
+        {
+            rai::Stats::Add(rai::ErrorCode::PEER_QUERY,
+                            "Node::Confirm account=", i.StringAccount());
+            continue;
+        }
+        SendToPeer(*peer, message);
+    }
 }
 
 void rai::Node::RequestConfirm(const rai::Route& route,
@@ -1287,6 +1365,88 @@ void rai::Node::Publish(const std::shared_ptr<rai::Block>& block)
 {
     std::shared_ptr<rai::Message> message(new rai::PublishMessage(block));
     BroadcastAsync(message);
+}
+
+void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
+                                   const std::shared_ptr<rai::Block>& block)
+{
+    // confirm request ack
+    do
+    {
+        if (result.operation_ != rai::BlockOperation::APPEND)
+        {
+            break;
+        }
+        if (result.error_code_ != rai::ErrorCode::SUCCESS
+            && result.error_code_ != rai::ErrorCode::BLOCK_PROCESS_EXISTS)
+        {
+            break;
+        }
+        auto to = confirm_requests_.Remove(block->Hash());
+        Confirm(to, block);
+    } while (0);
+
+    // recent blocks
+    do
+    {
+        if (result.operation_ == rai::BlockOperation::DROP)
+        {
+            recent_blocks_.Remove(block->Hash());
+        }
+    } while (0);
+
+    // start election for next fork
+    do
+    {
+        if (result.operation_ != rai::BlockOperation::CONFIRM)
+        {
+            break;
+        }
+
+        if (result.error_code_ != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, false);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+
+        rai::Account account(block->Account());
+        uint64_t height = block->Height();
+        height++;
+        std::shared_ptr<rai::Block> first(nullptr);
+        std::shared_ptr<rai::Block> second(nullptr);
+        bool error =
+            ledger_.NextFork(transaction, account, height, first, second);
+        if (error || account != block->Account())
+        {
+            break;
+        }
+
+        rai::AccountInfo info;
+        error = ledger_.AccountInfoGet(transaction, account, info);
+        if (error || !info.Valid())
+        {
+            break;
+        }
+
+        if (height > info.head_height_)
+        {
+            break;
+        }
+
+        if (info.confirmed_height_ != rai::Block::INVALID_HEIGHT
+            && info.confirmed_height_ >= height)
+        {
+            break;
+        }
+
+        StartElection(first, second);
+    } while (0);
 }
 
 void rai::Node::Ongoing(const std::function<void()>& process,
@@ -1482,6 +1642,10 @@ void rai::Node::ReceiveBlock(const std::shared_ptr<rai::Block>& block,
     {
         confirm_requests_.Insert(hash, *confirm_to);
     }
+    else
+    {
+        confirm_requests_.Insert(hash);
+    }
 
     recent_blocks_.Insert(block->Hash());
     block_processor_.Add(block);
@@ -1561,6 +1725,45 @@ void rai::Node::QueueGapCaches(const rai::BlockHash& hash)
     {
         block_processor_.Add(reward_source_gap->block_);
         reward_source_gap_cache_.Remove(hash);
+    }
+}
+
+void rai::Node::AgeGapCaches()
+{
+    uint64_t cutoff = 5;
+    auto previous = previous_gap_cache_.Age(cutoff);
+    auto receive_source = receive_source_gap_cache_.Age(cutoff);
+    auto reward_source = reward_source_gap_cache_.Age(cutoff);
+    if (Status() != rai::NodeStatus::RUN)
+    {
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, false);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        // log
+        rai::Stats::Add(error_code, "Node::AgeGapCaches");
+        return;
+    }
+
+    for (const auto& i : previous)
+    {
+        syncer_.SyncAccount(transaction, i.account_,
+                            rai::Syncer::DEFAULT_BATCH_ID);
+    }
+
+    for (const auto& i : receive_source)
+    {
+        syncer_.SyncAccount(transaction, i.account_,
+                            rai::Syncer::DEFAULT_BATCH_ID);
+    }
+
+    for (const auto& i : reward_source)
+    {
+        syncer_.SyncAccount(transaction, i.account_,
+                            rai::Syncer::DEFAULT_BATCH_ID);
     }
 }
 

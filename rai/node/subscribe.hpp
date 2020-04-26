@@ -38,6 +38,7 @@ public:
     void Cutoff();
     void Erase(const rai::Account&);
     bool Exists(const rai::Account&) const;
+    size_t Size() const;
     void StartElection(const rai::Account&);
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t);
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t,
@@ -46,7 +47,7 @@ public:
 
     static std::chrono::seconds constexpr CUTOFF_TIME =
         std::chrono::seconds(900);
-    static uint64_t constexpr TIME_DIFF = 60;
+    static uint64_t constexpr TIME_DIFF = 150;
 
 private:
     void StartElection_(rai::Transaction&, const rai::Account&);

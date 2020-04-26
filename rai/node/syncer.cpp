@@ -11,7 +11,7 @@ void rai::SyncStat::Reset()
     miss_  = 0;
 }
 
-rai::Syncer::Syncer(rai::Node& node) : node_(node)
+rai::Syncer::Syncer(rai::Node& node) : node_(node), current_query_id_(0)
 {
     node_.observers_.block_.Add(
         [this](const rai::BlockProcessResult& result,
@@ -20,15 +20,17 @@ rai::Syncer::Syncer(rai::Node& node) : node_(node)
         });
 }
 
-void rai::Syncer::Add(const rai::Account& account, uint64_t height, bool stat)
+void rai::Syncer::Add(const rai::Account& account, uint64_t height, bool stat,
+                      uint32_t batch_id)
 {
-    Add(account, height, rai::BlockHash(0), stat);
+    Add(account, height, rai::BlockHash(0), stat, batch_id);
 }
 
 void rai::Syncer::Add(const rai::Account& account, uint64_t height,
-                      const rai::BlockHash& previous, bool stat)
+                      const rai::BlockHash& previous, bool stat,
+                      uint32_t batch_id)
 {
-    rai::SyncInfo info{rai::SyncStatus::QUERY, stat, height, previous,
+    rai::SyncInfo info{rai::SyncStatus::QUERY, stat, batch_id, height, previous,
                        rai::BlockHash(0)};
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -44,7 +46,38 @@ void rai::Syncer::Add(const rai::Account& account, uint64_t height,
         }
     }
 
-    BlockQuery_(account, info);
+    BlockQuery_(account, info, batch_id);
+}
+
+uint64_t rai::Syncer::AddQuery(uint32_t batch_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    uint64_t query_id = current_query_id_++;
+    while (true)
+    {
+        auto it = queries_.find(query_id);
+        if (it != queries_.end())
+        {
+            query_id = current_query_id_++;
+            continue;
+        }
+        queries_.emplace(query_id, batch_id);
+        break;
+    }
+
+    return query_id;
+}
+
+uint32_t rai::Syncer::BatchId(uint64_t query_id) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = queries_.find(query_id);
+    if (it != queries_.end())
+    {
+        return it->second;
+    }
+    return rai::Syncer::DEFAULT_BATCH_ID;
 }
 
 bool rai::Syncer::Busy() const
@@ -69,17 +102,53 @@ void rai::Syncer::Erase(const rai::Account& account)
     }
 }
 
+void rai::Syncer::EraseQuery(uint64_t query_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    queries_.erase(query_id);
+}
+
+bool rai::Syncer::Exists(const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return syncs_.find(account) != syncs_.end();
+}
+
+bool rai::Syncer::Finished(uint32_t batch_id) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    for (const auto& i : syncs_)
+    {
+        if (i.second.batch_id_ == batch_id)
+        {
+            return false;
+        }
+    }
+
+    for (const auto& i : queries_)
+    {
+        if (i.second == batch_id)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 void rai::Syncer::ProcessorCallback(const rai::BlockProcessResult& result,
                                     const std::shared_ptr<rai::Block>& block)
 {
     if (result.operation_ != rai::BlockOperation::APPEND
         && result.operation_ != rai::BlockOperation::DROP)
     {
-        std::cout << "==================>>>ProcessorCallback:1\n";
         return;
     }
 
     rai::SyncInfo info;
+    uint32_t batch_id = rai::Syncer::DEFAULT_BATCH_ID;
     bool query        = false;
     bool source_miss  = false;
     bool sync_related = false;
@@ -90,13 +159,11 @@ void rai::Syncer::ProcessorCallback(const rai::BlockProcessResult& result,
         if (it == syncs_.end()
             || it->second.status_ != rai::SyncStatus::PROCESS)
         {
-            std::cout << "==================>>>ProcessorCallback:2\n";
             return;
         }
 
         if (it->second.current_ != block->Hash())
         {
-            std::cout << "==================>>>ProcessorCallback:3\n";
             return;
         }
 
@@ -106,6 +173,7 @@ void rai::Syncer::ProcessorCallback(const rai::BlockProcessResult& result,
             it->second.current_ = rai::BlockHash(0);
             info                = it->second;
             query               = true;
+            batch_id            = info.batch_id_;
             break;
         }
 
@@ -120,13 +188,17 @@ void rai::Syncer::ProcessorCallback(const rai::BlockProcessResult& result,
             info                 = it->second;
             query                = true;
             sync_related         = true;
+            batch_id             = info.batch_id_;
         }
         else if (result.error_code_
                      == rai::ErrorCode::BLOCK_PROCESS_GAP_RECEIVE_SOURCE
                  || result.error_code_
-                        == rai::ErrorCode::BLOCK_PROCESS_GAP_REWARD_SOURCE)
+                        == rai::ErrorCode::BLOCK_PROCESS_GAP_REWARD_SOURCE
+                 || result.error_code_
+                        == rai::ErrorCode::BLOCK_PROCESS_UNREWARDABLE)
         {
             source_miss = true;
+            batch_id = it->second.batch_id_;
             syncs_.erase(it);
         }
         else
@@ -138,17 +210,17 @@ void rai::Syncer::ProcessorCallback(const rai::BlockProcessResult& result,
 
     if (query)
     {
-        BlockQuery_(block->Account(), info);
+        BlockQuery_(block->Account(), info, batch_id);
     }
 
     if (source_miss)
     {
-        BlockQuery_(block->Link());
+        BlockQuery_(block->Link(), batch_id);
     }
 
     if (sync_related)
     {
-        SyncRelated(block);
+        SyncRelated(block, batch_id);
     }
 }
 
@@ -222,24 +294,31 @@ size_t rai::Syncer::Size() const
     return syncs_.size();
 }
 
+size_t rai::Syncer::Queries() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);  
+    return queries_.size();
+}
+
 void rai::Syncer::SyncAccount(rai::Transaction& transaction,
-                               const rai::Account& account)
+                              const rai::Account& account, uint32_t batch_id)
 {
     rai::AccountInfo account_info;
     bool error =
         node_.ledger_.AccountInfoGet(transaction, account, account_info);
     if (error || !account_info.Valid())
     {
-        node_.syncer_.Add(account, 0, false);
+        node_.syncer_.Add(account, 0, false, batch_id);
     }
     else
     {
         node_.syncer_.Add(account, account_info.head_height_ + 1,
-                            account_info.head_, false);
+                            account_info.head_, false, batch_id);
     }
 }
 
-void rai::Syncer::SyncRelated(const std::shared_ptr<rai::Block>& block)
+void rai::Syncer::SyncRelated(const std::shared_ptr<rai::Block>& block,
+                              uint32_t batch_id)
 {
     if (!block->HasRepresentative()
         && block->Opcode() != rai::BlockOpcode::SEND)
@@ -257,7 +336,7 @@ void rai::Syncer::SyncRelated(const std::shared_ptr<rai::Block>& block)
 
     if (block->Opcode() == rai::BlockOpcode::SEND)
     {
-        SyncAccount(transaction, block->Link());
+        SyncAccount(transaction, block->Link(), batch_id);
     }
 
     if (block->HasRepresentative() && block->Height() > 0)
@@ -282,7 +361,7 @@ void rai::Syncer::SyncRelated(const std::shared_ptr<rai::Block>& block)
         {
             return;
         }
-        SyncAccount(transaction, rep);
+        SyncAccount(transaction, rep, batch_id);
     }
 }
 
@@ -299,33 +378,36 @@ bool rai::Syncer::Add_(const rai::Account& account, const rai::SyncInfo& info)
 }
 
 void rai::Syncer::BlockQuery_(const rai::Account& account,
-                              const rai::SyncInfo& info)
+                              const rai::SyncInfo& info, uint32_t batch_id)
 {
+    uint64_t query_id = AddQuery(batch_id);
     if (info.height_ == 0 || info.previous_.IsZero())
     {
-        node_.block_queries_.QueryByHeight(account, info.height_, false,
-                                           QueryCallbackByAccount_(account));
+        node_.block_queries_.QueryByHeight(
+            account, info.height_, false,
+            QueryCallbackByAccount_(account, query_id));
     }
     else
     {
-        node_.block_queries_.QueryByPrevious(account, info.height_,
-                                             info.previous_, false,
-                                             QueryCallbackByAccount_(account));
+        node_.block_queries_.QueryByPrevious(
+            account, info.height_, info.previous_, false,
+            QueryCallbackByAccount_(account, query_id));
     }
 }
 
-void rai::Syncer::BlockQuery_(const rai::BlockHash& hash)
+void rai::Syncer::BlockQuery_(const rai::BlockHash& hash, uint32_t batch_id)
 {
+    uint64_t query_id = AddQuery(batch_id);
     node_.block_queries_.QueryByHash(rai::Account(0),
                                      rai::Block::INVALID_HEIGHT, hash, true,
-                                     QueryCallbackByHash_(hash));
+                                     QueryCallbackByHash_(hash, query_id));
 }
 
 rai::QueryCallback rai::Syncer::QueryCallbackByAccount_(
-    const rai::Account& account)
+    const rai::Account& account, uint64_t query_id)
 {
     std::weak_ptr<rai::Node> node_w(node_.Shared());
-    rai::QueryCallback callback = [node_w, account, count = 0](
+    rai::QueryCallback callback = [node_w, account, query_id, count = 0](
                                       const std::vector<rai::QueryAck>& acks,
                                       std::vector<rai::QueryCallbackStatus>&
                                           result) mutable {
@@ -342,6 +424,7 @@ rai::QueryCallback rai::Syncer::QueryCallbackByAccount_(
             result.insert(result.end(), acks.size(),
                           rai::QueryCallbackStatus::FINISH);
             node->syncer_.Erase(account);
+            node->syncer_.EraseQuery(query_id);
             return;
         }
 
@@ -351,15 +434,17 @@ rai::QueryCallback rai::Syncer::QueryCallbackByAccount_(
         {
             result.insert(result.end(), 1, rai::QueryCallbackStatus::FINISH);
             node->syncer_.QueryCallback(account, ack.status_, ack.block_);
+            node->syncer_.EraseQuery(query_id);
         }
         else if (ack.status_ == rai::QueryStatus::MISS)
         {
             ++count;
-            if (count >= 3)
+            if (count >= 5)
             {
                 result.insert(result.end(), 1,
                               rai::QueryCallbackStatus::FINISH);
                 node->syncer_.QueryCallback(account, ack.status_, ack.block_);
+                node->syncer_.EraseQuery(query_id);
             }
             else
             {
@@ -376,15 +461,17 @@ rai::QueryCallback rai::Syncer::QueryCallbackByAccount_(
         {
             result.insert(result.end(), 1, rai::QueryCallbackStatus::FINISH);
             node->syncer_.Erase(account);
+            node->syncer_.EraseQuery(query_id);
         }
     };
     return callback;
 }
 
-rai::QueryCallback rai::Syncer::QueryCallbackByHash_(const rai::BlockHash& hash)
+rai::QueryCallback rai::Syncer::QueryCallbackByHash_(const rai::BlockHash& hash,
+                                                     uint64_t query_id)
 {
     std::weak_ptr<rai::Node> node_w(node_.Shared());
-    rai::QueryCallback callback = [node_w, count = 0](
+    rai::QueryCallback callback = [node_w, query_id, count = 0](
                                       const std::vector<rai::QueryAck>& acks,
                                       std::vector<rai::QueryCallbackStatus>&
                                           result) mutable {
@@ -400,6 +487,7 @@ rai::QueryCallback rai::Syncer::QueryCallbackByHash_(const rai::BlockHash& hash)
         {
             result.insert(result.end(), acks.size(),
                           rai::QueryCallbackStatus::FINISH);
+            node->syncer_.EraseQuery(query_id);
             return;
         }
 
@@ -407,24 +495,33 @@ rai::QueryCallback rai::Syncer::QueryCallbackByHash_(const rai::BlockHash& hash)
         if (ack.status_ == rai::QueryStatus::SUCCESS)
         {
             result.insert(result.end(), 1, rai::QueryCallbackStatus::FINISH);
+
             
             rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
             rai::Transaction transaction(error_code, node->ledger_, false);
             if (error_code != rai::ErrorCode::SUCCESS)
             {
-                // log
+                rai::Stats::Add(error_code, "Syncer::QueryCallbackByHash_");
+                node->syncer_.EraseQuery(query_id);
                 return;
             }
-            
-            node->syncer_.SyncAccount(transaction, ack.block_->Account());
+
+            uint32_t batch_id = node->syncer_.BatchId(query_id);
+            node->syncer_.SyncAccount(transaction, ack.block_->Account(),
+                                      batch_id);
+            node->syncer_.EraseQuery(query_id);
+            std::cout << "======================>batch_id=" << batch_id
+                      << ", query_id=" << query_id << std::endl;
+            std::cout << ack.block_->Json() << std::endl;
         }
         else if (ack.status_ == rai::QueryStatus::MISS)
         {
             ++count;
-            if (count >= 3)
+            if (count >= 5)
             {
                 result.insert(result.end(), 1,
                               rai::QueryCallbackStatus::FINISH);
+                node->syncer_.EraseQuery(query_id);
             }
             else
             {
@@ -441,6 +538,7 @@ rai::QueryCallback rai::Syncer::QueryCallbackByHash_(const rai::BlockHash& hash)
         else
         {
             result.insert(result.end(), 1, rai::QueryCallbackStatus::FINISH);
+            node->syncer_.EraseQuery(query_id);
         }
     };
     return callback;

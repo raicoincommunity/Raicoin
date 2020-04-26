@@ -56,6 +56,8 @@ private:
     void Receive_();
     void ChangeStatus_(rai::WebsocketStatus);
 
+    static size_t constexpr MAX_QUEUE_SIZE = 2048;
+
     boost::asio::io_service& service_;
     bool ssl_;
     std::string host_;

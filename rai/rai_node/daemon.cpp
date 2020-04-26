@@ -18,8 +18,8 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
         std::fstream config_file;
         rai::ErrorCode error_code =
             rai::FetchObject(config, config_path, config_file);
-        IF_NOT_SUCCESS_RETURN(error_code);
         config_file.close();
+        IF_NOT_SUCCESS_RETURN(error_code);
         rai::Log::Init(data_path, config.node_.log_);
 
         rai::Fan key(rai::uint256_union(0), rai::Fan::FAN_OUT);

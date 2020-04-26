@@ -382,6 +382,10 @@ void rai::RpcHandler::Process()
         {
             AccountCount();
         }
+        else if (action == "account_forks")
+        {
+            AccountForks();
+        }
         else if (action == "account_info")
         {
             AccountInfo();
@@ -410,6 +414,14 @@ void rai::RpcHandler::Process()
         {
             BootstrapStatus();
         }
+        else if (action == "confirm_manager_status")
+        {
+            ConfirmManagerStatus();
+        }
+        else if (action == "election_count")
+        {
+            ElectionCount();
+        }
         else if (action == "election_info")
         {
             ElectionInfo();
@@ -417,6 +429,10 @@ void rai::RpcHandler::Process()
         else if (action == "elections")
         {
             Elections();
+        }
+        else if (action == "forks")
+        {
+            Forks();
         }
         else if (action == "message_dump")
         {
@@ -460,6 +476,10 @@ void rai::RpcHandler::Process()
         {
             Rewardables();
         }
+        else if (action == "rewarder_status")
+        {
+            RewarderStatus();
+        }
         else if (action == "stats")
         {
             Stats();
@@ -476,6 +496,10 @@ void rai::RpcHandler::Process()
         {
             Stop();
         }
+        else if (action == "subscriber_count")
+        {
+            SubscriberCount();
+        }
         else if (action == "syncer_status")
         {
             SyncerStatus();
@@ -490,10 +514,6 @@ void rai::RpcHandler::Process()
         {
             response_.put("request_id", *request_id);
         }
-    }
-    catch (const std::runtime_error&)
-    {
-        error_code_ = rai::ErrorCode::RPC_JSON;
     }
     catch (const std::exception& e)
     {
@@ -548,11 +568,51 @@ void rai::RpcHandler::AccountCount()
     response_.put("count", count);
 }
 
+void rai::RpcHandler::AccountForks()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    if (error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    rai::Ptree forks;
+    rai::Iterator i = node_.ledger_.ForkLowerBound(transaction, account);
+    rai::Iterator n = node_.ledger_.ForkUpperBound(transaction, account);
+    for (; i != n; ++i)
+    {
+        std::shared_ptr<rai::Block> first(nullptr);
+        std::shared_ptr<rai::Block> second(nullptr);
+        error = node_.ledger_.ForkGet(i, first, second);
+        if (error || first->Account() != account)
+        {
+            transaction.Abort();
+            return;
+        }
+        
+        rai::Ptree fork;
+        rai::Ptree block_first;
+        rai::Ptree block_second;
+        first->SerializeJson(block_first);
+        second->SerializeJson(block_second);
+        fork.put_child("block_first", block_first);
+        fork.put_child("block_second", block_second);
+        forks.push_back(std::make_pair("", fork));
+    }
+    response_.put_child("forks", forks);
+}
+
 void rai::RpcHandler::AccountInfo()
 {
     rai::Account account;
     bool error = GetAccount_(account);
     IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
 
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     if (error_code_ != rai::ErrorCode::SUCCESS)
@@ -564,7 +624,7 @@ void rai::RpcHandler::AccountInfo()
     error = node_.ledger_.AccountInfoGet(transaction, account, info);
     if (error || !info.Valid())
     {
-        error_code_ = rai::ErrorCode::RPC_ACCOUNT_NOT_EXIST;
+        response_.put("error", "The account does not exist");
         return;
     }
 
@@ -860,6 +920,16 @@ void rai::RpcHandler::BootstrapStatus()
     response_.put("waiting_syncer", node_.bootstrap_.WaitingSyncer());
 }
 
+void rai::RpcHandler::ConfirmManagerStatus()
+{
+    response_ = node_.confirm_manager_.Status();
+}
+
+void rai::RpcHandler::ElectionCount()
+{
+    response_.put("count", std::to_string(node_.elections_.Size()));
+}
+
 void rai::RpcHandler::ElectionInfo()
 {
     rai::Account account;
@@ -890,6 +960,76 @@ void rai::RpcHandler::Elections()
         elections_ptree.push_back(std::make_pair("", election));
     }
     response_.put_child("elections", elections_ptree);
+}
+
+void rai::RpcHandler::Forks()
+{
+    rai::Account account(0);
+    bool error = GetAccount_(account);
+    if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_ACCOUNT)
+    {
+        return;
+    }
+
+    uint64_t height = 0;
+    error = GetHeight_(height);
+    if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_HEIGHT)
+    {
+        return;
+    }
+
+    uint64_t count = 1000;
+    error = GetCount_(count);
+    if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_COUNT)
+    {
+        return;
+    }
+
+    if (count == 0)
+    {
+        response_.put("count", std::to_string(0));
+        response_.put("forks", "");
+        return;
+    }
+
+    error_code_ = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree forks;
+    uint64_t i = 0;
+    for (; i < count; ++i)
+    {
+        std::shared_ptr<rai::Block> first(nullptr);
+        std::shared_ptr<rai::Block> second(nullptr);
+        bool error =
+            node_.ledger_.NextFork(transaction, account, height, first, second);
+        if (error)
+        {
+            break;
+        }
+
+        if (height == rai::Block::INVALID_HEIGHT)
+        {
+            account += 1;
+            height = 0;
+        }
+        else
+        {
+            height += 1;
+        }
+
+        rai::Ptree fork;
+        rai::Ptree block_first;
+        rai::Ptree block_second;
+        first->SerializeJson(block_first);
+        second->SerializeJson(block_second);
+        fork.put_child("block_first", block_first);
+        fork.put_child("block_second", block_second);
+        forks.push_back(std::make_pair("", fork));
+    }
+    response_.put("count", std::to_string(i));
+    response_.put_child("forks", forks);
 }
 
 void rai::RpcHandler::MessageDump()
@@ -931,10 +1071,11 @@ void rai::RpcHandler::Peers()
     std::vector<rai::Peer> peers = node_.peers_.List();
     for (auto i = peers.begin(), n = peers.end(); i != n; ++i)
     {
-        std::stringstream text;
-        text << i->Endpoint();
+        std::stringstream endpoint;
+        endpoint << i->Endpoint();
         rai::Ptree entry;
-        entry.put("", text.str());
+        entry.put("account", i->account_.StringAccount());
+        entry.put("endpoint", endpoint.str());
         ptree.push_back(std::make_pair("", entry));
     }
     response_.add_child("peers", ptree);
@@ -1091,6 +1232,11 @@ void rai::RpcHandler::Rewardables()
     response_.put_child("rewardables", rewardables_ptree);
 }
 
+void rai::RpcHandler::RewarderStatus()
+{
+    node_.rewarder_.Status(response_);
+}
+
 void rai::RpcHandler::Stats()
 {
     boost::optional<std::string> type_o =
@@ -1206,12 +1352,18 @@ void rai::RpcHandler::Stop()
     response_.put("success", "");
 }
 
+void rai::RpcHandler::SubscriberCount()
+{
+    response_.put("acount", node_.subscriptions_.Size());
+}
+
 void rai::RpcHandler::SyncerStatus()
 {
     rai::SyncStat stat = node_.syncer_.Stat();
     response_.put("total", stat.total_);
     response_.put("miss", stat.miss_);
     response_.put("size", node_.syncer_.Size());
+    response_.put("queries", node_.syncer_.Queries());
 }
 
 bool rai::RpcHandler::CheckControl_()

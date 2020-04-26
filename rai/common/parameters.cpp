@@ -33,7 +33,7 @@ uint64_t rai::EpochTimestamp()
         }
         case rai::RaiNetworks::BETA:
         {
-            throw std::runtime_error("Beta network epoch timestamp is missing");
+            return rai::BETA_EPOCH_TIMESTAMP;
         }
         case rai::RaiNetworks::LIVE:
         {
@@ -56,8 +56,7 @@ std::string rai::GenesisPublicKey()
         }
         case rai::RaiNetworks::BETA:
         {
-            throw std::runtime_error(
-                "Beta network genesis public key is missing");
+            return rai::BETA_PUBLIC_KEY;
         }
         case rai::RaiNetworks::LIVE:
         {
@@ -81,7 +80,7 @@ std::string rai::GenesisBlock()
         }
         case rai::RaiNetworks::BETA:
         {
-            throw std::runtime_error("Beta network genesis block is missing");
+            return rai::BETA_GENESIS_BLOCK;
         }
         case rai::RaiNetworks::LIVE:
         {
