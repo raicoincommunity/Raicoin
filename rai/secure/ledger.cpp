@@ -943,7 +943,7 @@ rai::Iterator rai::Ledger::ForkUpperBound(rai::Transaction& transaction,
 }
 
 bool rai::Ledger::NextFork(rai::Transaction& transaction, rai::Account& account,
-                           uint64_t height, std::shared_ptr<rai::Block>& first,
+                           uint64_t& height, std::shared_ptr<rai::Block>& first,
                            std::shared_ptr<rai::Block>& second) const
 {
     std::vector<uint8_t> bytes_key;

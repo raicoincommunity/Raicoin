@@ -36,11 +36,15 @@ public:
     void SerializeJson(rai::Ptree&) const;
     rai::ErrorCode UpgradeJson(bool&, uint32_t, rai::Ptree&) const;
 
+    static uint32_t constexpr DEFAULT_DAILY_REWARD_TIMES = 12;
+
     uint16_t port_;
     rai::LogConfig log_;
     uint32_t io_threads_;
     std::vector<std::string> preconfigured_peers_;
     rai::Url callback_url_;
+    rai::Account reward_to_;
+    uint32_t daily_reward_times_;
 };
 
 class RecentBlock
@@ -92,10 +96,11 @@ class ConfirmRequests
 {
 public:
     bool Append(const rai::BlockHash&, const rai::Account&);
+    bool Insert(const rai::BlockHash&);
     bool Insert(const rai::BlockHash&, const rai::Account&);
     std::vector<rai::Account> Remove(const rai::BlockHash&);
 
-    static constexpr uint32_t MAX_CONFIRMATIONS_PER_BLOCK = 4;
+    static constexpr uint32_t MAX_CONFIRMATIONS_PER_BLOCK = 8;
 private:
     bool Insert_(const rai::BlockHash&, const rai::Account&);
     std::vector<rai::Account> Query_(const rai::BlockHash&);
@@ -118,6 +123,7 @@ class ConfirmManager
 public:
     uint64_t GetTimestamp(const rai::Account&, uint64_t, const rai::BlockHash&);
     void Age();
+    rai::Ptree Status() const;
 
 private:
     mutable std::mutex mutex_;
@@ -189,6 +195,8 @@ public:
                            const std::shared_ptr<rai::Block>&);
     bool Busy() const;
     void Confirm(const rai::Account&, const std::shared_ptr<rai::Block>&);
+    void Confirm(const std::vector<rai::Account>&,
+                 const std::shared_ptr<rai::Block>&);
     void RequestConfirm(const rai::Route&, const std::shared_ptr<rai::Block>&);
     void RequestConfirms(const std::shared_ptr<rai::Block>&,
                          std::unordered_set<rai::Account>&&);
@@ -204,6 +212,8 @@ public:
                     const rai::BlockHash&, const rai::Endpoint&,
                     const boost::optional<rai::Endpoint>&);
     void Publish(const std::shared_ptr<rai::Block>&);
+    void OnBlockProcessed(const rai::BlockProcessResult&,
+                          const std::shared_ptr<rai::Block>&);
     void Ongoing(const std::function<void()>&, const std::chrono::seconds&);
     void PostJson(const rai::Url&, const rai::Ptree&);
     void PrivateKey(rai::RawKey&);
@@ -220,6 +230,7 @@ public:
     void ForceConfirmBlock(std::shared_ptr<rai::Block>&);
     void ForceAppendBlock(std::shared_ptr<rai::Block>&);
     void QueueGapCaches(const rai::BlockHash&);
+    void AgeGapCaches();
     rai::Amount RepWeight(const rai::Account&);
     void RepWeights(rai::RepWeights&);
     void UpdatePeerWeights();

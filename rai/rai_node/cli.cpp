@@ -53,13 +53,73 @@ rai::ErrorCode ProcessDaemon(const boost::program_options::variables_map& vm,
 rai::ErrorCode ProcessKeyCreate(const boost::program_options::variables_map& vm,
                                 const boost::filesystem::path& data_path)
 {
+    bool dir = false;
+    std::string file;
+    boost::filesystem::path key_path;
+    if (vm.count("file"))
+    {
+        file = vm["file"].as<std::string>();
+        if ((file.find("/") != std::string::npos)
+            || (file.find("\\") != std::string::npos))
+        {
+            key_path = boost::filesystem::path(file);
+            if (file.find(".") == 0)
+            {
+                auto parent_path = key_path.parent_path();
+                key_path = boost::filesystem::canonical(parent_path)
+                           / key_path.filename();
+            }
+        }
+        else
+        {
+            key_path = data_path / file;
+        }
+    }
+    else
+    {
+        dir = true;
+        key_path = data_path;
+    }
+
+    return rai::CreateKey(key_path, dir);
+}
+
+rai::ErrorCode ProcessKeyShow(const boost::program_options::variables_map& vm,
+                              const boost::filesystem::path& data_path)
+{
     std::string file;
     if (vm.count("file"))
     {
         file = vm["file"].as<std::string>();
     }
 
-    return rai::CreateKey(data_path, file);
+    boost::filesystem::path key_path;
+    if ((file.find("/") != std::string::npos)
+        || (file.find("\\") != std::string::npos))
+    {
+        key_path = boost::filesystem::path(file);
+        if (file.find(".") == 0)
+        {
+            key_path = boost::filesystem::canonical(key_path);
+        }
+    }
+    else
+    {
+        key_path = data_path / file;
+    }
+
+    std::ifstream stream(key_path.string(), std::ios::in | std::ios::binary);
+    if (!stream)
+    {
+        return rai::ErrorCode::INVALID_KEY_FILE;
+    }
+    
+    rai::KeyPair key_pair;
+    rai::ErrorCode error_code = key_pair.Show(stream);
+    stream.close();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::ErrorCode ProcessSign(const boost::program_options::variables_map& vm,
@@ -105,6 +165,7 @@ void rai::CliAddOptions(boost::program_options::options_description& desc){
         ("hash",  boost::program_options::value<std::string>(), "Define <hash> for sign command")
         ("key", boost::program_options::value<std::string>(), "Define key file for daemon command")
         ("key_create", "Generate a random key pair and save it to <file>")
+        ("key_show", "Show key pair infomation in the specified <file>")
         ("sign", "Sign <hash> with a specified <key>")
         ;
 
@@ -148,6 +209,10 @@ rai::ErrorCode rai::CliProcessOptions(
         else if (vm.count("key_create"))
         {
             error_code = ProcessKeyCreate(vm, data_path);
+        }
+        else if (vm.count("key_show"))
+        {
+            error_code = ProcessKeyShow(vm, data_path);
         }
         else if (vm.count("sign"))
         {

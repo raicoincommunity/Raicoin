@@ -41,8 +41,9 @@ public:
     std::shared_ptr<rai::Airdrop> Shared();
     void ProcessReceivables();
 
-    void OnlineStatsRequest();
-    void ProcessOnlineStat(const std::string&);
+    void StatsRequest(bool);
+    void ProcessStats(bool, const std::string&);
+    
     void InvitedRepsRequest();
     void ProcessInvitedReps(const std::string&);
     void ProcessAirdrop(const rai::Account&);
@@ -55,14 +56,16 @@ private:
     uint64_t AirdropDelay_(const rai::Account&) const;
     bool Destroyed_(rai::Transaction&, const rai::Account&, bool&);
     uint64_t LastAirdrop_(rai::Transaction&, const rai::Account&);
-    void UpdateOnlineStatTs_();
+    void UpdateStatTs_();
     void UpdateValidReps_();
 
     std::condition_variable condition_;
     mutable std::mutex mutex_;
     bool stopped_;
     uint64_t last_request_;
+    std::atomic<uint64_t> prev_stat_ts_;
     std::atomic<uint64_t> online_stat_ts_;
+    std::unordered_map<rai::Account, uint32_t> prev_stats_;
     std::unordered_map<rai::Account, uint32_t> online_stats_;
     std::vector<std::pair<rai::Account, uint32_t>> valid_reps_;
     uint64_t valid_weight_;

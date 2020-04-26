@@ -747,6 +747,16 @@ bool rai::QtHistoryModel::Record(int row) const
     return false;
 }
 
+uint64_t rai::QtHistoryModel::HeadHeight() const
+{
+    return head_height_;
+}
+
+rai::Account rai::QtHistoryModel::Account() const
+{
+    return account_;
+}
+
 rai::QtHistory::QtHistory(rai::QtMain& qt_main)
     : window_(new QWidget),
       layout_(new QVBoxLayout),
@@ -764,13 +774,75 @@ rai::QtHistory::QtHistory(rai::QtMain& qt_main)
     #endif
 
     view_->setModel(model_);
+    view_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     view_->verticalHeader()->hide();
+    view_->setContextMenuPolicy(Qt::ContextMenuPolicy::CustomContextMenu);
     view_->setSelectionMode(QAbstractItemView::SingleSelection);
     view_->setSelectionBehavior(QAbstractItemView::SelectRows);
 
     layout_->addWidget(view_);
     layout_->setContentsMargins(0, 0, 0, 0);
     window_->setLayout(layout_);
+}
+
+void rai::QtHistory::OnMenuRequested(const QPoint& pos)
+{
+    std::weak_ptr<rai::QtMain> qt_main_w(main_.Shared());
+    auto menu   = std::make_shared<QMenu>(view_);
+    std::vector<std::shared_ptr<QAction>> actions;
+    actions.push_back(std::make_shared<QAction>("Copy block json"));
+    actions.push_back(std::make_shared<QAction>("Copy block raw"));
+    for (const auto& action : actions)
+    {
+        menu->addAction(action.get());
+    }
+
+    QObject::connect(
+        menu.get(), &QMenu::triggered,
+        [pos, menu, actions, qt_main_w](QAction* action) {
+            auto qt_main = qt_main_w.lock();
+            if (qt_main == nullptr) return;
+            QModelIndex index(qt_main->history_.view_->indexAt(pos));
+            rai::Account account = qt_main->history_.model_->Account();
+            uint64_t head_height = qt_main->history_.model_->HeadHeight();
+            if (index.row() > head_height)
+            {
+                return;
+            }
+
+            rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+            rai::Ledger& ledger = qt_main->wallets_->ledger_;
+            rai::Transaction transaction(error_code, ledger, false);
+            IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+            std::shared_ptr<rai::Block> block(nullptr);
+            bool error = ledger.BlockGet(transaction, account,
+                                        head_height - index.row(), block);
+            IF_ERROR_RETURN_VOID(error);
+
+            std::string block_str;
+            if (action->text() == "Copy block json")
+            {
+                block_str = block->Json();
+            }
+            else if (action->text() == "Copy block raw")
+            {
+                std::vector<uint8_t> bytes;
+                {
+                    rai::VectorStream stream(bytes);
+                    block->Serialize(stream);
+                }
+                block_str = rai::BytesToHex(bytes.data(), bytes.size());
+            }
+            else
+            {
+                return;
+            }
+
+            qt_main->application_.clipboard()->setText(block_str.c_str());
+        });
+    menu->popup(view_->viewport()->mapToGlobal(pos));
+
 }
 
 void rai::QtHistory::Refresh()
@@ -806,6 +878,14 @@ void rai::QtHistory::Refresh()
 
 void rai::QtHistory::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
 {
+    QObject::connect(view_, &QTableView::customContextMenuRequested,
+                     [qt_main_w](const QPoint& pos) {
+                         if (auto qt_main = qt_main_w.lock())
+                         {
+                             qt_main->history_.OnMenuRequested(pos);
+                         }
+                     });
+
     main_.wallets_->observers_.block_.Add(
         [qt_main_w](const std::shared_ptr<rai::Block>& block, bool rollback) {
             auto qt_main = qt_main_w.lock();

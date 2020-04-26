@@ -94,6 +94,7 @@ rai::Airdrop::Airdrop(const std::shared_ptr<rai::Wallets>& wallets,
       config_(config),
       stopped_(false),
       last_request_(0),
+      prev_stat_ts_(0),
       online_stat_ts_(0),
       valid_weight_(0),
       thread_([this]() { this->Run(); })
@@ -142,7 +143,9 @@ void rai::Airdrop::Run()
 
         if (do_request)
         {
-            OnlineStatsRequest();
+            UpdateStatTs_();
+            StatsRequest(true);
+            StatsRequest(false);
             InvitedRepsRequest();
         }
         ProcessReceivables();
@@ -319,27 +322,27 @@ void rai::Airdrop::ProcessReceivables()
     }
 }
 
-void rai::Airdrop::OnlineStatsRequest()
+void rai::Airdrop::StatsRequest(bool prev)
 {
     std::weak_ptr<rai::Airdrop> airdrop_w(Shared());
     auto client = std::make_shared<rai::HttpClient>(wallets_->service_);
 
     rai::Url url(config_.online_stats_);
-    UpdateOnlineStatTs_();
-    url.AddQuery("ts", std::to_string(online_stat_ts_));
+    uint64_t ts = prev ? prev_stat_ts_ : online_stat_ts_;
+    url.AddQuery("ts", std::to_string(ts));
 
     rai::ErrorCode error_code = client->Get(
-        url, [airdrop_w](rai::ErrorCode error_code, const std::string& body) {
+        url,
+        [airdrop_w, prev](rai::ErrorCode error_code, const std::string& body) {
             auto airdrop = airdrop_w.lock();
             if (airdrop == nullptr) return;
             if (error_code != rai::ErrorCode::SUCCESS)
             {
-                // log
                 std::cout << rai::ErrorString(error_code) << ":"
                           << static_cast<uint32_t>(error_code) << std::endl;
                 return;
             }
-            airdrop->ProcessOnlineStat(body);
+            airdrop->ProcessStats(prev, body);
         });
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -350,7 +353,7 @@ void rai::Airdrop::OnlineStatsRequest()
     wallets_->service_runner_.Notify();
 }
 
-void rai::Airdrop::ProcessOnlineStat(const std::string& response)
+void rai::Airdrop::ProcessStats(bool prev, const std::string& response)
 {
     try
     {
@@ -360,14 +363,14 @@ void rai::Airdrop::ProcessOnlineStat(const std::string& response)
         std::string status = ptree.get<std::string>("status");
         if (status != "success")
         {
-            std::cout << "Airdrop::ProcessOnlineStat: invalid status=" << status
+            std::cout << "Airdrop::ProcessStats: invalid status=" << status
                       << std::endl;
             return;
         }
         uint32_t count = ptree.get<uint32_t>("count");
         if (count == 0)
         {
-            std::cout << "Airdrop::ProcessOnlineStat: count=0" << std::endl;
+            std::cout << "Airdrop::ProcessStats: count=0" << std::endl;
             return;
         }
 
@@ -377,10 +380,11 @@ void rai::Airdrop::ProcessOnlineStat(const std::string& response)
         {
             const auto& record = i.second;
             uint64_t ts = record.get<uint64_t>("timestamp");
-            if (ts != online_stat_ts_)
+            uint64_t ts_expect = prev ? prev_stat_ts_ : online_stat_ts_;
+            if (ts != ts_expect)
             {
                 std::cout
-                    << "Airdrop::ProcessOnlineStat: Invalid timestamp field"
+                    << "Airdrop::ProcessStats: Invalid timestamp field"
                     << std::endl;
                 return;
             }
@@ -390,7 +394,7 @@ void rai::Airdrop::ProcessOnlineStat(const std::string& response)
             bool error = rep.DecodeAccount(record.get<std::string>("rep"));
             if (error)
             {
-                std::cout << "Airdrop::ProcessOnlineStat: Invalid rep field"
+                std::cout << "Airdrop::ProcessStats: Invalid rep field"
                           << std::endl;
                 return;
             }
@@ -398,7 +402,14 @@ void rai::Airdrop::ProcessOnlineStat(const std::string& response)
         }
 
         std::lock_guard<std::mutex> lock(mutex_);
-        online_stats_ = std::move(stats);
+        if (prev)
+        {
+            prev_stats_ = std::move(stats);
+        }
+        else
+        {
+            online_stats_ = std::move(stats);
+        }
         UpdateValidReps_();
     }
     catch(const std::exception& e)
@@ -406,7 +417,6 @@ void rai::Airdrop::ProcessOnlineStat(const std::string& response)
         std::cout << e.what() << std::endl;
     }
 }
-
 
 void rai::Airdrop::InvitedRepsRequest()
 {
@@ -635,7 +645,7 @@ bool rai::Airdrop::Destroyed_(rai::Transaction& transaction,
         throw std::runtime_error("Ledger inconsistent");
     }
 
-    if (head->Opcode() != rai::BlockOpcode::DESTROY)
+    if (head->Balance() >= rai::Amount(1000 * rai::RAI))
     {
         confirmed = false;
         return false;
@@ -680,11 +690,12 @@ uint64_t rai::Airdrop::LastAirdrop_(rai::Transaction& transaction,
     return 0;
 }
 
-void rai::Airdrop::UpdateOnlineStatTs_()
+void rai::Airdrop::UpdateStatTs_()
 {
     uint64_t day = 86400;
     uint64_t now = rai::CurrentTimestamp();
     online_stat_ts_ = now - now % day - day;
+    prev_stat_ts_  = online_stat_ts_ - day;
 }
 
 void rai::Airdrop::UpdateValidReps_()
@@ -700,6 +711,13 @@ void rai::Airdrop::UpdateValidReps_()
             {
                 continue;
             }
+
+            if (prev_stats_.find(i) != prev_stats_.end()
+                && prev_stats_[i] >= online_stats_[i])
+            {
+                continue;
+            }
+
             reps.emplace_back(i, online_stats_[i]);
             weight += online_stats_[i];
         }
@@ -708,6 +726,11 @@ void rai::Airdrop::UpdateValidReps_()
     {
         for (const auto& i : online_stats_)
         {
+            if (prev_stats_.find(i.first) != prev_stats_.end()
+                && prev_stats_[i.first] >= i.second)
+            {
+                continue;
+            }
             reps.push_back(i);
             weight += i.second;
         }

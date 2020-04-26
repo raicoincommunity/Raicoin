@@ -173,10 +173,12 @@ public:
     bool Reachable(const rai::Endpoint&) const;
     std::vector<rai::Peer> List() const;
     std::vector<rai::Peer> RandomPeers(size_t) const;
-    boost::optional<rai::Peer> RandomPeer() const;
-    boost::optional<rai::Peer> RandomFullNodePeer() const;
+    boost::optional<rai::Peer> RandomPeer(bool = true) const;
+    boost::optional<rai::Peer> RandomFullNodePeer(bool = true) const;
     void Routes(const std::unordered_set<rai::Account>&, bool,
                 std::vector<rai::Route>&);
+    size_t Size() const;
+    std::unordered_set<rai::Account> Accounts(bool) const;
 
     static bool LowWeightPeer(const rai::Peer&);
 

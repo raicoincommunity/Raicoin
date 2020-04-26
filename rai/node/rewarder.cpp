@@ -8,6 +8,7 @@ rai::Rewarder::Rewarder(rai::Node& node, const rai::Account& account,
       daily_send_times_(times),
       fan_(account, rai::Fan::FAN_OUT),
       stopped_(false),
+      up_to_date_(false),
       block_(nullptr),
       thread_([this]() { Run(); })
 {
@@ -86,6 +87,14 @@ rai::Rewarder::Rewarder(rai::Node& node, const rai::Account& account,
             }
             else if (result.operation_ == rai::BlockOperation::CONFIRM)
             {
+                rai::Amount amount = rai::RewardAmount(previous->Balance(),
+                                                       previous->Timestamp(),
+                                                       block->Timestamp());
+                if (amount.IsZero())
+                {
+                    return;
+                }
+
                 rai::RewardableInfo info;
                 error = node_.ledger_.RewardableInfoGet(
                     transaction, node_.account_, block->Previous(), info);
@@ -128,6 +137,59 @@ void rai::Rewarder::Add(const rai::RewarderInfo& info)
     condition_.notify_all();
 }
 
+void rai::Rewarder::UpToDate()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    up_to_date_ = true;
+}
+
+void rai::Rewarder::KeepUpToDate() const
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (up_to_date_)
+        {
+            return;
+        }
+    }
+
+    if (node_.Status() != rai::NodeStatus::RUN)
+    {
+        std::weak_ptr<rai::Node> node_w(node_.Shared());
+        node_.alarm_.Add(
+            std::chrono::steady_clock::now() + std::chrono::seconds(10),
+            [node_w]() {
+                std::shared_ptr<rai::Node> node = node_w.lock();
+                if (node)
+                {
+                    node->rewarder_.KeepUpToDate();
+                }
+            });
+
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::AccountInfo info;
+    bool error =
+        node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
+    if (error || !info.Valid())
+    {
+        node_.block_queries_.QueryByHeight(
+            node_.account_, 0, false,
+            QueryCallback_(node_.account_, 0, rai::BlockHash(0)));
+    }
+    else
+    {
+        node_.block_queries_.QueryByPrevious(
+            node_.account_, info.head_height_ + 1, info.head_, false,
+            QueryCallback_(node_.account_, info.head_height_ + 1, info.head_));
+    }
+}
+
 void rai::Rewarder::QueueAction(const rai::RewarderAction& action,
                                 const rai::RewarderCallback& callback)
 {
@@ -139,22 +201,23 @@ void rai::Rewarder::QueueAction(const rai::RewarderAction& action,
 }
 
 void rai::Rewarder::Run()
-{
+{ 
     std::unique_lock<std::mutex> lock(mutex_);
     while (!stopped_)
     {
-        if (node_.Status() != rai::NodeStatus::RUN)
+        if (node_.Status() != rai::NodeStatus::RUN || !up_to_date_)
         {
             condition_.wait_for(lock, std::chrono::seconds(5));
             continue;
         }
 
-        if (block_ != nullptr)
+        if (block_ != nullptr || Confirm_(lock))
         {
             condition_.wait_for(lock, std::chrono::seconds(1));
             continue;
         }
-        else if (!actions_.empty())
+
+        if (!actions_.empty())
         {
             auto action = actions_.front();
             actions_.pop_front();
@@ -267,6 +330,11 @@ void rai::Rewarder::Run()
 
 void rai::Rewarder::Send()
 {
+    if (node_.Status() != rai::NodeStatus::RUN)
+    {
+        return;
+    }
+
     rai::RawKey destination;
     fan_.Get(destination);
 
@@ -289,6 +357,30 @@ uint32_t rai::Rewarder::SendInterval() const
     }
 
     return interval;
+}
+
+void rai::Rewarder::Start()
+{
+    KeepUpToDate();
+}
+
+void rai::Rewarder::Status(rai::Ptree& ptree) const
+{
+    rai::RawKey destination;
+    fan_.Get(destination);
+    ptree.put("reward_to", destination.data_.StringAccount());
+    ptree.put("daily_reward_times", std::to_string(daily_send_times_));
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    ptree.put("up_to_date", up_to_date_ ? "true" : "false");
+    if (block_)
+    {
+        rai::Ptree block;
+        block_->SerializeJson(block);
+        ptree.put_child("current_block", block);
+    }
+    ptree.put("rewardable_count", rewardables_.size());
+    ptree.put("waiting_count", waitings_.size());
 }
 
 void rai::Rewarder::Stop()
@@ -380,6 +472,56 @@ void rai::Rewarder::Sync()
     {
         node_.StartElection(i.second);
     }
+}
+
+bool rai::Rewarder::Confirm_(std::unique_lock<std::mutex>& lock)
+{
+    lock.unlock();
+
+    bool ret = true;
+    do
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, node_.ledger_, false);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            rai::Stats::Add(error_code, "Rewarder::Confirm");
+            ret = true;
+            break;
+        }
+
+        rai::AccountInfo info;
+        bool error =
+            node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
+        if (error || !info.Valid())
+        {
+            ret = false;
+            break;
+        }
+
+        if (info.confirmed_height_ == info.head_height_)
+        {
+            ret = false;
+            break;
+        }
+
+        std::shared_ptr<rai::Block> block(nullptr);
+        error = node_.ledger_.BlockGet(transaction, info.head_, block);
+        if (error)
+        {
+            rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
+                            "Rewarder::Confirm_");
+            ret = true;
+            break;
+        }
+
+        node_.StartElection(block);
+        ret = true;
+    } while (0);
+
+    lock.lock();
+    return ret;
 }
 
 rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
@@ -532,4 +674,85 @@ rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
         balance, link, private_key, node_.account_);
 
     return rai::ErrorCode::SUCCESS;
+}
+
+rai::QueryCallback rai::Rewarder::QueryCallback_(
+    const rai::Account& account, uint64_t height,
+    const rai::BlockHash& previous) const
+{
+    std::weak_ptr<rai::Node> node_w(node_.Shared());
+    rai::QueryCallback callback =
+        [node_w, account, height, previous, count = 0](
+            const std::vector<rai::QueryAck>& acks,
+            std::vector<rai::QueryCallbackStatus>& result) mutable {
+            auto node(node_w.lock());
+            if (!node)
+            {
+                result.insert(result.end(), acks.size(),
+                              rai::QueryCallbackStatus::FINISH);
+                return;
+            }
+
+            if (acks.size() != 1)
+            {
+                result.insert(result.end(), acks.size(),
+                              rai::QueryCallbackStatus::FINISH);
+                rai::Stats::Add(rai::ErrorCode::LOGIC_ERROR,
+                                "Rewarder::QueryCallback_: invalid ack size");
+                return;
+            }
+
+            auto& ack = acks[0];
+            if (ack.status_ == rai::QueryStatus::FORK
+                || ack.status_ == rai::QueryStatus::SUCCESS)
+            {
+                result.insert(result.end(), 1,
+                              rai::QueryCallbackStatus::FINISH);
+                if (node->Status() == rai::NodeStatus::RUN)
+                {
+                    node->syncer_.Add(account, height, previous, false,
+                                      rai::Syncer::DEFAULT_BATCH_ID);
+                }
+                node->alarm_.Add(
+                    std::chrono::steady_clock::now() + std::chrono::seconds(10),
+                    [node_w]() {
+                        std::shared_ptr<rai::Node> node = node_w.lock();
+                        if (node)
+                        {
+                            node->rewarder_.KeepUpToDate();
+                        }
+                    });
+            }
+            else if (ack.status_ == rai::QueryStatus::MISS)
+            {
+                ++count;
+                if (count >= 20)
+                {
+                    result.insert(result.end(), 1,
+                                  rai::QueryCallbackStatus::FINISH);
+                    node->rewarder_.UpToDate();
+                }
+                else
+                {
+                    result.insert(result.end(), 1,
+                                  rai::QueryCallbackStatus::CONTINUE);
+                }
+            }
+            else if (ack.status_ == rai::QueryStatus::PRUNED
+                     || ack.status_ == rai::QueryStatus::TIMEOUT)
+            {
+                result.insert(result.end(), 1,
+                              rai::QueryCallbackStatus::CONTINUE);
+            }
+            else
+            {
+                result.insert(result.end(), 1,
+                              rai::QueryCallbackStatus::FINISH);
+                rai::Stats::Add(rai::ErrorCode::LOGIC_ERROR,
+                                "Rewarder::QueryCallback_: invalid ack status=",
+                                static_cast<uint32_t>(ack.status_));
+            }
+        };
+
+    return callback;
 }

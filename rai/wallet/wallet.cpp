@@ -21,7 +21,6 @@ void rai::WalletServiceRunner::Run()
     std::unique_lock<std::mutex> lock(mutex_);
     while (!stopped_)
     {
-        std::cout << "wait lock\n";
         condition_.wait_until(
             lock, std::chrono::steady_clock::now() + std::chrono::seconds(3));
         if (stopped_)
@@ -37,9 +36,7 @@ void rai::WalletServiceRunner::Run()
 
         try
         {
-            std::cout << "service start\n";
             service_.run();
-            std::cout << "service stop\n";
         }
         catch(const std::exception& e)
         {
@@ -324,6 +321,12 @@ bool rai::Wallet::Sign(const rai::Account& account,
     return false;
 }
 
+size_t rai::Wallet::Size() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return accounts_.size();
+}
+
 rai::ErrorCode rai::Wallet::Store(rai::Transaction& transaction,
                                   uint32_t wallet_id)
 {
@@ -519,16 +522,18 @@ rai::Wallets::Wallets(rai::ErrorCode& error_code,
                       boost::asio::io_service& service, rai::Alarm& alarm,
                       const boost::filesystem::path& data_path,
                       const rai::WalletConfig& config,
-                      rai::BlockType block_type, const rai::RawKey& seed)
+                      rai::BlockType block_type, const rai::RawKey& seed,
+                      uint32_t websockets)
     : service_(service),
       alarm_(alarm),
       config_(config),
       store_(error_code, data_path / "wallet_data.ldb"),
       ledger_(error_code, store_, false),
-      websocket_(*this, config.server_.host_, config.server_.port_,
-                 config.server_.path_),
       service_runner_(service),
       block_type_(block_type),
+      send_count_(0),
+      last_sync_(0),
+      last_sub_(0),
       stopped_(false),
       selected_wallet_id_(0),
       thread_([this]() { this->Run(); })
@@ -539,6 +544,14 @@ rai::Wallets::Wallets(rai::ErrorCode& error_code,
     {
         error_code = rai::ErrorCode::JSON_CONFIG_WALLET_PRECONFIGURED_REP;
         return;
+    }
+
+    for (uint32_t count = 0; count < websockets; ++count)
+    {
+        auto websocket = std::make_shared<rai::WebsocketClient>(
+            service_, config.server_.host_, config.server_.port_,
+            config.server_.path_, config.server_.protocol_ == "wss");
+        websockets_.push_back(websocket);
     }
 
     rai::Transaction transaction(error_code, ledger_, true);
@@ -794,7 +807,7 @@ void rai::Wallets::AccountInfoQuery(const rai::Account& account)
     rai::Ptree ptree;
     ptree.put("action", "account_info");
     ptree.put("account", account.StringAccount());
-    websocket_.Send(ptree);
+    Send(ptree);
 }
 
 rai::ErrorCode rai::Wallets::AccountChange(
@@ -854,6 +867,37 @@ rai::ErrorCode rai::Wallets::AccountCredit(
         if (auto this_s = this_w.lock())
         {
             this_s->ProcessAccountCredit(wallet, account, credit, callback);
+        }
+    });
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Wallets::AccountDestroy(
+    const rai::AccountActionCallback& callback)
+{
+    auto wallet = SelectedWallet();
+    if (wallet == nullptr)
+    {
+        return rai::ErrorCode::WALLET_GET;
+    }
+
+    if (!wallet->ValidPassword())
+    {
+        return rai::ErrorCode::WALLET_LOCKED;
+    }
+
+    rai::Account account = wallet->SelectedAccount();
+    if (account.IsZero())
+    {
+        return rai::ErrorCode::WALLET_ACCOUNT_GET;
+    }
+
+    std::weak_ptr<rai::Wallets> this_w(Shared());
+    QueueAction(rai::WalletActionPri::HIGH, [this_w, wallet, account, 
+                                             callback]() {
+        if (auto this_s = this_w.lock())
+        {
+            this_s->ProcessAccountDestroy(wallet, account, callback);
         }
     });
     return rai::ErrorCode::SUCCESS;
@@ -932,7 +976,7 @@ void rai::Wallets::BlockQuery(const rai::Account& account, uint64_t height,
     ptree.put("account", account.StringAccount());
     ptree.put("height", std::to_string(height));
     ptree.put("previous", previous.StringHex());
-    websocket_.Send(ptree);
+    Send(ptree);
 }
 
 void rai::Wallets::BlockPublish(const std::shared_ptr<rai::Block>& block)
@@ -942,18 +986,31 @@ void rai::Wallets::BlockPublish(const std::shared_ptr<rai::Block>& block)
     rai::Ptree block_ptree;
     block->SerializeJson(block_ptree);
     ptree.put_child("block", block_ptree);
-    websocket_.Send(ptree);
+    Send(ptree);
 }
 
 void rai::Wallets::ConnectToServer()
 {
-    websocket_.Run();
+    for (const auto& i : websockets_)
+    {
+        i->Run();
+        service_runner_.Notify();
+    }
 }
 
 rai::ErrorCode rai::Wallets::ChangePassword(const std::string& password)
 {
     bool empty_password = false;
     {
+        // construct writing transaction first to avoid deadlock
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            return error_code;
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         auto wallet = Wallet_(selected_wallet_id_);
         if (wallet == nullptr)
@@ -961,13 +1018,6 @@ rai::ErrorCode rai::Wallets::ChangePassword(const std::string& password)
             return rai::ErrorCode::WALLET_GET;
         }
         empty_password = wallet->EmptyPassword();
-
-        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-        rai::Transaction transaction(error_code, ledger_, true);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            return error_code;
-        }
 
         error_code = wallet->ChangePassword(password);
         IF_NOT_SUCCESS_RETURN(error_code);
@@ -990,9 +1040,24 @@ rai::ErrorCode rai::Wallets::ChangePassword(const std::string& password)
 
 rai::ErrorCode rai::Wallets::CreateAccount()
 {
-    uint32_t account_id = 0;
+    uint32_t ignore;
+    return CreateAccount(ignore);
+}
+
+rai::ErrorCode rai::Wallets::CreateAccount(uint32_t& account_id)
+{
+    account_id = 0;
     std::shared_ptr<rai::Wallet> wallet(nullptr);
     {
+        // construct writing transaction before mutex to avoid dead lock
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            return error_code;
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         wallet = Wallet_(selected_wallet_id_);
         if (wallet == nullptr)
@@ -1002,15 +1067,9 @@ rai::ErrorCode rai::Wallets::CreateAccount()
         }
 
         
-        rai::ErrorCode error_code = wallet->CreateAccount(account_id);
+        error_code = wallet->CreateAccount(account_id);
         IF_NOT_SUCCESS_RETURN(error_code);
 
-        rai::Transaction transaction(error_code, ledger_, true);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            // log
-            return error_code;
-        }
         error_code =
             wallet->StoreAccount(transaction, selected_wallet_id_, account_id);
         if (error_code != rai::ErrorCode::SUCCESS)
@@ -1037,6 +1096,15 @@ rai::ErrorCode rai::Wallets::CreateWallet()
 {
     auto wallet = std::make_shared<rai::Wallet>(*this);
     {
+        // construct writing transaction first to avoid deadlock
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            return error_code;
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         uint32_t wallet_id = NewWalletId_();
         if (wallet_id == 0)
@@ -1044,12 +1112,6 @@ rai::ErrorCode rai::Wallets::CreateWallet()
             return rai::ErrorCode::GENERIC;
         }
 
-        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-        rai::Transaction transaction(error_code, ledger_, true);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            return error_code;
-        }
         error_code = wallet->Store(transaction, wallet_id);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
@@ -1089,6 +1151,7 @@ bool rai::Wallets::EnterPassword(const std::string& password)
 
 rai::ErrorCode rai::Wallets::ImportAccount(const rai::KeyPair& key_pair)
 {
+    // construct writing transaction first to avoid deadlock
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, ledger_, true);
     if (error_code != rai::ErrorCode::SUCCESS)
@@ -1115,6 +1178,15 @@ rai::ErrorCode rai::Wallets::ImportWallet(const rai::RawKey& seed,
 {
     auto wallet = std::make_shared<rai::Wallet>(*this, seed);
     {
+        // construct writing transaction first to avoid deadlock
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            return error_code;
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         rai::Account account = wallet->SelectedAccount();
         for (const auto& i : wallets_)
@@ -1132,12 +1204,6 @@ rai::ErrorCode rai::Wallets::ImportWallet(const rai::RawKey& seed,
             return rai::ErrorCode::GENERIC;
         }
 
-        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-        rai::Transaction transaction(error_code, ledger_, true);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            return error_code;
-        }
         error_code = wallet->Store(transaction, wallet_id);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
@@ -1242,17 +1308,30 @@ void rai::Wallets::ProcessAccountInfo(const rai::Account& account,
         return;
     }
 
-    if (info_l.head_height_ <= info.head_height_)
+    if (info_l.head_height_ <= info.head_height_
+        && info.head_height_ != rai::Block::INVALID_HEIGHT)
     {
         return;
     }
 
     std::shared_ptr<rai::Block> block(nullptr);
     rai::BlockHash successor;
-    error = ledger_.BlockGet(transaction, info.head_, block, successor);
-    if (error || block == nullptr)
+    if (info.head_height_ == rai::Block::INVALID_HEIGHT)
     {
-        return;
+        error = ledger_.BlockGet(transaction, info_l.tail_, block, successor);
+        if (error || block == nullptr)
+        {
+            return;
+        }
+        BlockPublish(block);
+    }
+    else
+    {
+        error = ledger_.BlockGet(transaction, info.head_, block, successor);
+        if (error || block == nullptr)
+        {
+            return;
+        }
     }
 
     while (block->Height() < info_l.head_height_)
@@ -1469,6 +1548,95 @@ void rai::Wallets::ProcessAccountCredit(
     callback(rai::ErrorCode::SUCCESS, block);
 }
 
+void rai::Wallets::ProcessAccountDestroy(
+    const std::shared_ptr<rai::Wallet>& wallet, const rai::Account& account,
+    const rai::AccountActionCallback& callback)
+{
+    std::shared_ptr<rai::Block> block(nullptr);
+    if (!wallet->ValidPassword())
+    {
+        callback(rai::ErrorCode::WALLET_LOCKED, block);
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, false);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        callback(error_code, block);
+        return;
+    }
+
+    rai::AccountInfo info;
+    bool error =
+        ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        callback(rai::ErrorCode::LEDGER_ACCOUNT_INFO_GET, block);
+        return;
+    }
+
+    std::shared_ptr<rai::Block> head(nullptr);
+    error = ledger_.BlockGet(transaction, info.head_, head);
+    if (error || head == nullptr)
+    {
+        callback(rai::ErrorCode::LEDGER_BLOCK_GET, block);
+        return;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::DESTROY;
+    uint16_t credit = head->Credit();
+
+    uint64_t now = rai::CurrentTimestamp();
+    uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
+    if (timestamp > now + 60)
+    {
+        callback(rai::ErrorCode::BLOCK_TIMESTAMP, block);
+        return;
+    }
+    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    {
+        callback(rai::ErrorCode::ACCOUNT_LIMITED, block);
+        return;
+    }
+
+    uint32_t counter =
+        rai::SameDay(timestamp, head->Timestamp()) ? head->Counter() + 1 : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        callback(rai::ErrorCode::ACCOUNT_ACTION_CREDIT, block);
+        return;
+    }
+
+    uint64_t height = head->Height() + 1;
+    rai::BlockHash previous = info.head_;
+    rai::Amount balance = 0;
+    rai::uint256_union link(0);
+    rai::RawKey private_key;
+    error_code = wallet->PrivateKey(account, private_key);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        callback(error_code, block);
+        return;
+    }
+
+    if (info.type_ == rai::BlockType::AD_BLOCK)
+    {
+        block = std::make_shared<rai::AdBlock>(
+            opcode, credit, counter, timestamp, height, account, previous,
+            head->Representative(), balance, link, private_key, account);
+    }
+    else
+    {
+        callback(rai::ErrorCode::BLOCK_TYPE, block);
+        return;
+    }
+
+    ProcessBlock(block, false);
+    BlockPublish(block);
+    callback(rai::ErrorCode::SUCCESS, block);
+}
+
 void rai::Wallets::ProcessAccountSend(
     const std::shared_ptr<rai::Wallet>& wallet, const rai::Account& account,
     const rai::Account& destination, const rai::Amount& amount,
@@ -1574,7 +1742,6 @@ void rai::Wallets::ProcessAccountReceive(
         callback(rai::ErrorCode::WALLET_LOCKED, block);
         return;
     }
-
 
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, ledger_, false);
@@ -1764,12 +1931,14 @@ void rai::Wallets::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             {
                 transaction.Abort();
                 // log
+                return;
             }
 
             if (block->Opcode() == rai::BlockOpcode::RECEIVE)
             {
                 ledger_.ReceivableInfoDel(transaction, block->Account(),
                                           block->Link());
+            
                 ReceivedAdd(block->Link());
             }
             break;
@@ -2054,34 +2223,52 @@ void rai::Wallets::ReceivablesQuery(const rai::Account& account)
     ptree.put("type", "confirmed");
     ptree.put("count", std::to_string(1000));
 
-    websocket_.Send(ptree);
+    Send(ptree);
 }
 
 void rai::Wallets::ReceiveAccountInfoQueryAck(
     const std::shared_ptr<rai::Ptree>& message)
 {
-    auto block_o = message->get_child_optional("head_block");
-    if (!block_o)
+    auto account_o = message->get_optional<std::string>("account");
+    if (!account_o)
     {
-        // log
+        std::cout
+            << "Wallets::ReceiveAccountInfoQueryAck: Failed to get account"
+            << std::endl;
         return;
     }
 
-    std::shared_ptr<rai::Block> block(nullptr);
-    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block = rai::DeserializeBlockJson(error_code, *block_o);
-    if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+    rai::Account account;
+    bool error = account.DecodeAccount(*account_o);
+    if (error)
     {
-        //log
+        std::cout
+            << "Wallets::ReceiveAccountInfoQueryAck: Failed to decode account="
+            << *account_o << std::endl;
         return;
     }
 
     rai::AccountInfo info;
-    info.type_ = block->Type();
-    info.head_ = block->Hash();
-    info.head_height_ = block->Height();
+    auto block_o = message->get_child_optional("head_block");
+    if (block_o)
+    {
+        std::shared_ptr<rai::Block> block(nullptr);
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        block = rai::DeserializeBlockJson(error_code, *block_o);
+        if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+        {
+            std::cout << "Wallets::ReceiveAccountInfoQueryAck: Failed to "
+                         "deserialize json block"
+                      << std::endl;
+            return;
+        }
 
-    QueueAccountInfo(block->Account(), info);
+        info.type_ = block->Type();
+        info.head_ = block->Hash();
+        info.head_height_ = block->Height();
+    }
+
+    QueueAccountInfo(account, info);
 }
 
 void rai::Wallets::ReceiveBlockAppendNotify(
@@ -2405,12 +2592,14 @@ void rai::Wallets::ReceiveReceivableInfoNotify(
 
 void rai::Wallets::ReceiveMessage(const std::shared_ptr<rai::Ptree>& message)
 {
+    #if 0
     std::cout << "receive message<<=====:\n";
     std::stringstream ostream;
     boost::property_tree::write_json(ostream, *message);
     ostream.flush();
     std::string body = ostream.str();
     std::cout << body << std::endl;
+    #endif
 
     auto ack_o = message->get_optional<std::string>("ack");
     if (ack_o)
@@ -2471,6 +2660,12 @@ void rai::Wallets::ReceivedDel(const rai::BlockHash& hash)
     received_.erase(hash);
 }
 
+void rai::Wallets::Send(const rai::Ptree& ptree)
+{
+    uint32_t count = send_count_++;
+    websockets_[count % websockets_.size()]->Send(ptree);
+}
+
 std::vector<std::shared_ptr<rai::Wallet>> rai::Wallets::SharedWallets() const
 {
     std::vector<std::shared_ptr<rai::Wallet>> result;
@@ -2516,7 +2711,10 @@ void rai::Wallets::Stop()
 
     alarm_.Stop();
     std::cout << "alarm thread closed\n";
-    websocket_.Close();
+    for (const auto& i : websockets_)
+    {
+        i->Close();
+    }
     std::cout << "websocket closed\n";
     std::this_thread::sleep_for(std::chrono::seconds(1));
     service_runner_.Stop();
@@ -2529,8 +2727,16 @@ void rai::Wallets::SelectAccount(uint32_t account_id)
 {
     std::shared_ptr<rai::Wallet> wallet(nullptr);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // construct writing transaction first to avoid deadlock
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            return;
+        }
 
+        std::lock_guard<std::mutex> lock(mutex_);
         wallet = Wallet_(selected_wallet_id_);
         if (wallet == nullptr)
         {
@@ -2543,13 +2749,6 @@ void rai::Wallets::SelectAccount(uint32_t account_id)
             return;
         }
 
-        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-        rai::Transaction transaction(error_code, ledger_, true);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            // log
-            return;
-        }
         error_code = wallet->StoreInfo(transaction, selected_wallet_id_);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
@@ -2569,6 +2768,15 @@ void rai::Wallets::SelectWallet(uint32_t wallet_id)
 {
     rai::Account selected_account;
     {
+        // construct writing transaction first to avoid deadlock
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            return;
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         if (wallet_id == selected_wallet_id_)
         {
@@ -2590,13 +2798,6 @@ void rai::Wallets::SelectWallet(uint32_t wallet_id)
             return;
         }
 
-        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-        rai::Transaction transaction(error_code, ledger_, true);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            // log
-            return;
-        }
         bool error = ledger_.SelectedWalletIdPut(transaction, wallet_id);
         if (error)
         {
@@ -2668,6 +2869,13 @@ void rai::Wallets::Subscribe(const std::shared_ptr<rai::Wallet>& wallet)
 
 void rai::Wallets::SubscribeAll()
 {
+    auto now = rai::CurrentTimestamp();
+    if (last_sub_ > now - 150)
+    {
+        return;
+    }
+    last_sub_ = now;
+
     auto wallets = SharedWallets();
     for (const auto& wallet : wallets)
     {
@@ -2693,6 +2901,13 @@ void rai::Wallets::Sync(const std::shared_ptr<rai::Wallet>& wallet)
 
 void rai::Wallets::SyncAll()
 {
+    auto now = rai::CurrentTimestamp();
+    if (last_sync_ > now - 150)
+    {
+        return;
+    }
+    last_sync_ = now;
+
     auto wallets = SharedWallets();
     for (const auto& wallet : wallets)
     {
@@ -2800,7 +3015,7 @@ void rai::Wallets::Unsubscribe(const std::shared_ptr<rai::Wallet>& wallet)
         ptree.put("action", "account_unsubscribe");
         ptree.put("account", i.second.first.StringAccount());
 
-        websocket_.Send(ptree);
+        Send(ptree);
     }
 }
 
@@ -2865,7 +3080,7 @@ uint32_t rai::Wallets::WalletAccounts(uint32_t wallet_id) const
         return 0;
     }
 
-    return static_cast<uint32_t>(wallet->Accounts().size());
+    return static_cast<uint32_t>(wallet->Size());
 }
 
 rai::ErrorCode rai::Wallets::WalletSeed(uint32_t wallet_id,
@@ -2965,23 +3180,28 @@ uint32_t rai::Wallets::NewWalletId_() const
 
 void rai::Wallets::RegisterObservers_()
 {
-    websocket_.message_processor_ =
-        [this](const std::shared_ptr<rai::Ptree>& message) {
-            this->ReceiveMessage(message);
-        };
-
     std::weak_ptr<rai::Wallets> wallets(Shared());
-    websocket_.status_observer_ = [wallets](rai::WebsocketStatus status) {
-        auto wallets_s = wallets.lock();
-        if (wallets_s == nullptr) return;
+    for (const auto& i : websockets_)
+    {
+        i->message_processor_ =
+            [wallets](const std::shared_ptr<rai::Ptree>& message) {
+                auto wallets_s = wallets.lock();
+                if (wallets_s == nullptr) return;
+                wallets_s->ReceiveMessage(message);
+            };
 
-        wallets_s->Background([wallets, status]() {
-            if (auto wallets_s = wallets.lock())
-            {
-                wallets_s->observers_.connection_status_.Notify(status);
-            }
-        });
-    };
+        i->status_observer_ = [wallets](rai::WebsocketStatus status) {
+            auto wallets_s = wallets.lock();
+            if (wallets_s == nullptr) return;
+
+            wallets_s->Background([wallets, status]() {
+                if (auto wallets_s = wallets.lock())
+                {
+                    wallets_s->observers_.connection_status_.Notify(status);
+                }
+            });
+        };
+    }
 
     block_observer_ = [wallets](const std::shared_ptr<rai::Block>& block,
                                 bool rollback) {
@@ -3177,7 +3397,7 @@ void rai::Wallets::Subscribe_(const std::shared_ptr<rai::Wallet>& wallet,
     rai::Ptree ptree;
     ptree.put("action", "account_subscribe");
     ptree.put("account", account.StringAccount());
-    ptree.put("timestamp", std::to_string(rai::CurrentTimestamp()));
+    ptree.put("timestamp", std::to_string(timestamp));
 
     if (wallet->ValidPassword())
     {
@@ -3213,7 +3433,7 @@ void rai::Wallets::Subscribe_(const std::shared_ptr<rai::Wallet>& wallet,
         }
     }
 
-    websocket_.Send(ptree);
+    Send(ptree);
 }
 
 void rai::Wallets::SyncBlocks_(rai::Transaction& transaction,

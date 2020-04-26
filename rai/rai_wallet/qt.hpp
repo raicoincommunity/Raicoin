@@ -103,6 +103,9 @@ public:
     QVariant Field(int) const;
     bool Record(int) const;
 
+    uint64_t HeadHeight() const;
+    rai::Account Account() const;
+
 private:
     friend class QtHistory;
 
@@ -118,6 +121,8 @@ class QtHistory
 {
 public: 
     QtHistory(rai::QtMain&);
+
+    void OnMenuRequested(const QPoint& pos);
     void Refresh();
     void Start(const std::weak_ptr<rai::QtMain>&);
 

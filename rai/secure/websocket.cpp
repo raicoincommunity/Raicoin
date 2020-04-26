@@ -206,9 +206,16 @@ void rai::WebsocketClient::OnWebsocketHandshake(
 void rai::WebsocketClient::Send(const std::string& message)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stopped_ || status_ != rai::WebsocketStatus::CONNECTED
-        || message.empty())
+    if (stopped_ || message.empty())
     {
+        return;
+    }
+
+    if (send_queue_.size() >= rai::WebsocketClient::MAX_QUEUE_SIZE)
+    {
+        std::cout << "Send queue overflow, the message has been dropped:"
+                  << std::endl;
+        std::cout << message << std::endl;
         return;
     }
 

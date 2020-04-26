@@ -210,6 +210,7 @@ rai::Ptree rai::Peer::Ptree() const
     ptree.put("account", account_.StringAccount());
     ptree.put("light_node", light_node_);
     ptree.put("weight", rep_weight_.StringDec());
+    ptree.put("weight_in_rai", rep_weight_.StringBalance(rai::RAI) + " RAI");
     if (proxy_)
     {
         std::stringstream stream;
@@ -611,42 +612,66 @@ std::vector<rai::Peer> rai::Peers::RandomPeers(size_t max) const
     return RandomPeers_(max);
 }
 
-boost::optional<rai::Peer> rai::Peers::RandomPeer() const
+boost::optional<rai::Peer> rai::Peers::RandomPeer(bool exclude_self) const
 {
     boost::optional<rai::Peer> result(boost::none);
     std::lock_guard<std::mutex> lock(mutex_);
     uint32_t total_peers =
         static_cast<uint32_t>(peers_.size() + peers_low_weight_.size());
-    if (total_peers <= 1)
+    if (total_peers == 0)
     {
         return result;
     }
 
-    auto index = rai::random_pool.GenerateWord32(0, total_peers - 1);
-    if (index < peers_.size())
+    while (true)
     {
-        result = peers_.get<1>()[index];
+        auto index = rai::random_pool.GenerateWord32(0, total_peers - 1);
+        if (index < peers_.size())
+        {
+            result = peers_.get<1>()[index];
+        }
+        else
+        {
+            result = peers_low_weight_.get<1>()[index - peers_.size()];
+        }
+
+        if (!exclude_self || result->account_ != node_.account_)
+        {
+            return result;
+        }
+
+        if (total_peers == 1)
+        {
+            return boost::none;
+        }
     }
-    else
-    {
-        result = peers_low_weight_.get<1>()[index - peers_.size()];
-    }
-    return result;
 }
 
-boost::optional<rai::Peer> rai::Peers::RandomFullNodePeer() const
+boost::optional<rai::Peer> rai::Peers::RandomFullNodePeer(bool exclude_self) const
 {
     boost::optional<rai::Peer> result(boost::none);
     std::lock_guard<std::mutex> lock(mutex_);
     size_t size = full_node_index_.size();
-    if (size <= 1)
+    if (size == 0)
     {
         return result;
     }
 
-    auto index = rai::random_pool.GenerateWord32(0, size - 1);
-    result = Query_(full_node_index_.get<1>()[index]);
-    return result;
+    while (true)
+    {
+        auto index = rai::random_pool.GenerateWord32(0, size - 1);
+        result = Query_(full_node_index_.get<1>()[index]);
+
+        if (!exclude_self || result->account_ != node_.account_)
+        {
+            return result;
+        }
+
+        if (size == 1)
+        {
+            return boost::none;
+        }
+    }
 }
 
 void rai::Peers::Routes(const std::unordered_set<rai::Account>& filter,
@@ -666,6 +691,34 @@ void rai::Peers::Routes(const std::unordered_set<rai::Account>& filter,
     {
         Routes_(peers_low_weight_, filter, result);
     }
+}
+
+size_t rai::Peers::Size() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return peers_.size() + peers_low_weight_.size();
+}
+
+std::unordered_set<rai::Account> rai::Peers::Accounts(bool all) const
+{
+    std::unordered_set<rai::Account> result;
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto i = peers_.begin(), n = peers_.end(); i != n; ++i)
+    {
+        result.insert(i->account_);
+    }
+
+    if (all)
+    {
+        for (auto i = peers_low_weight_.begin(), n = peers_low_weight_.end();
+             i != n; ++i)
+        {
+            result.insert(i->account_);
+        }
+    }
+
+    return result;
 }
 
 bool rai::Peers::LowWeightPeer(const rai::Peer& peer)

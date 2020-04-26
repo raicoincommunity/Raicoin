@@ -108,6 +108,7 @@ enum class ErrorCode : int
     ELECTION_TALLY                       = 98,
     UDP_RECEIVE                          = 99,
     RESERVED_IP                          = 100,
+    REWARD_TO_ACCOUNT                    = 101,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC              = 200,

@@ -310,6 +310,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Message from reserved ip";
         }
+        case rai::ErrorCode::REWARD_TO_ACCOUNT:
+        {
+            return "Invalid reward_to account in config.json";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

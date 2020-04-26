@@ -11,7 +11,7 @@
 #include <rai/secure/store.hpp>
 #include <rai/secure/ledger.hpp>
 #include <rai/secure/common.hpp>
-#include <rai/wallet/websocket.hpp>
+#include <rai/secure/websocket.hpp>
 #include <rai/wallet/config.hpp>
 
 namespace rai
@@ -41,6 +41,7 @@ public:
     rai::ErrorCode Seed(rai::RawKey&) const;
     bool Sign(const rai::Account&, const rai::uint256_union&,
               rai::Signature&) const;
+    size_t Size() const;
     rai::ErrorCode Store(rai::Transaction&, uint32_t);
     rai::ErrorCode StoreInfo(rai::Transaction&, uint32_t);
     rai::ErrorCode StoreAccount(rai::Transaction&, uint32_t, uint32_t);
@@ -118,7 +119,7 @@ class Wallets : public std::enable_shared_from_this<rai::Wallets>
 {
 public:
     Wallets(rai::ErrorCode&, boost::asio::io_service&, rai::Alarm&,
-            const boost::filesystem::path&, const rai::WalletConfig&, rai::BlockType, const rai::RawKey& = rai::RawKey());
+            const boost::filesystem::path&, const rai::WalletConfig&, rai::BlockType, const rai::RawKey& = rai::RawKey(), uint32_t = 1);
     std::shared_ptr<rai::Wallets> Shared();
 
     void AccountBalance(const rai::Account&, rai::Amount&);
@@ -131,6 +132,7 @@ public:
     rai::ErrorCode AccountChange(const rai::Account&,
                                  const rai::AccountActionCallback&);
     rai::ErrorCode AccountCredit(uint16_t, const rai::AccountActionCallback&);
+    rai::ErrorCode AccountDestroy(const rai::AccountActionCallback&);
     rai::ErrorCode AccountSend(const rai::Account&, const rai::Amount&,
                                const rai::AccountActionCallback&);
     rai::ErrorCode AccountReceive(const rai::Account&, const rai::BlockHash&,
@@ -140,6 +142,7 @@ public:
     void ConnectToServer();
     rai::ErrorCode ChangePassword(const std::string&);
     rai::ErrorCode CreateAccount();
+    rai::ErrorCode CreateAccount(uint32_t&);
     rai::ErrorCode CreateWallet();
     bool EnterPassword(const std::string&);
     rai::ErrorCode ImportAccount(const rai::KeyPair&);
@@ -155,6 +158,9 @@ public:
     void ProcessAccountCredit(const std::shared_ptr<rai::Wallet>&,
                               const rai::Account&, uint16_t,
                               const rai::AccountActionCallback&);
+    void ProcessAccountDestroy(const std::shared_ptr<rai::Wallet>&,
+                               const rai::Account&,
+                               const rai::AccountActionCallback&);
     void ProcessAccountSend(const std::shared_ptr<rai::Wallet>&,
                             const rai::Account&, const rai::Account&,
                             const rai::Amount&,
@@ -185,6 +191,7 @@ public:
     bool Received(const rai::BlockHash&) const;
     void ReceivedAdd(const rai::BlockHash&);
     void ReceivedDel(const rai::BlockHash&);
+    void Send(const rai::Ptree&);
     std::vector<std::shared_ptr<rai::Wallet>> SharedWallets() const;
     void Start();
     void Stop();
@@ -227,7 +234,7 @@ public:
     const rai::WalletConfig& config_;
     rai::Store store_;
     rai::Ledger ledger_;
-    rai::WebsocketClient websocket_;
+    std::vector<std::shared_ptr<rai::WebsocketClient>> websockets_;
     rai::WalletServiceRunner service_runner_;
     rai::WalletObservers observers_;
 
@@ -241,6 +248,9 @@ private:
     std::shared_ptr<rai::Wallet> Wallet_(uint32_t) const;
 
     rai::BlockType block_type_;
+    std::atomic<uint32_t> send_count_;
+    std::atomic<uint64_t> last_sync_;
+    std::atomic<uint64_t> last_sub_;
     std::condition_variable condition_;
     mutable std::mutex mutex_;
     bool stopped_;

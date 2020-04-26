@@ -9,7 +9,10 @@
 #include <rai/common/numbers.hpp>
 #include <rai/common/blocks.hpp>
 #include <rai/common/errors.hpp>
+#include <rai/common/util.hpp>
 #include <rai/secure/common.hpp>
+#include <rai/node/blockquery.hpp>
+
 
 namespace rai
 {
@@ -59,18 +62,25 @@ public:
 
     void Add(const rai::BlockHash&, const rai::Amount&, uint64_t);
     void Add(const rai::RewarderInfo&);
+    void UpToDate();
+    void KeepUpToDate() const;
     void QueueAction(const rai::RewarderAction&, const rai::RewarderCallback&);
     void Run();
     void Send();
     uint32_t SendInterval() const;
+    void Start();
+    void Status(rai::Ptree&) const;
     void Stop();
     void Sync();
 
 private:
+    bool Confirm_(std::unique_lock<std::mutex>&);
     rai::ErrorCode ProcessReward_(const rai::Amount&, const rai::BlockHash&,
                                   std::shared_ptr<rai::Block>&);
     rai::ErrorCode ProcessSend_(const rai::Account&,
                                 std::shared_ptr<rai::Block>&);
+    rai::QueryCallback QueryCallback_(const rai::Account&, uint64_t,
+                                      const rai::BlockHash&) const;
 
     rai::Node& node_;
     uint32_t daily_send_times_;
@@ -78,6 +88,7 @@ private:
     std::condition_variable condition_;
     mutable std::mutex mutex_;
     bool stopped_;
+    bool up_to_date_;
     std::shared_ptr<rai::Block> block_;
     std::deque<std::pair<rai::RewarderAction, rai::RewarderCallback>> actions_;
     rai::RewarderInfos rewardables_;

@@ -65,12 +65,12 @@ void rai::Subscriptions::BlockAppend(const std::shared_ptr<rai::Block>& block)
         ptree.put_child("block", block_ptree);
         node_.PostJson(node_.config_.callback_url_, ptree);
 
-        node_.elections_.Add(block);
+        node_.StartElection(block);
     }
 
     if (block->Opcode() == rai::BlockOpcode::SEND && Exists(block->Link()))
     {
-        node_.elections_.Add(block);
+        node_.StartElection(block);
     }
 }
 
@@ -252,6 +252,12 @@ bool rai::Subscriptions::Exists(const rai::Account& account) const
     return subscriptions_.find(account) != subscriptions_.end();
 }
 
+size_t rai::Subscriptions::Size() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return subscriptions_.size();
+}
+
 void rai::Subscriptions::StartElection(const rai::Account& account)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
@@ -274,12 +280,21 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Account& account,
     if (timestamp < now - rai::Subscriptions::TIME_DIFF
         || timestamp > now + rai::Subscriptions::TIME_DIFF)
     {
+        rai::Stats::AddDetail(rai::ErrorCode::SUBSCRIBE_TIMESTAMP,
+                              "account=", account.StringAccount(),
+                              ", timestamp=", timestamp);
         return rai::ErrorCode::SUBSCRIBE_TIMESTAMP;
     }
 
     if (!node_.config_.callback_url_)
     {
         return rai::ErrorCode::SUBSCRIBE_NO_CALLBACK;
+    }
+
+    if (Exists(account))
+    {
+        Add(account);
+        return rai::ErrorCode::SUCCESS;
     }
 
     Add(account);
@@ -344,7 +359,7 @@ void rai::Subscriptions::StartElection_(rai::Transaction& transaction,
         return;
     }
 
-    node_.elections_.Add(block);
+    node_.StartElection(block);
 }
 
 void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,

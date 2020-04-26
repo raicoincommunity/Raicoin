@@ -202,7 +202,7 @@ public:
     bool ForkExists(rai::Transaction&, const rai::Account&, uint64_t) const;
     rai::Iterator ForkLowerBound(rai::Transaction&, const rai::Account&);
     rai::Iterator ForkUpperBound(rai::Transaction&, const rai::Account&);
-    bool NextFork(rai::Transaction&, rai::Account&, uint64_t,
+    bool NextFork(rai::Transaction&, rai::Account&, uint64_t&,
                   std::shared_ptr<rai::Block>&,
                   std::shared_ptr<rai::Block>&) const;
     bool ReceivableInfoPut(rai::Transaction&, const rai::Account&,
