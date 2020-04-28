@@ -47,7 +47,7 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm)
         rai::Alarm alarm(service);
         std::shared_ptr<rai::Wallets> wallets = std::make_shared<rai::Wallets>(
             error_code, service, alarm, dir, config.wallet_,
-            rai::BlockType::AD_BLOCK, seed, 20);
+            rai::BlockType::AD_BLOCK, seed, 32);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
             return error_code;

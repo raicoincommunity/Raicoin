@@ -209,7 +209,7 @@ void rai::Airdrop::Start()
     for (const auto& i : accounts)
     {
         ++count;
-        Add(i.second.first, count/6);
+        Add(i.second.first, count/100 + 5);
     }
 }
 
@@ -296,11 +296,10 @@ void rai::Airdrop::ProcessReceivables()
                                      + account.StringAccount());
         }
         wallets_->SelectAccount(account_ids_[account]);
-        std::cout << "===>>>AccountReceive: account=" << account.StringAccount() << std::endl;
         error_code = wallets_->AccountReceive(
             account, hash,
             [account, hash](rai::ErrorCode error_code,
-                            const std::shared_ptr<rai::Block>&) {
+                            const std::shared_ptr<rai::Block>& block) {
                 if (error_code != rai::ErrorCode::SUCCESS)
                 {
                     std::cout << "Failed to receive: account="
@@ -310,6 +309,14 @@ void rai::Airdrop::ProcessReceivables()
                               << "(" << static_cast<uint32_t>(error_code) << ")"
                               << std::endl;
                 }
+                else
+                {
+                    std::cout << "Receive: account=" << account.StringAccount()
+                              << ", height=" << block->Height()
+                              << ", hash=" << block->Hash().StringHex()
+                              << std::endl;
+                }
+                
             });
         if (error_code != rai::ErrorCode::SUCCESS)
         {
@@ -540,7 +547,7 @@ void rai::Airdrop::ProcessAirdrop(const rai::Account& account)
     {
         error_code = wallets_->AccountDestroy(
             [account](rai::ErrorCode error_code,
-                      const std::shared_ptr<rai::Block>&) {
+                      const std::shared_ptr<rai::Block>& block) {
                 if (error_code != rai::ErrorCode::SUCCESS)
                 {
                     std::cout << "Failed to destroy: account="
@@ -549,16 +556,22 @@ void rai::Airdrop::ProcessAirdrop(const rai::Account& account)
                               << "(" << static_cast<uint32_t>(error_code) << ")"
                               << std::endl;
                 }
+                else
+                {
+                    std::cout << "Destory: account=" << account.StringAccount()
+                              << ", height=" << block->Height()
+                              << ", hash=" << block->Hash().StringHex()
+                              << std::endl;
+                }
             });
 
-            if (error_code != rai::ErrorCode::SUCCESS)
-            {
-                std::cout << "Failed to destroy: account="
-                            << account.StringAccount()
-                            << ", error=" << rai::ErrorString(error_code)
-                            << "(" << static_cast<uint32_t>(error_code) << ")"
-                            << std::endl;
-            }
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            std::cout << "Failed to destroy: account="
+                      << account.StringAccount()
+                      << ", error=" << rai::ErrorString(error_code) << "("
+                      << static_cast<uint32_t>(error_code) << ")" << std::endl;
+        }
 
         Add(account, 300);
         return;
@@ -569,12 +582,13 @@ void rai::Airdrop::ProcessAirdrop(const rai::Account& account)
     if (error)
     {
         std::cout << "Failed to get rep" << std::endl;
+        Add(account, 300);
         return;
     }
 
     error_code = wallets_->AccountChange(
         rep, [account, rep](rai::ErrorCode error_code,
-                            const std::shared_ptr<rai::Block>&) {
+                            const std::shared_ptr<rai::Block>& block) {
             if (error_code != rai::ErrorCode::SUCCESS)
             {
                 std::cout << "Failed to change: account="
@@ -583,6 +597,13 @@ void rai::Airdrop::ProcessAirdrop(const rai::Account& account)
                           << ", error=" << rai::ErrorString(error_code) << "("
                           << static_cast<uint32_t>(error_code) << ")"
                           << std::endl;
+            }
+            else
+            {
+                std::cout << "Airdrop: account=" << account.StringAccount()
+                          << ", height=" << block->Height()
+                          << ", hash=" << block->Hash().StringHex()
+                          << ", to=" << rep.StringAccount() << std::endl;
             }
         });
 
@@ -645,7 +666,7 @@ bool rai::Airdrop::Destroyed_(rai::Transaction& transaction,
         throw std::runtime_error("Ledger inconsistent");
     }
 
-    if (head->Balance() >= rai::Amount(1000 * rai::RAI))
+    if (head->Balance() >= rai::Amount(999 * rai::RAI))
     {
         confirmed = false;
         return false;
@@ -742,4 +763,9 @@ void rai::Airdrop::UpdateValidReps_()
     }
     valid_weight_ = weight;
     valid_reps_ = std::move(reps);
+
+    for (const auto& i : valid_reps_)
+    {
+        std::cout << "rep:" << i.first.StringAccount() << ", weight:" << i.second << std::endl;
+    }
 }
