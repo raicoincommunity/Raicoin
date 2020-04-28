@@ -199,7 +199,12 @@ void rai::WebsocketClient::OnWebsocketHandshake(
     }
     ChangeStatus_(rai::WebsocketStatus::CONNECTED);
 
-    Send_();
+    if (!sending_)
+    {
+        sending_ = true;
+        Send_();
+    }
+
     Receive_();
 }
 
@@ -429,6 +434,11 @@ void rai::WebsocketClient::Send_()
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     if (ssl_)
     {
+        if (wss_stream_ == nullptr)
+        {
+            sending_ = false;
+            return;
+        }
         std::shared_ptr<rai::WssStream> stream(wss_stream_);
         auto session_id = session_id_;
         wss_stream_->async_write(
@@ -446,6 +456,11 @@ void rai::WebsocketClient::Send_()
     }
     else
     {
+        if (ws_stream_ == nullptr)
+        {
+            sending_ = false;
+            return;
+        }
         std::shared_ptr<rai::WsStream> stream(ws_stream_);
         auto session_id = session_id_;
         ws_stream_->async_write(
