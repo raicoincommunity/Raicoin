@@ -94,6 +94,9 @@ rai::Airdrop::Airdrop(const std::shared_ptr<rai::Wallets>& wallets,
       config_(config),
       stopped_(false),
       last_request_(0),
+      prev_updated_(false),
+      online_updated_(false),
+      invited_updated_(false),
       prev_stat_ts_(0),
       online_stat_ts_(0),
       valid_weight_(0),
@@ -143,6 +146,9 @@ void rai::Airdrop::Run()
 
         if (do_request)
         {
+            prev_updated_ = false;
+            online_updated_ = false;
+            invited_updated_ = false;
             UpdateStatTs_();
             StatsRequest(true);
             StatsRequest(false);
@@ -378,6 +384,14 @@ void rai::Airdrop::ProcessStats(bool prev, const std::string& response)
         if (count == 0)
         {
             std::cout << "Airdrop::ProcessStats: count=0" << std::endl;
+            if (prev)
+            {
+                prev_updated_ = true;
+            }
+            else
+            {
+                online_updated_ = true;
+            }
             return;
         }
 
@@ -411,10 +425,12 @@ void rai::Airdrop::ProcessStats(bool prev, const std::string& response)
         std::lock_guard<std::mutex> lock(mutex_);
         if (prev)
         {
+            prev_updated_ = true;
             prev_stats_ = std::move(stats);
         }
         else
         {
+            online_updated_ = true;
             online_stats_ = std::move(stats);
         }
         UpdateValidReps_();
@@ -484,6 +500,7 @@ void rai::Airdrop::ProcessInvitedReps(const std::string& response)
         }
 
         std::lock_guard<std::mutex> lock(mutex_);
+        invited_updated_ = true;
         invited_reps_ = std::move(reps);
         UpdateValidReps_();
     }
@@ -721,11 +738,21 @@ void rai::Airdrop::UpdateStatTs_()
 
 void rai::Airdrop::UpdateValidReps_()
 {
+    if (!prev_updated_ || !online_updated_)
+    {
+        return;
+    }
+
     uint64_t weight = 0;
     std::vector<std::pair<rai::Account, uint32_t>> reps;
     if (rai::CurrentTimestamp()
         < rai::EpochTimestamp() + rai::AIRDROP_INVITED_ONLY_DURATION)
     {
+        if (!invited_updated_)
+        {
+            return;
+        }
+
         for (const auto& i : invited_reps_)
         {
             if (online_stats_.find(i) == online_stats_.end())
