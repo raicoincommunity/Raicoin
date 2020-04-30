@@ -63,6 +63,9 @@ private:
     mutable std::mutex mutex_;
     bool stopped_;
     uint64_t last_request_;
+    std::atomic<bool> prev_updated_;
+    std::atomic<bool> online_updated_;
+    std::atomic<bool> invited_updated_;
     std::atomic<uint64_t> prev_stat_ts_;
     std::atomic<uint64_t> online_stat_ts_;
     std::unordered_map<rai::Account, uint32_t> prev_stats_;
