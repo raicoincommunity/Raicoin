@@ -1,0 +1,20 @@
+{
+    "representatives": [
+        {
+            "account": "rai_1jngsd4mnzfb4h5j8eji5ynqbigaz16dmjjdz8us6run1ziyzuqfhz8yz3uf",
+            "description": "official node #1"
+        },
+        {
+            "account": "rai_1936xw8zcxzsqx1rr97xwajigtdtsws45gatwu1ztt658gnpw1s1ttcwu11b",
+            "description": "official node #2"
+        },
+        {
+            "account": "rai_36bu4g1tegdbwwqnec4otqncqkjzyn5134skna4i8gexhx11eeawry4akjhu",
+            "description": "official node #3"
+        },
+        {
+            "account": "rai_14k51wrdhpfyf3ikh811pedndjof6fffziokwymapwjbk8obrztmawsw9bnm",
+            "description": "official node #4"
+        }
+    ]
+}
