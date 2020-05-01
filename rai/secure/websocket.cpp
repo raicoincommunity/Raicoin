@@ -422,7 +422,7 @@ void rai::WebsocketClient::CloseStream_()
 
 void rai::WebsocketClient::Send_()
 {
-    if (send_queue_.empty())
+    if (send_queue_.empty() || status_ != rai::WebsocketStatus::CONNECTED)
     {
         sending_ = false;
         return;
