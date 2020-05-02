@@ -428,9 +428,6 @@ void rai::WebsocketClient::Send_()
         return;
     }
 
-    //std::cout << "send message=====>>:\n";
-    //std::cout << send_queue_.front() << std::endl;
-
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     if (ssl_)
     {
@@ -476,7 +473,11 @@ void rai::WebsocketClient::Send_()
                 client->OnSend(session_id, ec, size);
             });
     }
-    
+
+    #if 0
+    std::cout << "send message=====>>:\n";
+    std::cout << send_queue_.front() << std::endl;
+    #endif
 }
 
 void rai::WebsocketClient::ChangeStatus_(rai::WebsocketStatus status)
