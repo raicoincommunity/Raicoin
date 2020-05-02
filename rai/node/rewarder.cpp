@@ -616,13 +616,28 @@ rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
 rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
                                            std::shared_ptr<rai::Block>& block)
 {
+    if (destination.IsZero())
+    {
+        rai::Stats::AddDetail(rai::ErrorCode::REWARD_TO_ACCOUNT,
+                              "Rewarder::ProcessSend_: zero account");
+        return rai::ErrorCode::REWARD_TO_ACCOUNT;
+    }
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     rai::AccountInfo info;
-    bool error =
-        node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
+    bool error = node_.ledger_.AccountInfoGet(transaction, destination, info);
+    if (!error && info.Valid() && info.type_ != rai::BlockType::TX_BLOCK)
+    {
+        rai::Stats::AddDetail(
+            rai::ErrorCode::REWARD_TO_ACCOUNT,
+            "Rewarder::ProcessSend_: not transaction account");
+        return rai::ErrorCode::REWARD_TO_ACCOUNT;
+    }
+
+    error = node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
     if (error || !info.Valid())
     {
         error_code = rai::ErrorCode::LEDGER_ACCOUNT_INFO_GET;
