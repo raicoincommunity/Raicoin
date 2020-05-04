@@ -52,6 +52,7 @@ public:
 private:
     void StartElection_(rai::Transaction&, const rai::Account&);
     void BlockConfirm_(rai::Transaction&, const std::shared_ptr<rai::Block>&);
+    bool NeedConfirm_(rai::Transaction&, const rai::Account&);
 
     rai::Node& node_;
     mutable std::mutex mutex_;

@@ -70,6 +70,29 @@ std::string rai::GenesisPublicKey()
     }
 }
 
+rai::Amount rai::GenesisBalance()
+{
+    switch (rai::RAI_NETWORK)
+    {
+        case rai::RaiNetworks::TEST:
+        {
+            return rai::Amount(rai::TEST_GENESIS_BALANCE * rai::RAI);
+        }
+        case rai::RaiNetworks::BETA:
+        {
+            return rai::Amount(rai::BETA_GENESIS_BALANCE * rai::RAI);
+        }
+        case rai::RaiNetworks::LIVE:
+        {
+            throw std::runtime_error("Live network genesis balance is missing");
+        }
+        default:
+        {
+            throw std::runtime_error("Unknown rai::RAI_NETWORK");
+        }
+    }
+}
+
 std::string rai::GenesisBlock()
 {
     switch (rai::RAI_NETWORK)
