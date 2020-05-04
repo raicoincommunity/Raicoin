@@ -21,6 +21,7 @@ rai::RaiNetworks constexpr RAI_NETWORK = rai::RaiNetworks::ACTIVE_NETWORK;
 std::string NetworkString();
 
 uint64_t constexpr TEST_EPOCH_TIMESTAMP = 1577836800;
+uint64_t constexpr TEST_GENESIS_BALANCE = 10000000; //unit: RAI
 const std::string TEST_PRIVATE_KEY =
     "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4";
 // rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo
@@ -44,6 +45,7 @@ const std::string TEST_GENESIS_BLOCK = R"%%%({
 })%%%";
 
 uint64_t constexpr BETA_EPOCH_TIMESTAMP = 1585699200;
+uint64_t constexpr BETA_GENESIS_BALANCE = 10010000; //unit: RAI
 const std::string BETA_PUBLIC_KEY =
     "4681DC26DA5C34B59D5B320D8053D957D5FC824CE39B239B101892658F180F08";
 const std::string BETA_GENESIS_BLOCK = R"%%%({
@@ -79,6 +81,7 @@ const rai::Amount QUALIFIED_REP_WEIGHT = rai::Amount(256 * rai::RAI);
 
 uint64_t EpochTimestamp();
 std::string GenesisPublicKey();
+rai::Amount GenesisBalance();
 std::string GenesisBlock();
 
 rai::Amount CreditPrice(uint64_t);

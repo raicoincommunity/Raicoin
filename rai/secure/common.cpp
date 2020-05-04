@@ -254,7 +254,7 @@ rai::Genesis::Genesis() : block_(nullptr)
         throw std::invalid_argument("Invalid genesis block previous");
     }
 
-    if (block_->Balance() != rai::Amount(10010000 * rai::RAI))
+    if (block_->Balance() != rai::GenesisBalance())
     {
         throw std::invalid_argument("Invalid genesis block balance");
     }

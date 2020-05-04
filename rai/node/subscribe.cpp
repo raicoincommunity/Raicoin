@@ -156,7 +156,7 @@ void rai::Subscriptions::BlockConfirm(const std::shared_ptr<rai::Block>& block,
         }
     } while (0);
 
-    if (Exists(block->Account()))
+    if (NeedConfirm_(transaction, block->Account()))
     {
         StartElection_(transaction, block->Account());
     }
@@ -291,12 +291,6 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Account& account,
         return rai::ErrorCode::SUBSCRIBE_NO_CALLBACK;
     }
 
-    if (Exists(account))
-    {
-        Add(account);
-        return rai::ErrorCode::SUCCESS;
-    }
-
     Add(account);
     StartElection(account);
     ConfirmReceivables(account);
@@ -393,4 +387,55 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
             node_.PostJson(node_.config_.callback_url_, ptree);
         }
     }
+}
+
+bool rai::Subscriptions::NeedConfirm_(rai::Transaction& transaction,
+                                      const rai::Account& account)
+{
+    if (Exists(account))
+    {
+        return true;
+    }
+
+    rai::AccountInfo info;
+    bool error =
+        node_.ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        return false;
+    }
+
+    if (info.confirmed_height_ == info.head_height_)
+    {
+        return false;
+    }
+
+    rai::BlockHash hash(info.head_);
+    while (!hash.IsZero())
+    {
+        std::shared_ptr<rai::Block> block(nullptr);
+        error = node_.ledger_.BlockGet(transaction, hash, block);
+        if (error)
+        {
+            rai::Stats::Add(
+                rai::ErrorCode::LEDGER_BLOCK_GET,
+                "Subscriptions::NeedConfirm_: hash=", hash.StringHex());
+            return true;
+        }
+
+        if (block->Opcode() == rai::BlockOpcode::SEND && Exists(block->Link()))
+        {
+            return true;
+        }
+
+        if ((info.confirmed_height_ != rai::Block::INVALID_HEIGHT
+             && block->Height() == info.confirmed_height_ + 1)
+            || block->Height() == 0)
+        {
+            break;
+        }
+        hash = block->Previous();
+    }
+
+    return false;
 }
