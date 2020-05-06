@@ -354,7 +354,6 @@ void rai::QtSelfPane::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
     Refresh();
 }
 
-
 namespace
 {
 class QtHistoryVisitor : public rai::BlockVisitor
@@ -370,10 +369,10 @@ public:
 
     rai::ErrorCode Send(const rai::Block& block) override
     {
-        record_.height_ = block.Height();
-        record_.type_   = "send";
-        record_.link_   = block.Link().StringAccount();
-        record_.hash_   = block.Hash();
+        record_.height_   = block.Height();
+        record_.type_     = "send";
+        record_.link_     = block.Link().StringAccount();
+        record_.hash_     = block.Hash();
         record_.previous_ = block.Previous();
 
         if (confirmed_height_ == rai::Block::INVALID_HEIGHT
@@ -403,10 +402,10 @@ public:
 
     rai::ErrorCode Receive(const rai::Block& block) override
     {
-        record_.height_ = block.Height();
-        record_.type_   = "receive";
-        record_.link_   = block.Link().StringHex();
-        record_.hash_   = block.Hash();
+        record_.height_   = block.Height();
+        record_.type_     = "receive";
+        record_.link_     = block.Link().StringHex();
+        record_.hash_     = block.Hash();
         record_.previous_ = block.Previous();
 
         if (confirmed_height_ == rai::Block::INVALID_HEIGHT
@@ -446,11 +445,11 @@ public:
 
     rai::ErrorCode Change(const rai::Block& block) override
     {
-        record_.height_ = block.Height();
-        record_.type_   = "change";
-        record_.link_   = block.Representative().StringAccount();
-        record_.amount_ = 0;
-        record_.hash_   = block.Hash();
+        record_.height_   = block.Height();
+        record_.type_     = "change";
+        record_.link_     = block.Representative().StringAccount();
+        record_.amount_   = 0;
+        record_.hash_     = block.Hash();
         record_.previous_ = block.Previous();
 
         if (confirmed_height_ == rai::Block::INVALID_HEIGHT
@@ -468,10 +467,10 @@ public:
 
     rai::ErrorCode Credit(const rai::Block& block) override
     {
-        record_.height_ = block.Height();
-        record_.type_   = "credit";
-        record_.link_   = block.Link().StringHex();
-        record_.hash_   = block.Hash();
+        record_.height_   = block.Height();
+        record_.type_     = "credit";
+        record_.link_     = block.Link().StringHex();
+        record_.hash_     = block.Hash();
         record_.previous_ = block.Previous();
 
         if (confirmed_height_ == rai::Block::INVALID_HEIGHT
@@ -501,10 +500,10 @@ public:
 
     rai::ErrorCode Reward(const rai::Block& block) override
     {
-        record_.height_ = block.Height();
-        record_.type_   = "reward";
-        record_.link_   = block.Link().StringHex();
-        record_.hash_   = block.Hash();
+        record_.height_   = block.Height();
+        record_.type_     = "reward";
+        record_.link_     = block.Link().StringHex();
+        record_.hash_     = block.Hash();
         record_.previous_ = block.Previous();
 
         if (confirmed_height_ == rai::Block::INVALID_HEIGHT
@@ -534,10 +533,10 @@ public:
 
     rai::ErrorCode Destroy(const rai::Block& block) override
     {
-        record_.height_ = block.Height();
-        record_.type_   = "destroy";
-        record_.link_   = block.Link().StringHex();
-        record_.hash_   = block.Hash();
+        record_.height_   = block.Height();
+        record_.type_     = "destroy";
+        record_.link_     = block.Link().StringHex();
+        record_.hash_     = block.Hash();
         record_.previous_ = block.Previous();
 
         if (confirmed_height_ == rai::Block::INVALID_HEIGHT
@@ -572,7 +571,6 @@ public:
     rai::QtHistoryRecord record_;
 };
 }  // namespace
-
 
 rai::QtHistoryRecord::QtHistoryRecord() : height_(rai::Block::INVALID_HEIGHT)
 {
@@ -764,14 +762,14 @@ rai::QtHistory::QtHistory(rai::QtMain& qt_main)
       view_(new QTableView),
       main_(qt_main)
 {
-    #if 0
+#if 0
     model_->setHorizontalHeaderItem(0, new QStandardItem("Height"));
     model_->setHorizontalHeaderItem(1, new QStandardItem("Type"));
     model_->setHorizontalHeaderItem(2, new QStandardItem("Link"));
     model_->setHorizontalHeaderItem(3, new QStandardItem("Amount"));
     model_->setHorizontalHeaderItem(4, new QStandardItem("Hash"));
     model_->setHorizontalHeaderItem(5, new QStandardItem("Status"));
-    #endif
+#endif
 
     view_->setModel(model_);
     view_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -788,7 +786,7 @@ rai::QtHistory::QtHistory(rai::QtMain& qt_main)
 void rai::QtHistory::OnMenuRequested(const QPoint& pos)
 {
     std::weak_ptr<rai::QtMain> qt_main_w(main_.Shared());
-    auto menu   = std::make_shared<QMenu>(view_);
+    auto menu = std::make_shared<QMenu>(view_);
     std::vector<std::shared_ptr<QAction>> actions;
     actions.push_back(std::make_shared<QAction>("Copy block json"));
     actions.push_back(std::make_shared<QAction>("Copy block raw"));
@@ -811,13 +809,13 @@ void rai::QtHistory::OnMenuRequested(const QPoint& pos)
             }
 
             rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-            rai::Ledger& ledger = qt_main->wallets_->ledger_;
+            rai::Ledger& ledger       = qt_main->wallets_->ledger_;
             rai::Transaction transaction(error_code, ledger, false);
             IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
             std::shared_ptr<rai::Block> block(nullptr);
             bool error = ledger.BlockGet(transaction, account,
-                                        head_height - index.row(), block);
+                                         head_height - index.row(), block);
             IF_ERROR_RETURN_VOID(error);
 
             std::string block_str;
@@ -842,12 +840,10 @@ void rai::QtHistory::OnMenuRequested(const QPoint& pos)
             qt_main->application_.clipboard()->setText(block_str.c_str());
         });
     menu->popup(view_->viewport()->mapToGlobal(pos));
-
 }
 
 void rai::QtHistory::Refresh()
 {
-
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, main_.wallets_->ledger_, false);
     if (error_code != rai::ErrorCode::SUCCESS)
@@ -858,20 +854,15 @@ void rai::QtHistory::Refresh()
 
     rai::Account account = main_.wallets_->SelectedAccount();
     rai::AccountInfo info;
-    bool error =
-        main_.wallets_->ledger_.AccountInfoGet(transaction, account, info);
-    if (error || !info.Valid())
-    {
-        return;
-    }
+    main_.wallets_->ledger_.AccountInfoGet(transaction, account, info);
 
     model_->beginResetModel();
-    
-    model_->account_ = account;
-    model_->head_ = info.head_;
-    model_->head_height_ = info.head_height_;
+
+    model_->account_          = account;
+    model_->head_             = info.head_;
+    model_->head_height_      = info.head_height_;
     model_->confirmed_height_ = info.confirmed_height_;
-    model_->current_record_ = rai::QtHistoryRecord();
+    model_->current_record_   = rai::QtHistoryRecord();
 
     model_->endResetModel();
 }
@@ -1683,7 +1674,7 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                 qt_main->settings_.increase_->text().toStdString();
 
             uint32_t tx = 0;
-            error = rai::StringToUint(increase_str, tx);
+            error       = rai::StringToUint(increase_str, tx);
             if (error || tx == 0)
             {
                 error = true;
@@ -1719,7 +1710,8 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                         if (error_code == rai::ErrorCode::SUCCESS)
                         {
                             qt_main.settings_.increase_->clear();
-                            qt_main.settings_.increase_button_->setEnabled(true);
+                            qt_main.settings_.increase_button_->setEnabled(
+                                true);
                         }
                         else
                         {
@@ -1735,7 +1727,7 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
 
             if (error_code != rai::ErrorCode::SUCCESS)
             {
-                error = true;
+                error      = true;
                 error_info = rai::ErrorString(error_code);
             }
         } while (0);
@@ -2419,7 +2411,7 @@ rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
     entry_window_layout_->addWidget(settings_button_);
     entry_window_layout_->addWidget(accounts_button_);
     entry_window_layout_->addWidget(wallets_button_);
-    //entry_window_layout_->addWidget(advanced_button_);
+    // entry_window_layout_->addWidget(advanced_button_);
     entry_window_layout_->setSpacing(5);
     entry_window_->setLayout(entry_window_layout_);
     main_stack_->addWidget(entry_window_);
@@ -2450,7 +2442,7 @@ rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
 std::string rai::QtMain::FormatBalance(const rai::Amount& balance) const
 {
     std::string balance_str = balance.StringBalance(rendering_ratio_);
-    std::string unit = "RAI";
+    std::string unit        = "RAI";
     if (rendering_ratio_ == rai::mRAI)
     {
         unit = std::string("mRAI");
