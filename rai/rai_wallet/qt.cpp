@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <rai/common/blocks.hpp>
 #include <rai/common/parameters.hpp>
+#include <rai/common/numbers.hpp>
 #include <rai/secure/util.hpp>
 
 namespace
@@ -2139,8 +2140,9 @@ rai::QtWallets::QtWallets(rai::QtMain& qt_main)
     layout_->addWidget(create_wallet_);
     layout_->addWidget(copy_wallet_seed_);
     layout_->addWidget(separator_);
-    layout_->addWidget(seed_), layout_->addWidget(import_),
-        layout_->addWidget(separator_2_);
+    layout_->addWidget(seed_);
+    layout_->addWidget(import_);
+    layout_->addWidget(separator_2_);
     layout_->addWidget(back_);
 
     window_->setLayout(layout_);
@@ -2374,6 +2376,247 @@ void rai::QtWallets::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
     Refresh();
 }
 
+rai::QtSignVerify::QtSignVerify(rai::QtMain& qt_main)
+    : window_(new QWidget),
+      layout_(new QVBoxLayout),
+      message_label_(new QLabel("Message:")),
+      message_(new QPlainTextEdit),
+      account_label_(new QLabel("Account:")),
+      account_(new QLineEdit),
+      signature_label_(new QLabel("Signature:")),
+      signature_(new QPlainTextEdit),
+      sign_(new QPushButton("Sign")),
+      verify_(new QPushButton("Verify")),
+      back_(new QPushButton("Back")),
+      main_(qt_main)
+{
+    layout_->addWidget(message_label_),
+    layout_->addWidget(message_),
+    layout_->addWidget(account_label_);
+    layout_->addWidget(account_),
+    layout_->addWidget(signature_label_),
+    layout_->addWidget(signature_);
+    layout_->addWidget(sign_);
+    layout_->addWidget(verify_);
+    layout_->addWidget(back_);
+
+    window_->setLayout(layout_);
+}
+
+void rai::QtSignVerify::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
+{
+    QObject::connect(sign_, &QPushButton::released, [qt_main_w, this]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+
+        bool error = false;
+        std::string show_info;
+        do
+        {
+            std::string message = message_->toPlainText().toStdString();
+            if (message.empty())
+            {
+                error = true;
+                show_info = "Error: message empty";
+                break;
+            }
+
+            std::string account_str = account_->text().toStdString();
+            rai::StringTrim(account_str, " \r\n\t");
+            if (account_str.empty())
+            {
+                error = true;
+                show_info = "Error: account empty";
+                break;
+            }
+
+            rai::Account account;
+            error = account.DecodeAccount(account_str);
+            if (error)
+            {
+                error = true;
+                show_info = "Error: invalid account";
+                break;
+            }
+
+            auto wallet = qt_main->wallets_->SelectedWallet();
+            if (!wallet->IsMyAccount(account))
+            {
+                error = true;
+                show_info = "Error: this account doesn't exist";
+                break;
+            }
+
+            if (qt_main->wallets_->WalletLocked(
+                    qt_main->wallets_->SelectedWalletId()))
+            {
+                error     = true;
+                show_info = "Error: wallet is locked, unlock it first";
+                break;
+            }
+
+            rai::BlockHash hash;
+            blake2b_state state;
+            blake2b_init(&state, sizeof(hash));
+            blake2b_update(&state, message.data(), message.size());
+            blake2b_final(&state, hash.bytes.data(), hash.bytes.size());
+
+            rai::Signature signature;
+            error = wallet->Sign(account, hash, signature);
+            if (error)
+            {
+                show_info = "Error: failed to sign message";
+                break;
+            }
+
+            signature_->setPlainText(signature.StringHex().c_str());
+        } while (0);
+
+        if (error)
+        {
+            ShowButtonError(*sign_);
+            sign_->setText(show_info.c_str());
+        }
+        else
+        {
+            ShowButtonSuccess(*sign_);
+            sign_->setText("Success");
+        }
+
+        qt_main->PostEvent(5, [this](rai::QtMain& qt_main) {
+            ShowButtonDefault(*sign_);
+            sign_->setText("Sign");
+        });
+    });
+
+    QObject::connect(verify_, &QPushButton::released, [qt_main_w, this]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+
+        bool error = false;
+        std::string show_info;
+        do
+        {
+            std::string message = message_->toPlainText().toStdString();
+            if (message.empty())
+            {
+                error = true;
+                show_info = "Error: message empty";
+                break;
+            }
+
+            std::string account_str = account_->text().toStdString();
+            rai::StringTrim(account_str, " \r\n\t");
+            if (account_str.empty())
+            {
+                error = true;
+                show_info = "Error: account empty";
+                break;
+            }
+
+            rai::Account account;
+            error = account.DecodeAccount(account_str);
+            if (error)
+            {
+                error = true;
+                show_info = "Error: invalid account";
+                break;
+            }
+
+
+            std::string signature_str = signature_->toPlainText().toStdString();
+            rai::StringTrim(signature_str, " \r\n\t");
+            if (signature_str.empty())
+            {
+                error = true;
+                show_info = "Error: signature empty";
+                break;
+            }
+
+            rai::Signature signature;
+            error = signature.DecodeHex(signature_str);
+            if (error)
+            {
+                error = true;
+                show_info = "Error: invalid signature";
+                break;
+            }
+
+            rai::BlockHash hash;
+            blake2b_state state;
+            blake2b_init(&state, sizeof(hash));
+            blake2b_update(&state, message.data(), message.size());
+            blake2b_final(&state, hash.bytes.data(), hash.bytes.size());
+
+            error = rai::ValidateMessage(account, hash, signature);
+            if (error)
+            {
+                error = true;
+                show_info = "Wrong signature";
+                break;
+            }
+        } while (0);
+
+        if (error)
+        {
+            ShowButtonError(*verify_);
+            verify_->setText(show_info.c_str());
+        }
+        else
+        {
+            ShowButtonSuccess(*verify_);
+            verify_->setText("Signature verified");
+        }
+
+        qt_main->PostEvent(5, [this](rai::QtMain& qt_main) {
+            ShowButtonDefault(*verify_);
+            verify_->setText("Verify");
+        });
+    });
+    
+    QObject::connect(back_, &QPushButton::released, [qt_main_w]() {
+        if (auto qt_main = qt_main_w.lock())
+        {
+            qt_main->Pop();
+        } 
+    });
+}
+
+rai::QtAdvanced::QtAdvanced(rai::QtMain& qt_main)
+    : window_(new QWidget),
+      layout_(new QVBoxLayout),
+      sign_verify_button_(new QPushButton("Sign/verify message")),
+      back_(new QPushButton("Back")),
+      main_(qt_main),
+      sign_verify_(qt_main)
+{
+    layout_->addWidget(sign_verify_button_);
+    layout_->addStretch();
+    layout_->addWidget(back_);
+
+    window_->setLayout(layout_);
+}
+
+void rai::QtAdvanced::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
+{
+    sign_verify_.Start(qt_main_w);
+
+    QObject::connect(
+        sign_verify_button_, &QPushButton::released, [qt_main_w]() {
+            if (auto qt_main = qt_main_w.lock())
+            {
+                qt_main->Push(qt_main->advanced_.sign_verify_.window_);
+            }
+        });
+
+    QObject::connect(back_, &QPushButton::released, [qt_main_w]() {
+        if (auto qt_main = qt_main_w.lock())
+        {
+            qt_main->Pop();
+        } 
+    });
+}
+
 rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
                     const std::shared_ptr<rai::Wallets>& wallets)
     : wallets_(wallets),
@@ -2401,6 +2644,7 @@ rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
       settings_(*this),
       accounts_(*this),
       qt_wallets_(*this),
+      advanced_(*this),
       processor_(processor),
       rendering_ratio_(rai::RAI)
 {
@@ -2411,7 +2655,7 @@ rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
     entry_window_layout_->addWidget(settings_button_);
     entry_window_layout_->addWidget(accounts_button_);
     entry_window_layout_->addWidget(wallets_button_);
-    // entry_window_layout_->addWidget(advanced_button_);
+    entry_window_layout_->addWidget(advanced_button_);
     entry_window_layout_->setSpacing(5);
     entry_window_->setLayout(entry_window_layout_);
     main_stack_->addWidget(entry_window_);
@@ -2490,6 +2734,13 @@ void rai::QtMain::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             qt_main->Push(qt_main->qt_wallets_.window_);
         }
     });
+
+    QObject::connect(advanced_button_, &QPushButton::released, [qt_main_w]() {
+        if (auto qt_main = qt_main_w.lock())
+        {
+            qt_main->Push(qt_main->advanced_.window_);
+        }
+    });
 }
 
 void rai::QtMain::Pop()
@@ -2552,4 +2803,5 @@ void rai::QtMain::Start()
     settings_.Start(this_w);
     accounts_.Start(this_w);
     qt_wallets_.Start(this_w);
+    advanced_.Start(this_w);
 }

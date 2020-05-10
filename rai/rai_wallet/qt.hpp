@@ -277,6 +277,44 @@ public:
     rai::QtMain& main_;
 };
 
+class QtSignVerify
+{
+public:
+    QtSignVerify(rai::QtMain&);
+
+    void Start(const std::weak_ptr<rai::QtMain>&);
+
+    QWidget* window_;
+    QVBoxLayout* layout_;
+    QLabel* message_label_;
+    QPlainTextEdit* message_;
+    QLabel* account_label_;
+    QLineEdit* account_;
+    QLabel* signature_label_;
+    QPlainTextEdit* signature_;
+    QPushButton* sign_;
+    QPushButton* verify_;
+    QPushButton* back_;
+
+    rai::QtMain& main_;
+};
+
+class QtAdvanced
+{
+public:
+    QtAdvanced(rai::QtMain&);
+
+    void Start(const std::weak_ptr<rai::QtMain>&);
+
+    QWidget* window_;
+    QVBoxLayout* layout_;
+    QPushButton* sign_verify_button_;
+    QPushButton* back_;
+
+    rai::QtMain& main_;
+    rai::QtSignVerify sign_verify_;
+};
+
 class QtMain : public std::enable_shared_from_this<rai::QtMain>
 {
 public:
@@ -319,6 +357,7 @@ public:
     rai::QtSettings settings_;
     rai::QtAccounts accounts_;
     rai::QtWallets qt_wallets_;
+    rai::QtAdvanced advanced_;
 
     rai::QtEventProcessor& processor_;
     rai::uint128_t rendering_ratio_;
