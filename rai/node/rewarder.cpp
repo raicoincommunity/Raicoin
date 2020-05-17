@@ -46,12 +46,17 @@ rai::Rewarder::Rewarder(rai::Node& node, const rai::Account& account,
             }
 
             // other block
-            if (error_code != rai::ErrorCode::SUCCESS || block == nullptr
-                || block->Height() == 0)
+            if (error_code != rai::ErrorCode::SUCCESS)
             {
                 return;
             }
-            if (!block->HasRepresentative())
+            if (result.operation_ != rai::BlockOperation::APPEND
+                && result.operation_ != rai::BlockOperation::CONFIRM)
+            {
+                return;
+            }
+            if (block == nullptr || block->Height() == 0
+                || !block->HasRepresentative())
             {
                 return;
             }

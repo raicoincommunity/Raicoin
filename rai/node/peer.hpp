@@ -69,7 +69,7 @@ public:
     static rai::IP InvalidIp();
 
     rai::Account account_;
-    rai::IP ip_;
+    rai::IP ip_; 
     uint16_t port_;
     uint8_t version_;
     uint8_t version_min_;

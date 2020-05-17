@@ -117,6 +117,8 @@ private:
     rai::ErrorCode RunLight_();
     rai::ErrorCode RunFork_();
     void Wait_();
+    void StartSync_(rai::Transaction&, const rai::BootstrapAccount&,
+                    uint32_t) const;
 
     rai::Node& node_;
     std::atomic<bool> stopped_;
@@ -142,6 +144,7 @@ public:
 private:
     void ReadMessage_(const boost::system::error_code&, size_t);
     void RunFull_();
+    void RunLight_();
     void RunFork_();
     void Send_(const std::function<void()>&);
 

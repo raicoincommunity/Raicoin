@@ -202,6 +202,7 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
         if (error_code != rai::ErrorCode::SUCCESS)
         {
             // log
+            rai::Stats::Add(error_code, "BlockProcessor::ProcessBlock_");
             rai::BlockProcessResult result{rai::BlockOperation::DROP,
                                            error_code, 0};
             observer_(result, block);

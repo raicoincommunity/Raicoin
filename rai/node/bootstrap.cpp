@@ -154,8 +154,8 @@ rai::ErrorCode rai::BootstrapClient::Run()
         return error_code;
     }
 
-    error_code_              = rai::ErrorCode::SUCCESS;
-    promise_                 = std::promise<bool>();
+    error_code_ = rai::ErrorCode::SUCCESS;
+    promise_ = std::promise<bool>();
     std::future<bool> future = promise_.get_future();
     std::shared_ptr<rai::BootstrapClient> this_s(shared_from_this());
     rai::BootstrapMessage message(type_, next_, next_height_, MaxSize_());
@@ -582,7 +582,7 @@ void rai::Bootstrap::Run()
         }
         else
         {
-            // error_code = RunLight();
+            error_code = RunLight_();
         }
 
         if (count_ == rai::Bootstrap::INITIAL_FULL_BOOTSTRAPS
@@ -728,24 +728,71 @@ rai::ErrorCode rai::Bootstrap::RunFull_()
         auto data = client->Accounts();
         for (size_t i = 0; i < client->Size(); ++i)
         {
-            rai::AccountInfo account_info;
-            bool error = node_.ledger_.AccountInfoGet(
-                transaction, data[i].account_, account_info);
-            bool account_exists = !error && account_info.Valid();
-            if (!account_exists)
-            {
-                node_.syncer_.Add(data[i].account_, 0, true, count);
-                continue;
-            }
+            StartSync_(transaction, data[i], count);
+        }
 
-            if (data[i].height_ > account_info.head_height_
-                || (data[i].height_ == account_info.head_height_
-                    && data[i].head_ != account_info.head_))
-            {
-                node_.syncer_.Add(data[i].account_,
-                                  account_info.head_height_ + 1,
-                                  account_info.head_, true, count);
-            }
+        if (client->Finished())
+        {
+            return rai::ErrorCode::SUCCESS;
+        }
+    }
+}
+
+rai::ErrorCode rai::Bootstrap::RunLight_()
+{
+    boost::optional<rai::Peer> peer = node_.peers_.RandomPeer();
+    if (!peer)
+    {
+        return rai::ErrorCode::BOOTSTRAP_PEER;
+    }
+    node_.syncer_.ResetStat();
+
+    std::shared_ptr<rai::Socket> socket =
+        std::make_shared<rai::Socket>(node_.Shared());
+    std::shared_ptr<rai::BootstrapClient> client =
+        std::make_shared<rai::BootstrapClient>(socket, peer->TcpEndpoint(),
+                                               rai::BootstrapType::LIGHT);
+    uint32_t count = count_;
+    while (true)
+    {
+        if (stopped_)
+        {
+            return rai::ErrorCode::SUCCESS;
+        }
+
+        if (count != count_)
+        {
+            return rai::ErrorCode::BOOTSTRAP_RESET;
+        }
+
+        if (UnderAttack())
+        {
+            return rai::ErrorCode::BOOTSTRAP_ATTACK;
+        }
+
+        if (client->TimeSpan() >= 10
+            && client->Total() / client->TimeSpan() < 1000)
+        {
+            return rai::ErrorCode::BOOTSTRAP_SLOW_CONNECTION;
+        }
+
+        if (node_.Busy())
+        {
+            rai::ErrorCode error_code = client->Pause();
+            IF_NOT_SUCCESS_RETURN(error_code);
+            continue;
+        }
+
+        rai::ErrorCode error_code = client->Run();
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        rai::Transaction transaction(error_code, node_.ledger_, false);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        auto data = client->Accounts();
+        for (size_t i = 0; i < client->Size(); ++i)
+        {
+            StartSync_(transaction, data[i], count);
         }
 
         if (client->Finished())
@@ -857,6 +904,53 @@ void rai::Bootstrap::Wait_()
     waiting_ = false;
 }
 
+void rai::Bootstrap::StartSync_(rai::Transaction& transaction,
+                                const rai::BootstrapAccount& data,
+                                uint32_t batch) const
+{
+    rai::AccountInfo info;
+    bool error = node_.ledger_.AccountInfoGet(transaction, data.account_, info);
+    bool account_exists = !error && info.Valid();
+    if (!account_exists)
+    {
+        node_.syncer_.Add(data.account_, 0, true, batch);
+        return;
+    }
+
+    if (data.height_ == info.head_height_ && data.head_ == info.head_)
+    {
+        return;
+    }
+
+    if (data.height_ < info.tail_height_)
+    {
+        return;
+    }
+    else if (data.height_ < info.head_height_)
+    {
+        if (node_.ledger_.BlockExists(transaction, data.head_))
+        {
+            return;
+        }
+        std::shared_ptr<rai::Block> block(nullptr);
+        error = node_.ledger_.BlockGet(transaction, data.account_, data.height_,
+                                       block);
+        if (error || block == nullptr)
+        {
+            rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
+                            "Bootstrap::StartSync_");
+            return;
+        }
+        node_.syncer_.Add(data.account_, data.height_ + 1, block->Hash(), true,
+                          batch);
+    }
+    else
+    {
+        node_.syncer_.Add(data.account_, info.head_height_ + 1, info.head_,
+                          true, batch);
+    }
+}
+
 rai::BootstrapServer::BootstrapServer(
     const std::shared_ptr<rai::Node>& node,
     const std::shared_ptr<rai::Socket>& socket, const rai::IP& ip)
@@ -914,7 +1008,7 @@ void rai::BootstrapServer::Run(const boost::system::error_code& ec, size_t size)
     }
     else if (type_ == rai::BootstrapType::LIGHT)
     {
-        static_assert(RAI_TODO, "rai::BootstrapServer::Run light");
+        RunLight_();
     }
     else if (type_ == rai::BootstrapType::FORK)
     {
@@ -1022,6 +1116,67 @@ void rai::BootstrapServer::RunFull_()
     send_buffer_.clear();
     bootstrap_account.ToBytes(send_buffer_);
     Send_(std::bind(&rai::BootstrapServer::RunFull_, this));
+}
+
+void rai::BootstrapServer::RunLight_()
+{
+    if (finished_)
+    {
+        // stat
+        return;
+    }
+
+    if (continue_ == false)
+    {
+        Receive();
+        return;
+    }
+
+    rai::BootstrapAccount bootstrap_account;
+    if (count_ < max_size_)
+    {
+        rai::Transaction transaction(error_code_, node_->ledger_, false);
+        IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+        rai::AccountInfo info;
+        bool finished = false;
+        while (true)
+        {
+            bool error = node_->active_accounts_.Next(next_);
+            if (error)
+            {
+                bootstrap_account.height_ = rai::Block::INVALID_HEIGHT;
+                if (count_ == 0)
+                {
+                    finished_ = true;
+                }
+                continue_ = false;
+                break;
+            }
+
+            error = node_->ledger_.AccountInfoGet(transaction, next_, info);
+            if (error || !info.Valid())
+            {
+                next_ += 1;
+                continue;
+            }
+
+            bootstrap_account.account_ = next_;
+            bootstrap_account.head_ = info.head_;
+            bootstrap_account.height_ = info.head_height_;
+            ++count_;
+            next_ += 1;
+            break;
+        }
+    }
+    else
+    {
+        bootstrap_account.height_ = rai::Block::INVALID_HEIGHT;
+        continue_ = false;
+    }
+
+    send_buffer_.clear();
+    bootstrap_account.ToBytes(send_buffer_);
+    Send_(std::bind(&rai::BootstrapServer::RunLight_, this));
 }
 
 void rai::BootstrapServer::RunFork_()
