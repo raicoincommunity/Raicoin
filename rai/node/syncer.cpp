@@ -510,9 +510,6 @@ rai::QueryCallback rai::Syncer::QueryCallbackByHash_(const rai::BlockHash& hash,
             node->syncer_.SyncAccount(transaction, ack.block_->Account(),
                                       batch_id);
             node->syncer_.EraseQuery(query_id);
-            std::cout << "======================>batch_id=" << batch_id
-                      << ", query_id=" << query_id << std::endl;
-            std::cout << ack.block_->Json() << std::endl;
         }
         else if (ack.status_ == rai::QueryStatus::MISS)
         {

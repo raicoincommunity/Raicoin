@@ -141,6 +141,35 @@ private:
         confirms_;
 };
 
+class ActiveAccount
+{
+public:
+    rai::Account account_;
+    std::chrono::steady_clock::time_point active_;
+};
+
+class ActiveAccounts
+{
+public:
+    void Add(const rai::Account&);
+    void Age();
+    bool Next(rai::Account&);
+
+    static std::chrono::seconds constexpr AGE_TIME = std::chrono::seconds(600);
+private:
+    mutable std::mutex mutex_;
+    boost::multi_index_container<
+        rai::ActiveAccount,
+        boost::multi_index::indexed_by<
+            boost::multi_index::ordered_unique<
+                boost::multi_index::member<rai::ActiveAccount, rai::Account,
+                                           &rai::ActiveAccount::account_>>,
+            boost::multi_index::ordered_non_unique<boost::multi_index::member<
+                rai::ActiveAccount, std::chrono::steady_clock::time_point,
+                &rai::ActiveAccount::active_>>>>
+        accounts_;
+};
+
 class Observers
 {
 public:
@@ -280,6 +309,7 @@ public:
     rai::Subscriptions subscriptions_;
     rai::Dumpers dumpers_;
     rai::Rewarder rewarder_;
+    rai::ActiveAccounts active_accounts_;
 };
 
 class ServiceRunner

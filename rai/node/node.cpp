@@ -9,6 +9,7 @@
 #include <rai/node/message.hpp>
 
 std::chrono::seconds constexpr rai::RecentBlocks::AGE_TIME;
+std::chrono::seconds constexpr rai::ActiveAccounts::AGE_TIME;
 
 rai::NodeConfig::NodeConfig()
     : port_(rai::Network::DEFAULT_PORT),
@@ -396,6 +397,42 @@ rai::Ptree rai::ConfirmManager::Status() const
     return status;
 }
 
+void rai::ActiveAccounts::Add(const rai::Account& account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto now = std::chrono::steady_clock::now();
+    auto it = accounts_.find(account);
+    if (it == accounts_.end())
+    {
+        accounts_.insert(rai::ActiveAccount{account, now});
+        return;
+    }
+
+    accounts_.modify(it, [&](rai::ActiveAccount& data) { data.active_ = now; });
+}
+
+void rai::ActiveAccounts::Age()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto cutoff =
+        std::chrono::steady_clock::now() - rai::ActiveAccounts::AGE_TIME;
+    accounts_.get<1>().erase(accounts_.get<1>().begin(),
+                             accounts_.get<1>().lower_bound(cutoff));
+}
+
+bool rai::ActiveAccounts::Next(rai::Account& account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = accounts_.lower_bound(account);
+    if (it == accounts_.end())
+    {
+        return true;
+    }
+
+    account = it->account_;
+    return false;
+}
+
 rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
                 const boost::filesystem::path& data_path, rai::Alarm& alarm,
                 const rai::NodeConfig& config, rai::Fan& key)
@@ -503,6 +540,8 @@ void rai::Node::Start()
     }
     Ongoing(std::bind(&rai::Rewarder::Sync, &rewarder_),
             std::chrono::seconds(600));
+    Ongoing(std::bind(&rai::ActiveAccounts::Age, &active_accounts_),
+            std::chrono::seconds(10));
     std::cout << "Node start: " << account_.StringAccount() << std::endl;
 
 #if 0
@@ -1402,7 +1441,6 @@ void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
         {
             break;
         }
-
         if (result.error_code_ != rai::ErrorCode::SUCCESS)
         {
             break;
@@ -1446,6 +1484,21 @@ void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
         }
 
         StartElection(first, second);
+    } while (0);
+
+    // update active accounts
+    do
+    {
+        if (result.error_code_ != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+        if (result.operation_ != rai::BlockOperation::APPEND
+            && result.operation_ != rai::BlockOperation::ROLLBACK)
+        {
+            break;
+        }
+        active_accounts_.Add(block->Account());
     } while (0);
 }
 
