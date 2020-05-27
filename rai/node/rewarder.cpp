@@ -542,7 +542,10 @@ rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
                                                  hash, rewardable_info);
     if (error)
     {
-        return rai::ErrorCode::LEDGER_REWARDABLE_INFO_GET;
+        error_code = rai::ErrorCode::LEDGER_REWARDABLE_INFO_GET;
+        rai::Stats::AddDetail(
+            error_code, "Rewarder::ProcessReward_: hash=", hash.StringHex());
+        return error_code;
     }
     if (amount != rewardable_info.amount_)
     {
