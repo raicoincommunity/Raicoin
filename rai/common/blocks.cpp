@@ -212,7 +212,7 @@ rai::TxBlock::TxBlock(
     uint64_t timestamp, uint64_t height, const rai::Account& account,
     const rai::BlockHash& previous, const rai::Account& representative,
     const rai::Amount& balance, const rai::uint256_union& link,
-    uint32_t note_length, const std::vector<uint8_t>& note,
+    uint32_t extensions_length, const std::vector<uint8_t>& extensions,
     const rai::RawKey& private_key, const rai::PublicKey& public_key)
     : type_(rai::BlockType::TX_BLOCK),
       opcode_(opcode),
@@ -225,8 +225,8 @@ rai::TxBlock::TxBlock(
       representative_(representative),
       balance_(balance),
       link_(link),
-      note_length_(note_length),
-      note_(note),
+      extensions_length_(extensions_length),
+      extensions_(extensions),
       signature_(rai::SignMessage(private_key, public_key, Hash()))
 {
 }
@@ -241,25 +241,30 @@ rai::TxBlock::TxBlock(rai::ErrorCode& error_code, const rai::Ptree& ptree)
     error_code = DeserializeJson(ptree);
 }
 
-std::string rai::NoteTypeToString(rai::NoteType type)
+std::string rai::ExtensionTypeToString(rai::ExtensionType type)
 {
     std::string result;
 
     switch (type)
     {
-        case rai::NoteType::INVALID:
+        case rai::ExtensionType::INVALID:
         {
             result = "invalid";
             break;
         }
-        case rai::NoteType::TEXT:
+        case rai::ExtensionType::SUB_ACCOUNT:
         {
-            result = "text";
+            result = "sub_account";
+            break;
+        }
+        case rai::ExtensionType::NOTE:
+        {
+            result = "note";
             break;
         }
         default:
         {
-            result = std::to_string(static_cast<uint8_t>(type));
+            result = std::to_string(static_cast<uint16_t>(type));
             break;
         }
     }
@@ -267,88 +272,157 @@ std::string rai::NoteTypeToString(rai::NoteType type)
     return result;
 }
 
-rai::NoteType rai::StringToNoteType(const std::string& str)
+rai::ExtensionType rai::StringToExtensionType(const std::string& str)
 {
-    if ("text" == str)
+    uint16_t type = 0;
+    bool error = rai::StringToUint(str, type);
+    if (!error)
     {
-        return rai::NoteType::TEXT;
+        return static_cast<rai::ExtensionType>(type);
     }
 
-    return rai::NoteType::INVALID;
-}
-
-std::string rai::NoteEncodeToString(rai::NoteEncode encode)
-{
-    std::string result;
-
-    switch (encode)
+    if ("sub_account" == str)
     {
-        case rai::NoteEncode::INVALID:
-        {
-            result = "invalid";
-            break;
-        }
-        case rai::NoteEncode::UTF8:
-        {
-            result = "utf8";
-            break;
-        }
-        default:
-        {
-            result = std::to_string(static_cast<uint8_t>(encode));
-            break;
-        }
+        return rai::ExtensionType::SUB_ACCOUNT;
     }
-
-    return result;
-}
-
-rai::NoteEncode rai::StringToNoteEncode(const std::string& str)
-{
-    if ("utf8" == str)
+    else if ("note" == str)
     {
-        return rai::NoteEncode::UTF8;
-    }
-
-    return rai::NoteEncode::INVALID;
-}
-
-rai::Ptree rai::NoteDataToPtree(const std::vector<uint8_t>& data)
-{
-    boost::property_tree::ptree tree;
-    const uint8_t* ptr = data.data();
-    size_t size        = data.size();
-
-    if (size < 1)
-    {
-        return tree;
-    }
-    rai::NoteType type = static_cast<rai::NoteType>(ptr[0]);
-    tree.put("type", NoteTypeToString(type));
-
-    if (size < 2)
-    {
-        return tree;
-    }
-    rai::NoteEncode encode = static_cast<rai::NoteEncode>(ptr[1]);
-    tree.put("encode", NoteEncodeToString(encode));
-
-    if (size < 3)
-    {
-        return tree;
-    }
-
-    if ((rai::NoteType::TEXT == type) && (rai::NoteEncode::UTF8 == encode))
-    {
-        tree.put("data",
-                 std::string(reinterpret_cast<const char*>(&ptr[2]), size - 2));
+        return rai::ExtensionType::NOTE;
     }
     else
     {
-        tree.put("data", rai::BytesToHex(&ptr[2], size - 2));
+        return rai::ExtensionType::INVALID;
+    }
+}
+
+rai::Ptree rai::ExtensionsToPtree(const std::vector<uint8_t>& data)
+{
+    rai::Ptree tree;
+    if (data.empty())
+    {
+        return tree;
+    }
+
+    rai::BufferStream stream(data.data(), data.size());
+    while (true)
+    {
+        rai::Ptree entry;
+        rai::Ptree error_info;
+
+        rai::ExtensionType type;
+        bool error = rai::Read(stream, type);
+        if (error)
+        {
+            if (!rai::StreamEnd(stream))
+            {
+                error_info.put("error", "deserialize extension type");
+                tree.push_back(std::make_pair("", error_info));
+            }
+            break;
+        }
+        entry.put("type", rai::ExtensionTypeToString(type));
+
+        uint16_t length;
+        error = rai::Read(stream, length);
+        if (error)
+        {
+            error_info.put("error", "deserialize extension length");
+            tree.push_back(std::make_pair("", error_info));
+            break;
+        }
+        entry.put("length", std::to_string(length));
+
+        std::vector<uint8_t> value;
+        error = rai::Read(stream, length, value);
+        if (error)
+        {
+            error_info.put("error", "deserialize extension value");
+            error_info.put("type", rai::ExtensionTypeToString(type));
+            error_info.put("length", std::to_string(length));
+            tree.push_back(std::make_pair("", error_info));
+            break;
+        }
+
+        std::string value_str;
+        switch (type)
+        {
+            case rai::ExtensionType::SUB_ACCOUNT:
+            case rai::ExtensionType::NOTE:
+            {
+                value_str = std::string(
+                    reinterpret_cast<const char*>(value.data()), value.size());
+                break;
+            }
+            default:
+            {
+                value_str = rai::BytesToHex(value.data(), value.size());
+            }
+        }
+        entry.put("value", value_str);
+
+        tree.push_back(std::make_pair("", entry));
     }
 
     return tree;
+}
+
+rai::ErrorCode rai::PtreeToExtensions(const rai::Ptree& tree,
+                                      std::vector<uint8_t>& extensions)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    try
+    {
+        rai::VectorStream stream(extensions);
+        for (const auto& i : tree)
+        {
+            error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TYPE;
+            std::string type_str = i.second.get<std::string>("type");
+            rai::ExtensionType type = rai::StringToExtensionType(type_str);
+            if (type == rai::ExtensionType::INVALID)
+            {
+                return error_code;
+            }
+            rai::Write(stream, type);
+
+            std::vector<uint8_t> value;
+            error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE;
+            std::string value_str = i.second.get<std::string>("value");
+            switch (type)
+            {
+                case rai::ExtensionType::SUB_ACCOUNT:
+                case rai::ExtensionType::NOTE:
+                {
+                    value = std::vector<uint8_t>(value_str.begin(),
+                                                 value_str.end());
+                    break;
+                }
+                default:
+                {
+                    bool error = rai::HexToBytes(value_str, value);
+                    IF_ERROR_RETURN(error, error_code);
+                }
+            }
+
+           if (value.size() > std::numeric_limits<uint16_t>::max())
+           {
+               return error_code;
+           }
+           uint16_t length = static_cast<uint16_t>(value.size());
+           rai::Write(stream, length);
+           rai::Write(stream, value);
+        }
+    }
+    catch (...)
+    {
+        return error_code;
+    }
+
+    if (extensions.empty())
+    {
+        return rai::ErrorCode::JSON_BLOCK_EXTENSIONS_EMPTY;
+    }
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 bool rai::TxBlock::operator==(const rai::Block& other) const
@@ -364,7 +438,8 @@ bool rai::TxBlock::operator==(const rai::TxBlock& other) const
            && (account_ == other.account_) && (previous_ == other.previous_)
            && (representative_ == other.representative_)
            && (balance_ == other.balance_) && (link_ == other.link_)
-           && (note_length_ == other.note_length_) && (note_ == other.note_)
+           && (extensions_length_ == other.extensions_length_)
+           && (extensions_ == other.extensions_)
            && (signature_ == other.signature_);
 }
 
@@ -384,8 +459,8 @@ void rai::TxBlock::Hash(blake2b_state& state) const
         rai::Write(stream, representative_.bytes);
         rai::Write(stream, balance_.bytes);
         rai::Write(stream, link_.bytes);
-        rai::Write(stream, note_length_);
-        rai::Write(stream, note_);
+        rai::Write(stream, extensions_length_);
+        rai::Write(stream, extensions_);
     }
 
     blake2b_update(&state, bytes.data(), bytes.size());
@@ -409,8 +484,8 @@ void rai::TxBlock::Serialize(rai::Stream& stream) const
     rai::Write(stream, representative_.bytes);
     rai::Write(stream, balance_.bytes);
     rai::Write(stream, link_.bytes);
-    rai::Write(stream, note_length_);
-    rai::Write(stream, note_);
+    rai::Write(stream, extensions_length_);
+    rai::Write(stream, extensions_);
     rai::Write(stream, signature_.bytes);
 }
 
@@ -460,12 +535,12 @@ rai::ErrorCode rai::TxBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, link_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error = rai::Read(stream, note_length_);
+    error = rai::Read(stream, extensions_length_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
-    error = rai::TxBlock::CheckNoteLength(note_length_);
-    IF_ERROR_RETURN(error, rai::ErrorCode::NOTE_LENGTH);
+    error = rai::TxBlock::CheckExtensionsLength(extensions_length_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSIONS_LENGTH);
 
-    error = rai::Read(stream, note_length_, note_);
+    error = rai::Read(stream, extensions_length_, extensions_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, signature_.bytes);
@@ -498,8 +573,8 @@ void rai::TxBlock::SerializeJson(rai::Ptree& ptree) const
     {
         ptree.put("link", link_.StringHex());
     }
-    ptree.put("note_length", std::to_string(note_length_));
-    ptree.add_child("note", rai::NoteDataToPtree(note_));
+    ptree.put("extensions_length", std::to_string(extensions_length_));
+    ptree.add_child("extensions", rai::ExtensionsToPtree(extensions_));
     ptree.put("signature", signature_.StringHex());
 }
 
@@ -583,46 +658,16 @@ rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
         }
         IF_ERROR_RETURN(error, error_code);
 
-        error_code = rai::ErrorCode::JSON_BLOCK_NOTE_LENGTH;
-        std::string note_length = ptree.get<std::string>("note_length");
-        error = rai::StringToUint(note_length, note_length_);
-        IF_ERROR_RETURN(error, error_code);
-        error = rai::TxBlock::CheckNoteLength(note_length_);
-        IF_ERROR_RETURN(error, rai::ErrorCode::NOTE_LENGTH);
-        if ((note_length_ > 0) && (note_length_ <= 2))
+        auto extensions  = ptree.get_child_optional("extensions");
+        if (extensions)
         {
-            return error_code;
+            error_code = rai::PtreeToExtensions(*extensions, extensions_);
+            IF_NOT_SUCCESS_RETURN(error_code);
         }
 
-        if (note_length_ > 2)
-        {
-            error_code = rai::ErrorCode::JSON_BLOCK_NOTE_TYPE;
-            const rai::Ptree& note  = ptree.get_child("note");
-            std::string note_type = note.get<std::string>("type");
-            rai::NoteType note_type_ = rai::StringToNoteType(note_type);
-            if (rai::NoteType::INVALID == note_type_)
-            {
-                return error_code;
-            }
-            note_.push_back(static_cast<uint8_t>(note_type_));
-
-            error_code = rai::ErrorCode::JSON_BLOCK_NOTE_ENCODE;
-            std::string note_encode = note.get<std::string>("encode");
-            rai::NoteEncode note_encode_ = rai::StringToNoteEncode(note_encode);
-            if (rai::NoteEncode::INVALID == note_encode_)
-            {
-                return error_code;
-            }
-            note_.push_back(static_cast<uint8_t>(note_encode_));
-
-            error_code = rai::ErrorCode::JSON_BLOCK_NOTE_DATA;
-            std::string note_data = note.get<std::string>("data");
-            if ((note_data.size() + 2) != note_length_)
-            {
-                return error_code;
-            }
-            note_.insert(note_.end(), note_data.begin(), note_data.end());
-        }
+        extensions_length_ = static_cast<uint32_t>(extensions_.size());
+        error = rai::TxBlock::CheckExtensionsLength(extensions_length_);
+        IF_ERROR_RETURN(error, rai::ErrorCode::JSON_BLOCK_EXTENSIONS_LENGTH);
 
         error_code = rai::ErrorCode::JSON_BLOCK_SIGNATURE;
         std::string signature = ptree.get<std::string>("signature");
@@ -632,7 +677,7 @@ rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
         error =  CheckSignature_();
         IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return error_code;
     }
@@ -731,6 +776,10 @@ bool rai::TxBlock::HasRepresentative() const
     return true;
 }
 
+std::vector<uint8_t> rai::TxBlock::Extensions() const
+{
+    return extensions_;
+}
 
 bool rai::TxBlock::CheckOpcode(rai::BlockOpcode opcode)
 {
@@ -741,14 +790,14 @@ bool rai::TxBlock::CheckOpcode(rai::BlockOpcode opcode)
     return std::find(opcodes.begin(), opcodes.end(), opcode) == opcodes.end();
 }
 
-bool rai::TxBlock::CheckNoteLength(uint32_t length)
+bool rai::TxBlock::CheckExtensionsLength(uint32_t length)
 {
-    return length > rai::TxBlock::MaxNoteLength();
+    return length > rai::TxBlock::MaxExtensionsLength();
 }
 
-uint32_t rai::TxBlock::MaxNoteLength()
+uint32_t rai::TxBlock::MaxExtensionsLength()
 {
-    return 130; // 128 bytes raw data
+    return 256;
 }
 
 rai::RepBlock::RepBlock(rai::BlockOpcode opcode, uint16_t credit,

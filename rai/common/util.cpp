@@ -42,6 +42,37 @@ std::string rai::BytesToHex(const uint8_t* data, size_t size)
     return stream.str();
 }
 
+bool rai::HexToBytes(const std::string& hex, std::vector<uint8_t>& bytes)
+{
+    if (hex.size() % 2)
+    {
+        return true;
+    }
+
+    if (hex.find_first_not_of("0123456789ABCDEFabcdef") != std::string::npos)
+    {
+        return true;
+    }
+
+    for (size_t i = 0; i < hex.size(); i += 2)
+    {
+        uint32_t u32;
+        std::stringstream stream(hex.substr(i, 2));
+        stream << std::hex << std::noshowbase;
+        try
+        {
+            stream >> u32;
+        }
+        catch (...)
+        {
+            return true;
+        }
+        bytes.push_back(static_cast<uint8_t>(u32));
+    }
+
+    return false;
+}
+
 void rai::DumpBytes(const uint8_t* data, size_t size)
 {
     const size_t chars_per_line = 32;
