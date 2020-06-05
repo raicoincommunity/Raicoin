@@ -77,23 +77,19 @@ private:
     mutable bool signature_error_;
 };
 
-enum class NoteType : uint8_t
+enum class ExtensionType : uint16_t
 {
-    INVALID = 0,
-    TEXT    = 1,
-};
-std::string NoteTypeToString(rai::NoteType);
-rai::NoteType StringToNoteType(const std::string&);
+    INVALID     = 0,
+    SUB_ACCOUNT = 1,
+    NOTE        = 2,
 
-enum class NoteEncode : uint8_t
-{
-    INVALID = 0,
-    UTF8    = 1,
+    RESERVED_MAX = 1023,
 };
-std::string NoteEncodeToString(rai::NoteEncode);
-rai::NoteEncode StringToNoteEncode(const std::string&);
+std::string ExtensionTypeToString(rai::ExtensionType);
+rai::ExtensionType StringToExtensionType(const std::string&);
 
-rai::Ptree NoteDataToPtree(const std::vector<uint8_t>&);
+rai::Ptree ExtensionsToPtree(const std::vector<uint8_t>&);
+rai::ErrorCode PtreeToExtensions(const rai::Ptree&, std::vector<uint8_t>&);
 
 // Transaction Block
 class TxBlock : public Block
@@ -133,9 +129,12 @@ public:
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
 
+    std::vector<uint8_t> Extensions() const;
+
+
     static bool CheckOpcode(rai::BlockOpcode);
-    static bool CheckNoteLength(uint32_t);
-    static uint32_t MaxNoteLength();
+    static bool CheckExtensionsLength(uint32_t);
+    static uint32_t MaxExtensionsLength();
 
 private:
     rai::BlockType type_;
@@ -149,8 +148,8 @@ private:
     rai::Account representative_;
     rai::Amount balance_;
     rai::uint256_union link_;
-    uint32_t note_length_;
-    std::vector<uint8_t> note_;
+    uint32_t extensions_length_;
+    std::vector<uint8_t> extensions_;
     rai::Signature signature_;
 };
 

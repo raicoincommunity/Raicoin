@@ -45,8 +45,8 @@ TEST(TxBlock, constructor)
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
 
     rai::TxBlock block(rai::BlockOpcode::SEND, 1, 1, 1541128318, 1, account,
-                       hash, representive, balance, link, 9,
-                       {1, 1, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
+                       hash, representive, balance, link, 11,
+                       {0, 2, 0, 7, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
                        public_key);
 
     std::string str("");
@@ -61,8 +61,8 @@ TEST(TxBlock, constructor)
     str += "00000000000000000000000000000001";  // balance
     // link
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
-    str += "00000009";            // note_length
-    str += "0101726169636F696E";  // note_data
+    str += "0000000B";            // extensions_length
+    str += "00020007726169636F696E";  // extensions
 
     size_t size    = str.size() / 2;
     uint8_t* bytes = new uint8_t[size];
@@ -276,8 +276,8 @@ TEST(TxBlock, serialize_json)
     public_key.DecodeHex(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
     rai::TxBlock block(rai::BlockOpcode::SEND, 1, 1, 1541128318, 1, account,
-                       hash, representive, balance, link, 9,
-                       {1, 1, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
+                       hash, representive, balance, link, 11,
+                       {0, 1, 0, 7, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
                        public_key);
 
     std::stringstream stream(block.Json());
@@ -303,13 +303,13 @@ TEST(TxBlock, deserialize_json_opcode)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "1140988520DD99E3FFC30A81303F1BEAA84BF974E12A95AB4B700CAE8D22D6893698C8CEC1B879C4939F486F91EA748EE5D45D9A1D32B1D7896C1ED3BF659302"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
+    "signature": "15E23A2EF0D6E0F5B5095F04BE0D157943921927FF0603D435E72D5B333DFEBD956799A292100F759343C1829B98CCAD2D700C7C29299866E89E270EC4BACA00"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
@@ -322,7 +322,7 @@ TEST(TxBlock, deserialize_json_opcode)
     str.replace(str.find("receive"), std::string("receive").size(), "change");
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
-    ptree.put<std::string>("signature", "D5BA3123E0559C41F14B0BE00988189603971785CEB83D7E5D8D00FAD6B82029E269186A103486C62E17C071C681F5E10D1FFB63DA019C7C602D63A6E245EC0B");
+    ptree.put<std::string>("signature", "52F671F408E505C72150860F19EB3D66398BB24103DB5A89EF4B94D04F7C29099B6F1A52342C79AEB07C6E2DD3DCC4D81F9735459EBD741757BE09D7ABAD9406");
     rai::TxBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(rai::BlockOpcode::CHANGE, block4.Opcode());
@@ -348,13 +348,13 @@ TEST(TxBlock, deserialize_json_credit)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "FA25BFF7B0AF4C2B7456D3F77D9C8074EA89083595477D5189F8D7594C9B4DCDD593329C93220D7CFC01C1A1DCDE702114A63D33FE25AD6CD9ABE5C40A217B07"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
+    "signature": "87C56758DE961356A6E2F7F5571CF38316C77325564FB0D76B62F47C517A2B9561EB7228DE97908086F85DC31529E45880FB807AEF66F77776646E142306590C"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
@@ -375,12 +375,12 @@ TEST(TxBlock, deserialize_json_credit)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -400,12 +400,12 @@ TEST(TxBlock, deserialize_json_credit)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -425,12 +425,12 @@ TEST(TxBlock, deserialize_json_credit)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -450,12 +450,12 @@ TEST(TxBlock, deserialize_json_credit)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -475,12 +475,12 @@ TEST(TxBlock, deserialize_json_credit)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -503,13 +503,13 @@ TEST(TxBlock, deserialize_json_counter)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "1301BADA5E3455D8C31F533C76EC108A7A395137C69D64BA1D892AE2D0156D0F68530AF96AC87A405F1D4D3DC1034042DB11DF8ADF31095B165DBED55E10C107"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
+    "signature": "1B52157E93D35620E223DD4D08AD5A76142665D10ABE48E0F37E5505A6BDD39630248D70ED09BEE9A500DE467C57E181BFA59E4243B567732DD619CB1254A80A"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
@@ -518,7 +518,7 @@ TEST(TxBlock, deserialize_json_counter)
     rai::TxBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -530,12 +530,12 @@ TEST(TxBlock, deserialize_json_counter)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -555,12 +555,12 @@ TEST(TxBlock, deserialize_json_counter)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -583,13 +583,13 @@ TEST(TxBlock, deserialize_json_timestamp)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "73BDA9F1A835E580C07DF3364F9CBC4AC3CC6C686F8A05B698A036DDDF2EF217F95AA50110D58BFC1920973BE08C982FAFA418743A4C710DE3A11E7DD36D1006"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
+    "signature": "8D33EEDF0B7FED1E4AEED5BDC34A4EAD9D8AE1752FB64B478431F5517F193D04F781E511534FC7DB0C10A8FBE1B4100A640932FB4B5BD6ED53DEE928CE876603"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
@@ -610,12 +610,12 @@ TEST(TxBlock, deserialize_json_timestamp)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -635,12 +635,12 @@ TEST(TxBlock, deserialize_json_timestamp)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -663,13 +663,13 @@ TEST(TxBlock, deserialize_json_height)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "1C60BA94AC235A14731E94208A0BEAA98C1BBEB17F74CDE65FFFE3B7B962D24BE247FB0157BD7F1311A4D37DFA469908222F4FFC5E94723E472A1BE43B7C4C0A"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
+    "signature": "05EEF8D5FD5C6CEBFE3CECE34716D52ACF00E35B5803FCA37D0642D79799E2E9CCB801B0543F23E5CF895134343AC556BAA2AF122C3225EFCB1356C060F29409"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
@@ -690,12 +690,12 @@ TEST(TxBlock, deserialize_json_height)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -715,12 +715,12 @@ TEST(TxBlock, deserialize_json_height)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -740,12 +740,12 @@ TEST(TxBlock, deserialize_json_height)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -765,12 +765,12 @@ TEST(TxBlock, deserialize_json_height)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -790,12 +790,12 @@ TEST(TxBlock, deserialize_json_height)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "1",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -818,12 +818,12 @@ TEST(TxBlock, deserialize_json_account)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     rai::Ptree ptree;
@@ -848,12 +848,12 @@ TEST(TxBlock, deserialize_json_representative)
     "representative": "0000000000000000000000000000000000000000000000000000000000000000",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     rai::Ptree ptree;
@@ -878,13 +878,13 @@ TEST(TxBlock, deserialize_json_balance)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "340282366920938463463374607431768211455",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "5A695DD4FB9B197771BA959F563982744B84CD2A640ACF448FF1EF791BAE9125FBEFEBA538747497CCE4410AB7CAC381CAF17831F9245E3C56D5EAC47CD9CB0E"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
+    "signature": "C8CA8B6B228B072A33119C4EA50D7135E25369D0D1408234BF29DAA5C6C5E0DFCDFCCA359E941D05DD6612435B310E37716D47B12026344579C5352052F4D401"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
@@ -905,12 +905,12 @@ TEST(TxBlock, deserialize_json_balance)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "340282366920938463463374607431768211456",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -930,12 +930,12 @@ TEST(TxBlock, deserialize_json_balance)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "0x1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -955,12 +955,12 @@ TEST(TxBlock, deserialize_json_balance)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -980,12 +980,12 @@ TEST(TxBlock, deserialize_json_balance)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "01",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -1005,12 +1005,12 @@ TEST(TxBlock, deserialize_json_balance)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "-1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
@@ -1033,12 +1033,12 @@ TEST(TxBlock, deserialize_json_link)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     rai::Ptree ptree;
@@ -1049,7 +1049,7 @@ TEST(TxBlock, deserialize_json_link)
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_LINK, error_code);
 }
 
-TEST(TxBlock, deserialize_json_note)
+TEST(TxBlock, deserialize_json_extensions)
 {
     std::string str = R"%%%({
     "type": "transaction",
@@ -1058,25 +1058,37 @@ TEST(TxBlock, deserialize_json_note)
     "counter": "4294967295",
     "timestamp": "18446744073709551615",
     "height": "18446744073709551615",
-    "account": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
+    "account": "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo",
     "previous": "0000000000000000000000000000000000000000000000000000000000000000",
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "4294967295",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
-    "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
+    "extensions": [
+        {
+            "type": "note",
+            "value": "raicoin"
+        },
+        {
+            "type": "sub_account",
+            "value": "unique user id in third party system"
+        },
+        {
+            "type": "1024",
+            "value": "74686973206973206120637573746F6D20746C76"
+        },
+        {
+            "type": "65535",
+            "value": "7468697320697320616e6f7468657220637573746f6d20746c76"
+        }
+    ],
+    "signature": "EE4C28048CDB9AC4B9B326C60F120676B17CC86B1A2BEBD6ABE19E3054E1BF883007DD1BD435B9319FE94956F93B9559A9CCF19B3FD10362C83032656CB8150A"
 })%%%";
     rai::Ptree ptree;
     rai::ErrorCode error_code;
     std::stringstream stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block1(error_code, ptree);
-    ASSERT_EQ(rai::ErrorCode::NOTE_LENGTH, error_code);
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     str    = R"%%%({
     "type": "transaction",
@@ -1090,18 +1102,30 @@ TEST(TxBlock, deserialize_json_note)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "4294967296",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "note",
+            "value": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        },
+        {
+            "type": "sub_account",
+            "value": "unique user id in third party system"
+        },
+        {
+            "type": "1024",
+            "value": "74686973206973206120637573746F6D20746C76"
+        },
+        {
+            "type": "65535",
+            "value": "7468697320697320616e6f7468657220637573746f6d20746c76"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block2(error_code, ptree);
-    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_NOTE_LENGTH, error_code);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSIONS_LENGTH, error_code);
 
     str    = R"%%%({
     "type": "transaction",
@@ -1115,18 +1139,18 @@ TEST(TxBlock, deserialize_json_note)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "65536",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block3(error_code, ptree);
-    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_NOTE_TYPE, error_code);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSION_TYPE, error_code);
 
     str    = R"%%%({
     "type": "transaction",
@@ -1140,18 +1164,18 @@ TEST(TxBlock, deserialize_json_note)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf-8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "65535",
+            "value": "raicoin"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block4(error_code, ptree);
-    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_NOTE_ENCODE, error_code);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE, error_code);
 
     str    = R"%%%({
     "type": "transaction",
@@ -1165,18 +1189,18 @@ TEST(TxBlock, deserialize_json_note)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin_"
-    },
+    "extensions": [
+        {
+            "type": "65535",
+            "value": "0xFFFF0101"
+        }
+    ],
     "signature": "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07"
 })%%%";
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block5(error_code, ptree);
-    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_NOTE_DATA, error_code);
+    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE, error_code);
 }
 
 TEST(TxBlock, deserialize_json_signature)
@@ -1193,12 +1217,12 @@ TEST(TxBlock, deserialize_json_signature)
     "representative": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
     "balance": "1",
     "link": "rai_11rjpbh1t9ixgwkdqbfxcawobwgusz13sg595ocytdbkrxcbzekkcqkc3dn1",
-    "note_length": "9",
-    "note": {
-        "type": "text",
-        "encode": "utf8",
-        "data": "raicoin"
-    },
+    "extensions": [
+        {
+            "type": "sub_account",
+            "value": "raicoin"
+        }
+    ],
     "signature": ""
 })%%%";
     rai::Ptree ptree;
@@ -1232,8 +1256,8 @@ TEST(TxBlock, deserialize)
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
 
     rai::TxBlock block(rai::BlockOpcode::SEND, 1, 1, 1541128318, 1, account,
-                       hash, representive, balance, link, 9,
-                       {1, 1, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
+                       hash, representive, balance, link, 11,
+                       {0, 1, 0, 7, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
                        public_key);
     std::string str("");
     str += "01000100000001";  // opcode + credit + counter
@@ -1247,12 +1271,12 @@ TEST(TxBlock, deserialize)
     str += "00000000000000000000000000000001";  // balance
     // link
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
-    str += "00000009";            // note_length
-    str += "0101726169636F696E";  // note_data
+    str += "0000000B";            // extensions_length
+    str += "00010007726169636F696E";  // extensions
     // signature
     str +=
-        "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A"
-        "661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07";
+        "1EFFFBDE0313E2F5360B7C50496B2C48A7EEA6B39B3C2F4A21BC051F9F7283E3CAB57A"
+        "F79C48C9BE9CDAC8F462A23C57843FC51FF70D04F7AA528244EE68A70C";
 
     std::vector<uint8_t> bytes;
     bool error = TestDecodeHex(str, bytes);
@@ -1291,8 +1315,8 @@ TEST(TxBlock, serialize)
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
 
     rai::TxBlock block(rai::BlockOpcode::SEND, 1, 1, 1541128318, 1, account,
-                       hash, representive, balance, link, 9,
-                       {1, 1, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
+                       hash, representive, balance, link, 11,
+                       {0, 1, 0, 7, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
                        public_key);
     std::vector<uint8_t> bytes;
     {
@@ -1312,18 +1336,18 @@ TEST(TxBlock, serialize)
     str += "00000000000000000000000000000001";  // balance
     // link
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
-    str += "00000009";            // note_length
-    str += "0101726169636F696E";  // note_data
+    str += "0000000B";            // extensions_length
+    str += "00010007726169636F696E";  // extensions
     // signature
     str +=
-        "6411A4E7F1BA3FF832BB6D82462FC11679A477FF471E3C755A4E00814FA3F2D0C7ED3A"
-        "661A72C4E21BDF210EF1D3053801EA0D1A295C22CB132CEE8939225C07";
+        "1EFFFBDE0313E2F5360B7C50496B2C48A7EEA6B39B3C2F4A21BC051F9F7283E3CAB57A"
+        "F79C48C9BE9CDAC8F462A23C57843FC51FF70D04F7AA528244EE68A70C";
 
     std::vector<uint8_t> bytes_expect;
     bool error = TestDecodeHex(str, bytes_expect);
     ASSERT_FALSE(error);
     ASSERT_EQ(bytes_expect, bytes);
-    ASSERT_EQ(245, block.Size());
+    ASSERT_EQ(247, block.Size());
 }
 
 TEST(TxBlock, hash)
@@ -3327,8 +3351,8 @@ TEST(blocks, DeserializeBlockJson_TxBlock)
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
 
     rai::TxBlock block(rai::BlockOpcode::SEND, 1, 1, 1541128318, 1, account,
-                       hash, representive, balance, link, 9,
-                       {1, 1, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
+                       hash, representive, balance, link, 11,
+                       {0, 1, 0, 7, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
                        public_key);
     rai::Ptree ptree;
     rai::ErrorCode error_code;

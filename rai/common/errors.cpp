@@ -26,9 +26,9 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid block opcode";
         }
-        case rai::ErrorCode::NOTE_LENGTH:
+        case rai::ErrorCode::EXTENSIONS_LENGTH:
         {
-            return "Invalid note length";
+            return "Invalid extensions length";
         }
         case rai::ErrorCode::UNKNOWN_COMMAND:
         {
@@ -462,21 +462,21 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse block link from json";
         }
-        case rai::ErrorCode::JSON_BLOCK_NOTE_LENGTH:
+        case rai::ErrorCode::JSON_BLOCK_EXTENSIONS_LENGTH:
         {
-            return "Failed to parse block note length from json";
+            return "Failed to parse block extensions length from json";
         }
-        case rai::ErrorCode::JSON_BLOCK_NOTE_TYPE:
+        case rai::ErrorCode::JSON_BLOCK_EXTENSIONS_EMPTY:
         {
-            return "Failed to parse block note type from json";
+            return "Extensions empty";
         }
-        case rai::ErrorCode::JSON_BLOCK_NOTE_ENCODE:
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TYPE:
         {
-            return "Failed to parse block note encode from json";
+            return "Failed to parse block extension type from json";
         }
-        case rai::ErrorCode::JSON_BLOCK_NOTE_DATA:
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE:
         {
-            return "Failed to parse block note data from json";
+            return "Failed to parse block extension value from json";
         }
         case rai::ErrorCode::JSON_BLOCK_SIGNATURE:
         {

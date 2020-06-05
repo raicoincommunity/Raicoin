@@ -108,6 +108,10 @@ template <typename T>
 typename std::enable_if<is_bytes<T>::value>::type Write(rai::Stream& stream,
                                                         T const& value)
 {
+    if (value.size() == 0)
+    {
+        return;
+    }
     auto num(stream.sputn(reinterpret_cast<const uint8_t*>(value.data()),
                           value.size()));
     assert(num == value.size());
@@ -142,6 +146,7 @@ using VectorStream = boost::iostreams::stream_buffer<
 using Ptree = boost::property_tree::ptree;
 
 std::string BytesToHex(const uint8_t* data, size_t size);
+bool HexToBytes(const std::string&, std::vector<uint8_t>&);
 void DumpBytes(const uint8_t* data, size_t size);
 
 template <typename T>
