@@ -147,6 +147,8 @@ public:
     QLineEdit* destination_;
     QLabel* amount_label_;
     QLineEdit* amount_;
+    QLabel* note_label_;
+    QLineEdit* note_;
     QPushButton* send_;
     QPushButton* back_;
 

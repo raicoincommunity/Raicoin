@@ -909,14 +909,23 @@ rai::QtSend::QtSend(rai::QtMain& qt_main)
       destination_(new QLineEdit),
       amount_label_(new QLabel("Amount:")),
       amount_(new QLineEdit),
+      note_label_(new QLabel("Note:")),
+      note_(new QLineEdit),
       send_(new QPushButton("Send")),
       back_(new QPushButton("Back")),
       main_(qt_main)
 {
+    std::string place_text = rai::Account().StringAccount() + "[_SubAccount]";
+    destination_->setPlaceholderText(place_text.c_str());
+
+    note_->setPlaceholderText("optional");
+
     layout_->addWidget(destination_label_);
     layout_->addWidget(destination_);
     layout_->addWidget(amount_label_);
     layout_->addWidget(amount_);
+    layout_->addWidget(note_label_);
+    layout_->addWidget(note_);
     layout_->addWidget(send_);
     layout_->addStretch();
     layout_->addWidget(back_);
@@ -949,13 +958,22 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             std::string destination_str =
                 qt_main->send_.destination_->text().toStdString();
             rai::StringTrim(destination_str, " \r\n\t");
-            rai::Account destination;
-            error = destination.DecodeAccount(destination_str);
+            rai::AccountParser parser(destination_str);
             if (error)
             {
                 ShowLineError(*qt_main->send_.destination_);
                 error_info = "Bad destination account";
                 break;
+            }
+
+            rai::Account destination = parser.Account();
+            std::string sub_account = parser.SubAccount();
+
+            std::vector<uint8_t> extensions;
+            if (!sub_account.empty())
+            {
+                rai::ExtensionAppend(rai::ExtensionType::SUB_ACCOUNT,
+                                     sub_account, extensions);
             }
 
             std::string amount_str =
@@ -981,8 +999,15 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                 break;
             }
 
+            std::string note = qt_main->send_.note_->text().toStdString();
+            if (!note.empty())
+            {
+                rai::ExtensionAppend(rai::ExtensionType::NOTE, note,
+                                     extensions);
+            }
+
             rai::ErrorCode error_code = qt_main->wallets_->AccountSend(
-                destination, amount,
+                destination, amount, extensions,
                 [qt_main_w](rai::ErrorCode error_code,
                             const std::shared_ptr<rai::Block>& block) {
                     auto qt_main = qt_main_w.lock();

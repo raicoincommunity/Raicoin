@@ -99,6 +99,20 @@ using Account    = uint256_union;
 using PublicKey  = uint256_union;
 using PrivateKey = uint256_union;
 
+class AccountParser
+{
+public:
+    AccountParser(const std::string&);
+    rai::Account Account() const;
+    std::string SubAccount() const;
+    bool Error() const;
+
+private:
+    bool error_;
+    rai::Account account_;
+    std::string sub_account_;
+};
+
 class RawKey
 {
 public:

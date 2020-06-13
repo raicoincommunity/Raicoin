@@ -1041,6 +1041,23 @@ bool rai::Ledger::ReceivableInfoGet(rai::Transaction& transaction,
     return info.Deserialize(stream);
 }
 
+bool rai::Ledger::ReceivableInfoExists(rai::Transaction& transaction,
+                                       const rai::Account& destination,
+                                       const rai::BlockHash& hash) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, destination.bytes);
+        rai::Write(stream, hash.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_, store_.receivables_,
+                            key, value);
+    return !error;
+}
+
 bool rai::Ledger::ReceivableInfoGet(const rai::Iterator& it,
                                     rai::Account& destination,
                                     rai::BlockHash& hash,
