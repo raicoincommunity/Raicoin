@@ -47,6 +47,7 @@ public:
     rai::ErrorCode StoreAccount(rai::Transaction&, uint32_t, uint32_t);
     bool SelectAccount(uint32_t);
     rai::Account SelectedAccount() const;
+    uint32_t SelectedAccountId() const;
 
     static uint32_t constexpr VERSION_1 = 1;
     static uint32_t constexpr CURRENT_VERSION = 1;
@@ -135,6 +136,9 @@ public:
     rai::ErrorCode AccountDestroy(const rai::AccountActionCallback&);
     rai::ErrorCode AccountSend(const rai::Account&, const rai::Amount&,
                                const rai::AccountActionCallback&);
+    rai::ErrorCode AccountSend(const rai::Account&, const rai::Amount&,
+                               const std::vector<uint8_t>&,
+                               const rai::AccountActionCallback&);
     rai::ErrorCode AccountReceive(const rai::Account&, const rai::BlockHash&,
                                   const rai::AccountActionCallback&);
     void BlockQuery(const rai::Account&, uint64_t, const rai::BlockHash&);
@@ -163,7 +167,7 @@ public:
                                const rai::AccountActionCallback&);
     void ProcessAccountSend(const std::shared_ptr<rai::Wallet>&,
                             const rai::Account&, const rai::Account&,
-                            const rai::Amount&,
+                            const rai::Amount&, const std::vector<uint8_t>&,
                             const rai::AccountActionCallback&);
     void ProcessAccountReceive(const std::shared_ptr<rai::Wallet>&,
                                const rai::Account&, const rai::BlockHash&,
@@ -203,9 +207,11 @@ public:
     void Subscribe(const std::shared_ptr<rai::Wallet>&, uint32_t);
     void Subscribe(const std::shared_ptr<rai::Wallet>&);
     void SubscribeAll();
+    void SubscribeSelected();
     void Sync(const rai::Account&);
     void Sync(const std::shared_ptr<rai::Wallet>&);
     void SyncAll();
+    void SyncSelected();
     void SyncAccountInfo(const rai::Account&);
     void SyncAccountInfo(const std::shared_ptr<rai::Wallet>&);
     void SyncBlocks(const rai::Account&);

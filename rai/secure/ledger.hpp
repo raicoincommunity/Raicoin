@@ -209,6 +209,8 @@ public:
                            const rai::BlockHash&, const rai::ReceivableInfo&);
     bool ReceivableInfoGet(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&, rai::ReceivableInfo&) const;
+    bool ReceivableInfoExists(rai::Transaction&, const rai::Account&,
+                              const rai::BlockHash&) const;
     bool ReceivableInfoGet(const rai::Iterator&, rai::Account&, rai::BlockHash&,
                            rai::ReceivableInfo&) const;
 

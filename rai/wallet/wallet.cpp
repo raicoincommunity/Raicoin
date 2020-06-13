@@ -414,6 +414,12 @@ rai::Account rai::Wallet::SelectedAccount() const
     return rai::Account(0);
 }
 
+uint32_t rai::Wallet::SelectedAccountId() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return selected_account_id_;
+}
+
 rai::RawKey rai::Wallet::Decrypt_(const rai::uint256_union& encrypted) const
 {
     rai::RawKey result;
@@ -907,6 +913,14 @@ rai::ErrorCode rai::Wallets::AccountSend(
     const rai::Account& destination, const rai::Amount& amount,
     const rai::AccountActionCallback& callback)
 {
+    return AccountSend(destination, amount, std::vector<uint8_t>(), callback);
+}
+
+rai::ErrorCode rai::Wallets::AccountSend(
+    const rai::Account& destination, const rai::Amount& amount,
+    const std::vector<uint8_t>& extensions,
+    const rai::AccountActionCallback& callback)
+{
     auto wallet = SelectedWallet();
     if (wallet == nullptr)
     {
@@ -925,14 +939,15 @@ rai::ErrorCode rai::Wallets::AccountSend(
     }
 
     std::weak_ptr<rai::Wallets> this_w(Shared());
-    QueueAction(rai::WalletActionPri::HIGH,
-                [this_w, wallet, account, destination, amount, callback]() {
-                    if (auto this_s = this_w.lock())
-                    {
-                        this_s->ProcessAccountSend(wallet, account, destination,
-                                                   amount, callback);
-                    }
-                });
+    QueueAction(
+        rai::WalletActionPri::HIGH,
+        [this_w, wallet, account, destination, amount, extensions, callback]() {
+            if (auto this_s = this_w.lock())
+            {
+                this_s->ProcessAccountSend(wallet, account, destination, amount,
+                                           extensions, callback);
+            }
+        });
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -1640,6 +1655,7 @@ void rai::Wallets::ProcessAccountDestroy(
 void rai::Wallets::ProcessAccountSend(
     const std::shared_ptr<rai::Wallet>& wallet, const rai::Account& account,
     const rai::Account& destination, const rai::Amount& amount,
+    const std::vector<uint8_t>& extensions,
     const rai::AccountActionCallback& callback)
 {
     std::shared_ptr<rai::Block> block(nullptr);
@@ -1706,6 +1722,20 @@ void rai::Wallets::ProcessAccountSend(
     }
     rai::Amount balance = head->Balance() - amount;
     rai::uint256_union link = destination;
+
+    if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
+    {
+        callback(rai::ErrorCode::EXTENSIONS_LENGTH, block);
+        return;
+    }
+
+    rai::Ptree extensions_ptree;
+    if (rai::ExtensionsToPtree(extensions, extensions_ptree))
+    {
+        callback(rai::ErrorCode::GENERIC, block);
+        return;
+    }
+
     rai::RawKey private_key;
     error_code = wallet->PrivateKey(account, private_key);
     if (error_code != rai::ErrorCode::SUCCESS)
@@ -1718,8 +1748,8 @@ void rai::Wallets::ProcessAccountSend(
     {
         block = std::make_shared<rai::TxBlock>(
             opcode, credit, counter, timestamp, height, account, previous,
-            head->Representative(), balance, link, 0, std::vector<uint8_t>(),
-            private_key, account);
+            head->Representative(), balance, link, extensions.size(),
+            extensions, private_key, account);
     }
     else
     {
@@ -2120,6 +2150,11 @@ void rai::Wallets::ProcessReceivableInfo(const rai::Account& account,
             return;
         }
 
+        if (ledger_.ReceivableInfoExists(transaction, account, hash))
+        {
+            return;
+        }
+
         bool error = ledger_.ReceivableInfoPut(transaction, account, hash, info);
         if (error)
         {
@@ -2258,8 +2293,8 @@ void rai::Wallets::ReceiveAccountInfoQueryAck(
         if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
         {
             std::cout << "Wallets::ReceiveAccountInfoQueryAck: Failed to "
-                         "deserialize json block"
-                      << std::endl;
+                         "deserialize json block, error="
+                      << rai::ErrorString(error_code) << std::endl;
             return;
         }
 
@@ -2883,6 +2918,12 @@ void rai::Wallets::SubscribeAll()
     }
 }
 
+void rai::Wallets::SubscribeSelected()
+{
+    auto wallet = SelectedWallet();
+    Subscribe(wallet, wallet->SelectedAccountId());
+}
+
 void rai::Wallets::Sync(const rai::Account& account)
 {
     SyncBlocks(account);
@@ -2912,6 +2953,15 @@ void rai::Wallets::SyncAll()
     for (const auto& wallet : wallets)
     {
         Sync(wallet);
+    }
+}
+
+void rai::Wallets::SyncSelected()
+{
+    rai::Account account = SelectedAccount();
+    if (!account.IsZero())
+    {
+        Sync(account);
     }
 }
 
@@ -3280,6 +3330,8 @@ void rai::Wallets::RegisterObservers_()
         if (status == rai::WebsocketStatus::CONNECTED)
         {
             std::cout << "websocket connected\n";
+            SubscribeSelected();
+            SyncSelected();
             SubscribeAll();
             SyncAll();
         }
@@ -3303,6 +3355,10 @@ void rai::Wallets::RegisterObservers_()
             }
         });
 
+    observers_.selected_account_.Add([this](const rai::Account&) {
+        SubscribeSelected();
+        SyncSelected();
+    });
 }
 
 bool rai::Wallets::Rollback_(rai::Transaction& transaction,

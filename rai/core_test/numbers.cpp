@@ -563,3 +563,40 @@ TEST(PublicKey, generate)
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
     ASSERT_EQ(pub_expect, pub);
 }
+
+TEST(AccountParser, parse)
+{
+    rai::AccountParser parser(
+        "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo_"
+        "sub_account");
+    ASSERT_EQ(false, parser.Error());
+
+    rai::Account account;
+    bool error = account.DecodeAccount(
+        "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo");
+    ASSERT_EQ(false, error);
+    ASSERT_EQ(account, parser.Account());
+    ASSERT_EQ("sub_account", parser.SubAccount());
+
+    rai::AccountParser parser2(
+        "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo");
+    ASSERT_EQ(false, parser2.Error());
+    ASSERT_EQ(account, parser.Account());
+    ASSERT_EQ("", parser2.SubAccount());
+
+    rai::AccountParser parser3(
+        "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo ");
+    ASSERT_EQ(true, parser3.Error());
+
+    rai::AccountParser parser4(
+        "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtdo_");
+    ASSERT_EQ(true, parser4.Error());
+
+    rai::AccountParser parser5(
+        "rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtd");
+    ASSERT_EQ(true, parser5.Error());
+
+    rai::AccountParser parser6(
+        "Rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtd0");
+    ASSERT_EQ(true, parser6.Error());
+}

@@ -87,8 +87,10 @@ enum class ExtensionType : uint16_t
 };
 std::string ExtensionTypeToString(rai::ExtensionType);
 rai::ExtensionType StringToExtensionType(const std::string&);
+bool ExtensionAppend(rai::ExtensionType, const std::string&,
+                     std::vector<uint8_t>&);
 
-rai::Ptree ExtensionsToPtree(const std::vector<uint8_t>&);
+bool ExtensionsToPtree(const std::vector<uint8_t>&, rai::Ptree&);
 rai::ErrorCode PtreeToExtensions(const rai::Ptree&, std::vector<uint8_t>&);
 
 // Transaction Block

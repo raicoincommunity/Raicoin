@@ -295,12 +295,44 @@ rai::ExtensionType rai::StringToExtensionType(const std::string& str)
     }
 }
 
-rai::Ptree rai::ExtensionsToPtree(const std::vector<uint8_t>& data)
+bool rai::ExtensionAppend(rai::ExtensionType type, const std::string& value,
+                          std::vector<uint8_t>& extensions)
 {
-    rai::Ptree tree;
+    if (extensions.size() > std::numeric_limits<uint16_t>::max())
+    {
+        return true;
+    }
+
+    uint16_t length = 0;
+    std::vector<uint8_t> extension;
+    switch (type)
+    {
+        case rai::ExtensionType::SUB_ACCOUNT:
+        case rai::ExtensionType::NOTE:
+        {
+            rai::VectorStream stream(extension);
+            rai::Write(stream, type);
+            length = static_cast<uint16_t>(value.size());
+            rai::Write(stream, length);
+            rai::Write(stream,
+                       std::vector<uint8_t>(value.begin(), value.end()));
+            break;
+        }
+        default:
+        {
+            return true;
+        }
+    }
+
+    extensions.insert(extensions.end(), extension.begin(), extension.end());
+    return false;
+}
+
+bool rai::ExtensionsToPtree(const std::vector<uint8_t>& data, rai::Ptree& tree)
+{
     if (data.empty())
     {
-        return tree;
+        return false;
     }
 
     rai::BufferStream stream(data.data(), data.size());
@@ -317,6 +349,7 @@ rai::Ptree rai::ExtensionsToPtree(const std::vector<uint8_t>& data)
             {
                 error_info.put("error", "deserialize extension type");
                 tree.push_back(std::make_pair("", error_info));
+                return true;
             }
             break;
         }
@@ -328,7 +361,7 @@ rai::Ptree rai::ExtensionsToPtree(const std::vector<uint8_t>& data)
         {
             error_info.put("error", "deserialize extension length");
             tree.push_back(std::make_pair("", error_info));
-            break;
+            return true;
         }
         entry.put("length", std::to_string(length));
 
@@ -340,7 +373,7 @@ rai::Ptree rai::ExtensionsToPtree(const std::vector<uint8_t>& data)
             error_info.put("type", rai::ExtensionTypeToString(type));
             error_info.put("length", std::to_string(length));
             tree.push_back(std::make_pair("", error_info));
-            break;
+            return true;
         }
 
         std::string value_str;
@@ -363,7 +396,7 @@ rai::Ptree rai::ExtensionsToPtree(const std::vector<uint8_t>& data)
         tree.push_back(std::make_pair("", entry));
     }
 
-    return tree;
+    return false;
 }
 
 rai::ErrorCode rai::PtreeToExtensions(const rai::Ptree& tree,
@@ -574,7 +607,9 @@ void rai::TxBlock::SerializeJson(rai::Ptree& ptree) const
         ptree.put("link", link_.StringHex());
     }
     ptree.put("extensions_length", std::to_string(extensions_length_));
-    ptree.add_child("extensions", rai::ExtensionsToPtree(extensions_));
+    rai::Ptree extensions;
+    rai::ExtensionsToPtree(extensions_, extensions);
+    ptree.add_child("extensions", extensions);
     ptree.put("signature", signature_.StringHex());
 }
 
@@ -659,7 +694,7 @@ rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
         IF_ERROR_RETURN(error, error_code);
 
         auto extensions  = ptree.get_child_optional("extensions");
-        if (extensions)
+        if (extensions && !extensions->empty())
         {
             error_code = rai::PtreeToExtensions(*extensions, extensions_);
             IF_NOT_SUCCESS_RETURN(error_code);

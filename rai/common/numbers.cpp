@@ -655,6 +655,64 @@ std::string rai::uint256_union::StringAccount() const
     return result;
 }
 
+rai::AccountParser::AccountParser(const std::string& str)
+{
+    error_ = true;
+
+    if (str.empty() || StringContain(str, ' ') || StringContain(str, '\r')
+        || StringContain(str, '\t') || StringContain(str, '\n'))
+    {
+        return;
+    }
+
+    do
+    {
+        if (str.find("rai_") == 0)
+        {
+            size_t size = str.size();
+            if (size < 64)
+            {
+                return;
+            }
+
+            bool error = account_.DecodeAccount(str.substr(0, 64));
+            IF_ERROR_RETURN_VOID(error);
+            if (size == 64)
+            {
+                break;
+            }
+
+            if (str[64] != '_' || size == 65)
+            {
+                return;
+            }
+            sub_account_ = str.substr(65);
+        }
+        else
+        {
+            // TODO: alias
+            return;
+        }
+    } while (0);
+
+    error_ = false;
+}
+
+rai::Account rai::AccountParser::Account() const
+{
+    return account_;
+}
+
+std::string rai::AccountParser::SubAccount() const
+{
+    return sub_account_;
+}
+
+bool rai::AccountParser::Error() const
+{
+    return error_;
+}
+
 rai::RawKey::~RawKey()
 {
     data_.SecureClear();
