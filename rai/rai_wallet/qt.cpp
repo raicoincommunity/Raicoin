@@ -1018,6 +1018,7 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                         {
                             qt_main.send_.amount_->clear();
                             qt_main.send_.destination_->clear();
+                            qt_main.send_.note_->clear(); 
                             qt_main.send_.send_->setEnabled(true);
                         }
                         else

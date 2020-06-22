@@ -5,6 +5,7 @@
 #include <iostream>
 #include <rai/secure/util.hpp>
 #include <rai/rai_wallet/qt.hpp>
+#include <rai/rai_wallet/icon.hpp>
 #include <rai/wallet/config.hpp>
 
 namespace
@@ -137,6 +138,7 @@ int main(int argc, char* const* argv)
             return 1;
         }
 
+        rai::SetAppIcon(application);
         rai::ErrorCode error_code = Run(application, data_path);
         if (rai::ErrorCode::SUCCESS != error_code)
         {
