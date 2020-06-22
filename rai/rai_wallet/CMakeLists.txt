@@ -1,11 +1,16 @@
 if (WIN32)
 	set (PLATFORM_GUI_TARGET_PROPERTIES WIN32)
+	set (PLATFORM_WALLET_SOURCE plat/windows/icon.cpp ../../Raicoin.rc)
 else (WIN32)
 	set (PLATFORM_GUI_TARGET_PROPERTIES "")
 endif (WIN32)
 
+#qt5_add_resources(RES resources.qrc)
+
 add_executable (rai_wallet
 	${PLATFORM_GUI_TARGET_PROPERTIES}
+	${PLATFORM_WALLET_SOURCE}
+	${RES}
 	qt.hpp
 	qt.cpp
 	entry.cpp)
