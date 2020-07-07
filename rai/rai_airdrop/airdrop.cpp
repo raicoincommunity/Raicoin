@@ -128,7 +128,7 @@ void rai::Airdrop::Join()
 void rai::Airdrop::Run()
 {
     std::unique_lock<std::mutex> lock(mutex_);
-    if (airdrops_.empty())
+    while (airdrops_.size() < rai::AIRDROP_ACCOUNTS)
     {
         condition_.wait(lock);
     }
@@ -141,6 +141,13 @@ void rai::Airdrop::Run()
         {
             do_request = true;
             last_request_ = now;
+            std::cout << "queue size:" << airdrops_.size() << std::endl;
+            if (!airdrops_.empty())
+            {
+                std::cout << "queue head:"
+                          << airdrops_.top().account_.StringAccount()
+                          << std::endl;
+            }
         }
         lock.unlock();
 
