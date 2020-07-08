@@ -3328,6 +3328,52 @@ TEST(AdBlock, serialize)
     ASSERT_EQ(232, block.Size());
 }
 
+TEST(AdBlock, hash)
+{
+    rai::Account account;
+    rai::BlockHash hash;
+    rai::Account representive;
+    rai::Amount balance;
+    rai::uint256_union link;
+    rai::RawKey raw_key;
+    rai::PublicKey public_key;
+
+    account.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+    representive.DecodeHex(
+        "0311B25E0D1E1D7724BBA5BD523954F1DBCFC01CB8671D55ED2D32C7549FB252");
+    balance.DecodeDec("1");
+    link.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+    raw_key.data_.DecodeHex(
+        "34F0A37AAD20F4A260F0A5B3CB3D7FB50673212263E58A380BC10474BB039CE4");
+    public_key.DecodeHex(
+        "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0");
+
+    rai::AdBlock block(rai::BlockOpcode::DESTROY, 1, 1, 1541128318, 1, account,
+                       hash, representive, balance, link, raw_key, public_key);
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        block.Serialize(stream);
+    }
+
+    int ret;
+    rai::uint256_union expect_hash;
+    blake2b_state state;
+
+    ret = blake2b_init(&state, sizeof(expect_hash.bytes));
+    ASSERT_EQ(0, ret);
+
+    blake2b_update(&state, bytes.data(), bytes.size() - 64);
+
+    ret = blake2b_final(&state, expect_hash.bytes.data(),
+                        expect_hash.bytes.size());
+    ASSERT_EQ(0, ret);
+
+    ASSERT_EQ(expect_hash, block.Hash());
+}
+
 TEST(blocks, DeserializeBlockJson_TxBlock)
 {
     rai::Account account;
