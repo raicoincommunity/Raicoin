@@ -311,7 +311,10 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
     else
     {
         rai::Stats::Add(error_code);
-        if (error_code != rai::ErrorCode::BLOCK_PROCESS_EXISTS)
+        if (error_code != rai::ErrorCode::BLOCK_PROCESS_EXISTS
+            && error_code != rai::ErrorCode::BLOCK_PROCESS_GAP_PREVIOUS
+            && error_code != rai::ErrorCode::BLOCK_PROCESS_GAP_RECEIVE_SOURCE
+            && error_code != rai::ErrorCode::BLOCK_PROCESS_GAP_REWARD_SOURCE)
         {
             std::cout << rai::ErrorString(error_code) << std::endl;
         }
