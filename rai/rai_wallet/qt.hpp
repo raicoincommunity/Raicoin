@@ -32,9 +32,10 @@ enum class QtStatusType
 {
     INVALID      = 0,
     DISCONNECTED = 1,
-    ACTIVE       = 2,
-    LOCKED       = 3,
-    VULNERABLE   = 4,
+    SYNC         = 2,
+    ACTIVE       = 3,
+    LOCKED       = 4,
+    VULNERABLE   = 5,
 };
 
 class QtStatus

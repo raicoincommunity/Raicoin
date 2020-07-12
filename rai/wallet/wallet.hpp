@@ -112,6 +112,7 @@ public:
     rai::ObserverContainer<bool> wallet_locked_;
     rai::ObserverContainer<> wallet_password_set_;
     rai::ObserverContainer<const rai::Account&> receivable_;
+    rai::ObserverContainer<const rai::Account&, bool> synced_;
 };
 
 typedef std::function<void(rai::ErrorCode, const std::shared_ptr<rai::Block>&)> AccountActionCallback;
@@ -220,6 +221,9 @@ public:
     void SyncForks(const std::shared_ptr<rai::Wallet>&);
     void SyncReceivables(const rai::Account&);
     void SyncReceivables(const std::shared_ptr<rai::Wallet>&);
+    bool Synced(const rai::Account&) const;
+    void SyncedAdd(const rai::Account&);
+    void SyncedClear();
     void Unsubscribe(const std::shared_ptr<rai::Wallet>&);
     void UnsubscribeAll();
     std::vector<uint32_t> WalletIds() const;
@@ -245,6 +249,7 @@ public:
     rai::WalletObservers observers_;
 
 private:
+    rai::ErrorCode ActionCommonCheck_() const;
     void InitReceived_(rai::Transaction&);
     uint32_t NewWalletId_() const;
     void RegisterObservers_();
@@ -262,6 +267,7 @@ private:
     bool stopped_;
     uint32_t selected_wallet_id_;
     std::unordered_set<rai::BlockHash> received_;
+    std::unordered_set<rai::Account> synced_;
     std::vector<std::pair<uint32_t, std::shared_ptr<rai::Wallet>>> wallets_;
     std::multimap<rai::WalletActionPri, std::function<void()>,
                   std::greater<rai::WalletActionPri>>
@@ -273,6 +279,7 @@ private:
     std::function<void(uint32_t)> selected_wallet_observer_;
     std::function<void(bool)> wallet_locked_observer_;
     std::function<void()> wallet_password_set_observer_;
-    std::function<void(const rai::Account&)> receivable_;
+    std::function<void(const rai::Account&)> receivable_observer_;
+    std::function<void(const rai::Account&, bool)> synced_observer_;
 };
 };  // namespace rai

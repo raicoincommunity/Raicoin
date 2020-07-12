@@ -314,6 +314,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid reward_to account in config.json";
         }
+        case rai::ErrorCode::WALLET_ACCOUNT_IN_SYNC:
+        {
+            return "The account is synchronizing, please try later";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

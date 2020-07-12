@@ -109,6 +109,7 @@ enum class ErrorCode : int
     UDP_RECEIVE                          = 99,
     RESERVED_IP                          = 100,
     REWARD_TO_ACCOUNT                    = 101,
+    WALLET_ACCOUNT_IN_SYNC               = 102,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

@@ -218,11 +218,7 @@ uint16_t rai::MaxAllowedForks(uint64_t timestamp)
         return min_forks;
     }
 
-    uint64_t forks = (timestamp - rai::EpochTimestamp()) / quarter;
-    if (forks < min_forks)
-    {
-        return min_forks;
-    }
+    uint64_t forks = (timestamp - rai::EpochTimestamp()) / quarter + min_forks;
     if (forks > max_forks)
     {
         return max_forks;
