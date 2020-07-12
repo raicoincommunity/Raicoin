@@ -75,6 +75,15 @@ void rai::QtStatus::Refresh()
         status_set_.insert(rai::QtStatusType::DISCONNECTED);
     }
 
+    if (main_.wallets_->Synced(main_.wallets_->SelectedAccount()))
+    {
+        status_set_.erase(rai::QtStatusType::SYNC);
+    }
+    else
+    {
+        status_set_.insert(rai::QtStatusType::SYNC);
+    }
+
     auto wallet_id = main_.wallets_->SelectedWalletId();
     if (main_.wallets_->WalletLocked(wallet_id))
     {
@@ -134,6 +143,19 @@ void rai::QtStatus::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             [](rai::QtMain& qt_main) { qt_main.active_status_.Refresh(); });
     });
 
+    main_.wallets_->observers_.synced_.Add(
+        [qt_main_w](const rai::Account& account, bool) {
+            auto qt_main = qt_main_w.lock();
+            if (qt_main == nullptr) return;
+
+            if (qt_main->wallets_->SelectedAccount() != account)
+            {
+                return;
+            }
+            qt_main->PostEvent(
+                [](rai::QtMain& qt_main) { qt_main.active_status_.Refresh(); });
+        });
+
     Refresh();
 }
 
@@ -150,6 +172,11 @@ std::string rai::QtStatus::Text() const
         case rai::QtStatusType::DISCONNECTED:
         {
             result = "Status: Disconnected";
+            break;
+        }
+        case rai::QtStatusType::SYNC:
+        {
+            result = "Status: Synchronizing";
             break;
         }
         case rai::QtStatusType::ACTIVE:
@@ -201,6 +228,7 @@ std::string rai::QtStatus::Color() const
             result = "color: orange";
             break;
         }
+        case rai::QtStatusType::SYNC:
         case rai::QtStatusType::VULNERABLE:
         {
             result = "color: blue";

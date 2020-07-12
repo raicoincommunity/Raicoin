@@ -819,22 +819,11 @@ void rai::Wallets::AccountInfoQuery(const rai::Account& account)
 rai::ErrorCode rai::Wallets::AccountChange(
     const rai::Account& rep, const rai::AccountActionCallback& callback)
 {
+    rai::ErrorCode error_code = ActionCommonCheck_();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     auto wallet = SelectedWallet();
-    if (wallet == nullptr)
-    {
-        return rai::ErrorCode::WALLET_GET;
-    }
-
-    if (!wallet->ValidPassword())
-    {
-        return rai::ErrorCode::WALLET_LOCKED;
-    }
-
     rai::Account account = wallet->SelectedAccount();
-    if (account.IsZero())
-    {
-        return rai::ErrorCode::WALLET_ACCOUNT_GET;
-    }
 
     std::weak_ptr<rai::Wallets> this_w(Shared());
     QueueAction(
@@ -850,22 +839,11 @@ rai::ErrorCode rai::Wallets::AccountChange(
 rai::ErrorCode rai::Wallets::AccountCredit(
     uint16_t credit, const rai::AccountActionCallback& callback)
 {
+    rai::ErrorCode error_code = ActionCommonCheck_();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     auto wallet = SelectedWallet();
-    if (wallet == nullptr)
-    {
-        return rai::ErrorCode::WALLET_GET;
-    }
-
-    if (!wallet->ValidPassword())
-    {
-        return rai::ErrorCode::WALLET_LOCKED;
-    }
-
     rai::Account account = wallet->SelectedAccount();
-    if (account.IsZero())
-    {
-        return rai::ErrorCode::WALLET_ACCOUNT_GET;
-    }
 
     std::weak_ptr<rai::Wallets> this_w(Shared());
     QueueAction(rai::WalletActionPri::HIGH, [this_w, wallet, account, credit,
@@ -881,22 +859,11 @@ rai::ErrorCode rai::Wallets::AccountCredit(
 rai::ErrorCode rai::Wallets::AccountDestroy(
     const rai::AccountActionCallback& callback)
 {
+    rai::ErrorCode error_code = ActionCommonCheck_();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     auto wallet = SelectedWallet();
-    if (wallet == nullptr)
-    {
-        return rai::ErrorCode::WALLET_GET;
-    }
-
-    if (!wallet->ValidPassword())
-    {
-        return rai::ErrorCode::WALLET_LOCKED;
-    }
-
     rai::Account account = wallet->SelectedAccount();
-    if (account.IsZero())
-    {
-        return rai::ErrorCode::WALLET_ACCOUNT_GET;
-    }
 
     std::weak_ptr<rai::Wallets> this_w(Shared());
     QueueAction(rai::WalletActionPri::HIGH, [this_w, wallet, account, 
@@ -921,22 +888,11 @@ rai::ErrorCode rai::Wallets::AccountSend(
     const std::vector<uint8_t>& extensions,
     const rai::AccountActionCallback& callback)
 {
+    rai::ErrorCode error_code = ActionCommonCheck_();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     auto wallet = SelectedWallet();
-    if (wallet == nullptr)
-    {
-        return rai::ErrorCode::WALLET_GET;
-    }
-
-    if (!wallet->ValidPassword())
-    {
-        return rai::ErrorCode::WALLET_LOCKED;
-    }
-
     rai::Account account = wallet->SelectedAccount();
-    if (account.IsZero())
-    {
-        return rai::ErrorCode::WALLET_ACCOUNT_GET;
-    }
 
     std::weak_ptr<rai::Wallets> this_w(Shared());
     QueueAction(
@@ -955,17 +911,10 @@ rai::ErrorCode rai::Wallets::AccountReceive(
     const rai::Account& account, const rai::BlockHash& hash,
     const rai::AccountActionCallback& callback)
 {
+    rai::ErrorCode error_code = ActionCommonCheck_();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     auto wallet = SelectedWallet();
-    if (wallet == nullptr)
-    {
-        return rai::ErrorCode::WALLET_GET;
-    }
-
-    if (!wallet->ValidPassword())
-    {
-        return rai::ErrorCode::WALLET_LOCKED;
-    }
-
     if (account != wallet->SelectedAccount())
     {
         return rai::ErrorCode::WALLET_NOT_SELECTED_ACCOUNT;
@@ -991,6 +940,7 @@ void rai::Wallets::BlockQuery(const rai::Account& account, uint64_t height,
     ptree.put("account", account.StringAccount());
     ptree.put("height", std::to_string(height));
     ptree.put("previous", previous.StringHex());
+    ptree.put("request_id", account.StringAccount());
     Send(ptree);
 }
 
@@ -2163,9 +2113,9 @@ void rai::Wallets::ProcessReceivableInfo(const rai::Account& account,
         }
     }
 
-    if (receivable_)
+    if (receivable_observer_)
     {
-        receivable_(account);
+        receivable_observer_(account);
     }
 }
 
@@ -2390,7 +2340,6 @@ void rai::Wallets::ReceiveBlockQueryAck(
         block = rai::DeserializeBlockJson(error_code, *block_o);
         if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
         {
-            //log
             return;
         }
     }
@@ -2438,7 +2387,21 @@ void rai::Wallets::ReceiveBlockQueryAck(
     }
     else if (*status_o == "miss")
     {
-
+        auto account_o = message->get_optional<std::string>("request_id");
+        if (!account_o)
+        {
+            std::cout << "ReceiveBlockQueryAck::get account error\n";
+            return;
+        }
+        rai::Account account;
+        bool error = account.DecodeAccount(*account_o);
+        if (error)
+        {
+            std::cout << "ReceiveBlockQueryAck::invalid account:" << *account_o
+                      << std::endl;
+            return;
+        }
+        SyncedAdd(account);
     }
     else if (*status_o == "pruned")
     {
@@ -3048,6 +3011,42 @@ void rai::Wallets::SyncReceivables(const std::shared_ptr<rai::Wallet>& wallet)
     }
 }
 
+bool rai::Wallets::Synced(const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return synced_.find(account)  != synced_.end();
+}
+
+void rai::Wallets::SyncedAdd(const rai::Account& account)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        synced_.insert(account);
+    }
+
+    if (synced_observer_)
+    {
+        synced_observer_(account, true);
+    }
+}
+
+void rai::Wallets::SyncedClear()
+{
+    std::unordered_set<rai::Account> accounts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        synced_.swap(accounts);
+    }
+
+    if (synced_observer_)
+    {
+        for (const auto& account : accounts)
+        {
+            synced_observer_(account, false);
+        }
+    }
+}
+
 void rai::Wallets::Unsubscribe(const std::shared_ptr<rai::Wallet>& wallet)
 {
     if (wallet == nullptr)
@@ -3171,6 +3170,33 @@ bool rai::Wallets::WalletVulnerable(uint32_t wallet_id) const
     }
 
     return false;
+}
+
+rai::ErrorCode rai::Wallets::ActionCommonCheck_() const
+{
+    auto wallet = SelectedWallet();
+    if (wallet == nullptr)
+    {
+        return rai::ErrorCode::WALLET_GET;
+    }
+
+    if (!wallet->ValidPassword())
+    {
+        return rai::ErrorCode::WALLET_LOCKED;
+    }
+
+    rai::Account account = wallet->SelectedAccount();
+    if (account.IsZero())
+    {
+        return rai::ErrorCode::WALLET_ACCOUNT_GET;
+    }
+
+    if (!Synced(account))
+    {
+        return rai::ErrorCode::WALLET_ACCOUNT_IN_SYNC;
+    }
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 void rai::Wallets::InitReceived_(rai::Transaction& transaction)
@@ -3314,7 +3340,7 @@ void rai::Wallets::RegisterObservers_()
         });
     };
 
-    receivable_ = [wallets](const rai::Account& account) {
+    receivable_observer_ = [wallets](const rai::Account& account) {
         auto wallets_s = wallets.lock();
         if (wallets_s == nullptr) return;
 
@@ -3322,6 +3348,18 @@ void rai::Wallets::RegisterObservers_()
             if (auto wallets_s = wallets.lock())
             {
                 wallets_s->observers_.receivable_.Notify(account);
+            }
+        });
+    };
+
+    synced_observer_ = [wallets](const rai::Account& account, bool synced) {
+        auto wallets_s = wallets.lock();
+        if (wallets_s == nullptr) return;
+
+        wallets_s->Background([wallets, account, synced]() {
+            if (auto wallets_s = wallets.lock())
+            {
+                wallets_s->observers_.synced_.Notify(account, synced);
             }
         });
     };
@@ -3342,6 +3380,7 @@ void rai::Wallets::RegisterObservers_()
         else
         {
             std::cout << "websocket disconnected\n";
+            SyncedClear();
         }
     });
 
