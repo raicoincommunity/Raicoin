@@ -816,6 +816,14 @@ void rai::Wallets::AccountInfoQuery(const rai::Account& account)
     Send(ptree);
 }
 
+void rai::Wallets::AccountForksQuery(const rai::Account& account)
+{
+    rai::Ptree ptree;
+    ptree.put("action", "account_forks");
+    ptree.put("account", account.StringAccount());
+    Send(ptree);
+}
+
 rai::ErrorCode rai::Wallets::AccountChange(
     const rai::Account& rep, const rai::AccountActionCallback& callback)
 {
@@ -1311,6 +1319,138 @@ void rai::Wallets::ProcessAccountInfo(const rai::Account& account,
             return;
         }
         BlockPublish(block);
+    }
+}
+
+void rai::Wallets::ProcessAccountForks(
+    const rai::Account& account,
+    const std::vector<std::pair<std::shared_ptr<rai::Block>,
+                                std::shared_ptr<rai::Block>>>& forks)
+{
+    if (!IsMyAccount(account))
+    {
+        return;
+    }
+
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            return;
+        }
+
+        rai::AccountInfo info;
+        bool error = ledger_.AccountInfoGet(transaction, account, info);
+        if (error || !info.Valid())
+        {
+            return;
+        }
+
+        if (forks.size() == 0 && info.forks_ == 0)
+        {
+            return;
+        }
+
+        std::vector<uint64_t> heights;
+        for (auto const& i : forks)
+        {
+            if (!i.first->ForkWith(*i.second) || i.first->Account() != account)
+            {
+                return;
+            }
+            uint64_t height = i.first->Height();
+            if (std::find(heights.begin(), heights.end(), height)
+                != heights.end())
+            {
+                return;
+            }
+            heights.push_back(height);
+        }
+
+        std::vector<uint64_t> heights_l;
+        if (info.forks_ > 0)
+        {
+            rai::Iterator i = ledger_.ForkLowerBound(transaction, account);
+            rai::Iterator n = ledger_.ForkUpperBound(transaction, account);
+            for (; i != n; ++i)
+            {
+                std::shared_ptr<rai::Block> first(nullptr);
+                std::shared_ptr<rai::Block> second(nullptr);
+                error = ledger_.ForkGet(i, first, second);
+                if (error || first->Account() != account)
+                {
+                    transaction.Abort();
+                    std::cout
+                        << "Wallets::ProcessAccountForks: fork get, account="
+                        << account.StringAccount() << std::endl;
+                    return;
+                }
+                heights_l.push_back(first->Height());
+            }
+        }
+
+        if (heights_l.size() == heights.size())
+        {
+            bool same = true;
+            for (const auto& i : heights_l)
+            {
+                if (std::find(heights.begin(), heights.end(), i)
+                    == heights.end())
+                {
+                    same = false;
+                    break;
+                }
+            }
+
+            if (same)
+            {
+                return;
+            }
+        }
+
+        for (const auto& i : heights_l)
+        {
+            error = ledger_.ForkDel(transaction, account, i);
+            if (error)
+            {
+                transaction.Abort();
+                std::cout
+                    << "Wallets::ProcessAccountForks: fork delete, account="
+                    << account.StringAccount() << ", height=" << i << std::endl;
+                return;
+            }
+        }
+
+        for (const auto& i : forks)
+        {
+            error = ledger_.ForkPut(transaction, account, i.first->Height(),
+                                    *i.first, *i.second);
+            if (error)
+            {
+                transaction.Abort();
+                std::cout << "Wallets::ProcessAccountForks: fork put, account="
+                          << account.StringAccount()
+                          << ", height=" << i.first->Height() << std::endl;
+                return;
+            }
+        }
+
+        info.forks_ = forks.size();
+        error       = ledger_.AccountInfoPut(transaction, account, info);
+        if (error)
+        {
+            transaction.Abort();
+            std::cout
+                << "Wallets::ProcessAccountForks: account info put, account="
+                << account.StringAccount() << std::endl;
+            return;
+        }
+    }
+
+    if (fork_observer_)
+    {
+        fork_observer_(account);
     }
 }
 
@@ -1903,6 +2043,7 @@ void rai::Wallets::ProcessBlock(const std::shared_ptr<rai::Block>& block,
                 ledger_.AccountInfoPut(transaction, block->Account(), new_info);
             if (error)
             {
+                transaction.Abort();
                 // log
                 return;
             }
@@ -2131,6 +2272,20 @@ void rai::Wallets::QueueAccountInfo(const rai::Account& account,
     });
 }
 
+void rai::Wallets::QueueAccountForks(
+    const rai::Account& account,
+    const std::vector<std::pair<std::shared_ptr<rai::Block>,
+                                std::shared_ptr<rai::Block>>>& forks)
+{
+    std::weak_ptr<rai::Wallets> wallets(Shared());
+    QueueAction(rai::WalletActionPri::URGENT, [wallets, account, forks]() {
+        if (auto wallets_s = wallets.lock())
+        {
+            wallets_s->ProcessAccountForks(account, forks);
+        }
+    });
+}
+
 void rai::Wallets::QueueAction(rai::WalletActionPri pri,
                                const std::function<void()>& action)
 {
@@ -2254,6 +2409,93 @@ void rai::Wallets::ReceiveAccountInfoQueryAck(
     }
 
     QueueAccountInfo(account, info);
+}
+
+void rai::Wallets::ReceiveAccountForksQueryAck(
+    const std::shared_ptr<rai::Ptree>& message)
+{
+    auto account_o = message->get_optional<std::string>("account");
+    if (!account_o)
+    {
+        std::cout
+            << "Wallets::ReceiveAccountForksQueryAck: Failed to get account"
+            << std::endl;
+        return;
+    }
+
+    rai::Account account;
+    bool error = account.DecodeAccount(*account_o);
+    if (error)
+    {
+        std::cout
+            << "Wallets::ReceiveAccountForksQueryAck: Failed to decode account="
+            << *account_o << std::endl;
+        return;
+    }
+
+    auto forks_o = message->get_child_optional("forks");
+    if (!forks_o)
+    {
+        return;
+    }
+
+    std::vector<
+        std::pair<std::shared_ptr<rai::Block>, std::shared_ptr<rai::Block>>>
+        forks;
+    for (const auto& i : *forks_o)
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        auto first_o = i.second.get_child_optional("block_first");
+        if (!first_o)
+        {
+            std::cout << "Wallets::ReceiveAccountForksQueryAck: Failed to get "
+                         "first block, account="
+                      << account.StringAccount() << std::endl;
+            return;
+        }
+        std::shared_ptr<rai::Block> first(nullptr);
+        first = rai::DeserializeBlockJson(error_code, *first_o);
+        if (error_code != rai::ErrorCode::SUCCESS || first == nullptr)
+        {
+            std::cout
+                << "Wallets::ReceiveAccountForksQueryAck: Failed to parse "
+                   "first block, account="
+                << account.StringAccount() << std::endl;
+            return;
+        }
+
+        auto second_o = i.second.get_child_optional("block_second");
+        if (!second_o)
+        {
+            std::cout << "Wallets::ReceiveAccountForksQueryAck: Failed to get "
+                         "second block, account="
+                      << account.StringAccount() << std::endl;
+            return;
+        }
+        std::shared_ptr<rai::Block> second(nullptr);
+        second = rai::DeserializeBlockJson(error_code, *second_o);
+        if (error_code != rai::ErrorCode::SUCCESS || second == nullptr)
+        {
+            std::cout
+                << "Wallets::ReceiveAccountForksQueryAck: Failed to parse "
+                   "second block, account="
+                << account.StringAccount() << std::endl;
+            return;
+        }
+
+        if (first->Account() != account || second->Account() != account
+            || !first->ForkWith(*second))
+        {
+            std::cout
+                << "Wallets::ReceiveAccountForksQueryAck: data inconsistent"
+                << std::endl;
+            return;
+        }
+
+        forks.push_back({first, second});
+    }
+
+    QueueAccountForks(account, forks);
 }
 
 void rai::Wallets::ReceiveBlockAppendNotify(
@@ -2615,6 +2857,10 @@ void rai::Wallets::ReceiveMessage(const std::shared_ptr<rai::Ptree>& message)
         {
             ReceiveAccountInfoQueryAck(message);
         }
+        else if (ack == "account_forks")
+        {
+            ReceiveAccountForksQueryAck(message);
+        }
     }
 
     auto notify_o = message->get_optional<std::string>("notify");
@@ -2943,7 +3189,7 @@ void rai::Wallets::SyncAccountInfo(const std::shared_ptr<rai::Wallet>& wallet)
 
     for (const auto& i : accounts)
     {
-       AccountInfoQuery(i.second.first);
+        AccountInfoQuery(i.second.first);
     }
 }
 
@@ -2984,12 +3230,21 @@ void rai::Wallets::SyncBlocks(const std::shared_ptr<rai::Wallet>& wallet)
 
 void rai::Wallets::SyncForks(const rai::Account& account)
 {
-    static_assert(RAI_TODO, "Wallets::SyncForks");
+    AccountForksQuery(account);
 }
 
 void rai::Wallets::SyncForks(const std::shared_ptr<rai::Wallet>& wallet)
 {
-    static_assert(RAI_TODO, "Wallets::SyncForks");
+    if (wallet == nullptr)
+    {
+        return;
+    }
+    auto accounts = wallet->Accounts();
+
+    for (const auto& i : accounts)
+    {
+        AccountForksQuery(i.second.first);
+    }
 }
 
 void rai::Wallets::SyncReceivables(const rai::Account& account)
@@ -3360,6 +3615,18 @@ void rai::Wallets::RegisterObservers_()
             if (auto wallets_s = wallets.lock())
             {
                 wallets_s->observers_.synced_.Notify(account, synced);
+            }
+        });
+    };
+
+    fork_observer_ = [wallets](const rai::Account& account) {
+        auto wallets_s = wallets.lock();
+        if (wallets_s == nullptr) return;
+
+        wallets_s->Background([wallets, account]() {
+            if (auto wallets_s = wallets.lock())
+            {
+                wallets_s->observers_.fork_.Notify(account);
             }
         });
     };

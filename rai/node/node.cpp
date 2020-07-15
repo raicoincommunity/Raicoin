@@ -472,13 +472,21 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
         return;
     }
 
-    block_processor_.observer_ = [this](
+    block_processor_.block_observer_ = [this](
                                      const rai::BlockProcessResult& result,
                                      const std::shared_ptr<rai::Block>& block) {
         Background([this, result, block]() {
             observers_.block_.Notify(result, block);
         });
     };
+
+    block_processor_.fork_observer_ =
+        [this](bool add, const std::shared_ptr<rai::Block>& first,
+               const std::shared_ptr<rai::Block>& second) {
+            Background([this, add, first, second]() {
+                observers_.fork_.Notify(add, first, second);
+            });
+        };
 
     observers_.block_.Add([this](const rai::BlockProcessResult& result,
                                  const std::shared_ptr<rai::Block>& block) {

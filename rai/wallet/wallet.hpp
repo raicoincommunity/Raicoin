@@ -113,6 +113,7 @@ public:
     rai::ObserverContainer<> wallet_password_set_;
     rai::ObserverContainer<const rai::Account&> receivable_;
     rai::ObserverContainer<const rai::Account&, bool> synced_;
+    rai::ObserverContainer<const rai::Account&> fork_;
 };
 
 typedef std::function<void(rai::ErrorCode, const std::shared_ptr<rai::Block>&)> AccountActionCallback;
@@ -131,6 +132,7 @@ public:
     bool AccountRepresentative(const rai::Account&, rai::Account&);
     void AccountTransactionsLimit(const rai::Account&, uint32_t&, uint32_t&);
     void AccountInfoQuery(const rai::Account&);
+    void AccountForksQuery(const rai::Account&);
     rai::ErrorCode AccountChange(const rai::Account&,
                                  const rai::AccountActionCallback&);
     rai::ErrorCode AccountCredit(uint16_t, const rai::AccountActionCallback&);
@@ -157,6 +159,10 @@ public:
     void Run();
     void Ongoing(const std::function<void()>&, const std::chrono::seconds&);
     void ProcessAccountInfo(const rai::Account&, const rai::AccountInfo&);
+    void ProcessAccountForks(
+        const rai::Account&,
+        const std::vector<std::pair<std::shared_ptr<rai::Block>,
+                                    std::shared_ptr<rai::Block>>>&);
     void ProcessAccountChange(const std::shared_ptr<rai::Wallet>&,
                               const rai::Account&, const rai::Account&,
                               const rai::AccountActionCallback&);
@@ -178,6 +184,10 @@ public:
     void ProcessReceivableInfo(const rai::Account&, const rai::BlockHash&,
                                const rai::ReceivableInfo&);
     void QueueAccountInfo(const rai::Account&, const rai::AccountInfo&);
+    void QueueAccountForks(
+        const rai::Account&,
+        const std::vector<std::pair<std::shared_ptr<rai::Block>,
+                                    std::shared_ptr<rai::Block>>>&);
     void QueueAction(rai::WalletActionPri, const std::function<void()>&);
     void QueueBlock(const std::shared_ptr<rai::Block>&, bool);
     void QueueBlockRollback(const std::shared_ptr<rai::Block>&);
@@ -186,6 +196,7 @@ public:
     rai::Account RandomRepresentative() const;
     void ReceivablesQuery(const rai::Account&);
     void ReceiveAccountInfoQueryAck(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveAccountForksQueryAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockAppendNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockConfirmNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockRollbackNotify(const std::shared_ptr<rai::Ptree>&);
@@ -281,5 +292,6 @@ private:
     std::function<void()> wallet_password_set_observer_;
     std::function<void(const rai::Account&)> receivable_observer_;
     std::function<void(const rai::Account&, bool)> synced_observer_;
+    std::function<void(const rai::Account&)> fork_observer_;
 };
 };  // namespace rai

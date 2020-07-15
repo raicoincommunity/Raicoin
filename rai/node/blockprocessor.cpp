@@ -48,7 +48,7 @@ void rai::BlockProcessor::Add(const std::shared_ptr<rai::Block>& block)
         auto it = blocks_.rbegin();
         rai::BlockProcessResult result{rai::BlockOperation::DROP,
                                        rai::ErrorCode::SUCCESS, 0};
-        observer_(result, it->block_);
+        block_observer_(result, it->block_);
         blocks_.erase((++it).base());
     }
 
@@ -205,7 +205,7 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
             rai::Stats::Add(error_code, "BlockProcessor::ProcessBlock_");
             rai::BlockProcessResult result{rai::BlockOperation::DROP,
                                            error_code, 0};
-            observer_(result, block);
+            block_observer_(result, block);
             return;
         }
 
@@ -321,7 +321,7 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
     }
 
     rai::BlockProcessResult result{rai::BlockOperation::APPEND, error_code, 0};
-    observer_(result, block);
+    block_observer_(result, block);
 
 }
 
@@ -336,6 +336,9 @@ void rai::BlockProcessor::ProcessBlockFork_(
 
     bool broadcast = false;
     bool election = false;
+    bool del = false;
+    std::shared_ptr<rai::Block> del_first;
+    std::shared_ptr<rai::Block> del_second;
     do
     {
         rai::Account account = first->Account();
@@ -407,12 +410,26 @@ void rai::BlockProcessor::ProcessBlockFork_(
                 if (first->Height() > max_height)
                 {
                     max_height = first->Height();
+                    del_first = first;
+                    del_second = second;
                 }
             }
             if (max_height == height)
             {
                 return;
             }
+
+            if (del_first == nullptr || del_second == nullptr
+                || del_first->Height() != max_height)
+            {
+                assert(0);
+                rai::Stats::Add(
+                    rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_GET,
+                    "BlockProcessor::ProcessBlockFork_: logic error");
+                transaction.Abort();
+                return;
+            }
+            del = true;
             error = ledger_.ForkDel(transaction, account, max_height);
             if (error)
             {
@@ -433,9 +450,18 @@ void rai::BlockProcessor::ProcessBlockFork_(
         broadcast = true;
     } while(0);
 
+    if (del && fork_observer_)
+    {
+        fork_observer_(false, del_first, del_second);
+    }
+
     if (broadcast)
     {
         node_.BroadcastFork(first, second);
+        if (fork_observer_)
+        {
+            fork_observer_(true, first, second);
+        }
     }
 
     if (election)
@@ -536,7 +562,7 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
 
         rai::BlockProcessResult result{top.operation_, error_code,
                                        last_confirm_height};
-        observer_(result, top.block_);
+        block_observer_(result, top.block_);
 
         if (error_code == rai::ErrorCode::SUCCESS)
         {
