@@ -34,6 +34,12 @@ rai::Subscriptions::Subscriptions(rai::Node& node) : node_(node)
                 // do nothing
             }
         });
+
+    node_.observers_.fork_.Add(
+        [this](bool add, const std::shared_ptr<rai::Block>& first,
+               const std::shared_ptr<rai::Block>& second) {
+            BlockFork(add, first, second);
+        });
 }
 
 void rai::Subscriptions::Add(const rai::Account& account)
@@ -188,6 +194,27 @@ void rai::Subscriptions::BlockDrop(const std::shared_ptr<rai::Block>& block)
         ptree.put_child("block", block_ptree);
         node_.PostJson(node_.config_.callback_url_, ptree);
     }
+}
+
+void rai::Subscriptions::BlockFork(bool add,
+                                   const std::shared_ptr<rai::Block>& first,
+                                   const std::shared_ptr<rai::Block>& second)
+{
+    if (!Exists(first->Account()))
+    {
+        return;
+    }
+
+    rai::Ptree ptree;
+    ptree.put("notify", add ? "fork_add" : "fork_delete");
+    ptree.put("account", first->Account().StringAccount());
+    rai::Ptree ptree_first;
+    first->SerializeJson(ptree_first);
+    ptree.put_child("block_first", ptree_first);
+    rai::Ptree ptree_second;
+    second->SerializeJson(ptree_second);
+    ptree.put_child("block_second", ptree_second);
+    node_.PostJson(node_.config_.callback_url_, ptree);
 }
 
 void rai::Subscriptions::ConfirmReceivables(const rai::Account& account)

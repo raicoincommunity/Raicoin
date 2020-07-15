@@ -110,7 +110,10 @@ public:
 
     std::function<void(const rai::BlockProcessResult&,
                        const std::shared_ptr<rai::Block>&)>
-        observer_;
+        block_observer_;
+    std::function<void(bool, const std::shared_ptr<rai::Block>&,
+                       const std::shared_ptr<rai::Block>&)>
+        fork_observer_;
 
 private:
     static uint32_t Priority_(const std::shared_ptr<rai::Block>&);

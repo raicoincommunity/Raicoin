@@ -176,6 +176,9 @@ public:
     rai::ObserverContainer<const rai::BlockProcessResult&,
                            const std::shared_ptr<rai::Block>&>
         block_;
+    rai::ObserverContainer<bool, const std::shared_ptr<rai::Block>&,
+                           const std::shared_ptr<rai::Block>&>
+        fork_;
 };
 
 class RepWeights

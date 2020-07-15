@@ -389,10 +389,11 @@ class QtHistoryVisitor : public rai::BlockVisitor
 {
 public:
     QtHistoryVisitor(rai::Transaction& transaction, rai::Ledger& ledger,
-                     uint64_t confirmed_height)
+                     uint64_t confirmed_height, bool fork)
         : transaction_(transaction),
           ledger_(ledger),
-          confirmed_height_(confirmed_height)
+          confirmed_height_(confirmed_height),
+          fork_(fork)
     {
     }
 
@@ -412,6 +413,10 @@ public:
         else
         {
             record_.status_ = "confirmed";
+        }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
         }
 
         std::shared_ptr<rai::Block> previous(nullptr);
@@ -445,6 +450,10 @@ public:
         else
         {
             record_.status_ = "confirmed";
+        }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
         }
 
         if (record_.height_ == 0)
@@ -490,6 +499,10 @@ public:
         {
             record_.status_ = "confirmed";
         }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
+        }
 
         return rai::ErrorCode::SUCCESS;
     }
@@ -510,6 +523,10 @@ public:
         else
         {
             record_.status_ = "confirmed";
+        }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
         }
 
         std::shared_ptr<rai::Block> previous(nullptr);
@@ -544,6 +561,10 @@ public:
         {
             record_.status_ = "confirmed";
         }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
+        }
 
         std::shared_ptr<rai::Block> previous(nullptr);
         bool error = ledger_.BlockGet(transaction_, block.Previous(), previous);
@@ -577,6 +598,10 @@ public:
         {
             record_.status_ = "confirmed";
         }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
+        }
 
         std::shared_ptr<rai::Block> previous(nullptr);
         bool error = ledger_.BlockGet(transaction_, block.Previous(), previous);
@@ -596,6 +621,7 @@ public:
     rai::Transaction& transaction_;
     rai::Ledger& ledger_;
     uint64_t confirmed_height_;
+    bool fork_;
 
     rai::QtHistoryRecord record_;
 };
@@ -767,7 +793,9 @@ bool rai::QtHistoryModel::Record(int row) const
     }
     IF_ERROR_RETURN(error, true);
 
-    QtHistoryVisitor visitor(transaction, ledger, confirmed_height_);
+    bool fork =
+        ledger.ForkExists(transaction, block->Account(), block->Height());
+    QtHistoryVisitor visitor(transaction, ledger, confirmed_height_, fork);
     block->Visit(visitor);
     current_record_ = visitor.record_;
 
@@ -819,6 +847,15 @@ void rai::QtHistory::OnMenuRequested(const QPoint& pos)
     std::vector<std::shared_ptr<QAction>> actions;
     actions.push_back(std::make_shared<QAction>("Copy block json"));
     actions.push_back(std::make_shared<QAction>("Copy block raw"));
+
+    QModelIndex index(main_.history_.view_->indexAt(pos));
+    model_->data(index, Qt::DisplayRole);
+    auto status = model_->Field(5).toString();
+    if (status.contains("fork"))
+    {
+        actions.push_back(std::make_shared<QAction>("Copy fork detail"));
+    }
+
     for (const auto& action : actions)
     {
         menu->addAction(action.get());
@@ -836,37 +873,59 @@ void rai::QtHistory::OnMenuRequested(const QPoint& pos)
             {
                 return;
             }
+            uint64_t height = head_height - index.row();
 
             rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
             rai::Ledger& ledger       = qt_main->wallets_->ledger_;
             rai::Transaction transaction(error_code, ledger, false);
             IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
-            std::shared_ptr<rai::Block> block(nullptr);
-            bool error = ledger.BlockGet(transaction, account,
-                                         head_height - index.row(), block);
-            IF_ERROR_RETURN_VOID(error);
-
-            std::string block_str;
+            std::string copy_str;
+            bool error;
             if (action->text() == "Copy block json")
             {
-                block_str = block->Json();
+                std::shared_ptr<rai::Block> block(nullptr);
+                error = ledger.BlockGet(transaction, account, height, block);
+                IF_ERROR_RETURN_VOID(error);
+                copy_str = block->Json();
             }
             else if (action->text() == "Copy block raw")
             {
+                std::shared_ptr<rai::Block> block(nullptr);
+                error = ledger.BlockGet(transaction, account, height, block);
+                IF_ERROR_RETURN_VOID(error);
                 std::vector<uint8_t> bytes;
                 {
                     rai::VectorStream stream(bytes);
                     block->Serialize(stream);
                 }
-                block_str = rai::BytesToHex(bytes.data(), bytes.size());
+                copy_str = rai::BytesToHex(bytes.data(), bytes.size());
+            }
+            else if (action->text() == "Copy fork detail")
+            {
+                rai::Ptree ptree;
+                std::shared_ptr<rai::Block> first(nullptr);
+                std::shared_ptr<rai::Block> second(nullptr);
+                error =
+                    ledger.ForkGet(transaction, account, height, first, second);
+                IF_ERROR_RETURN_VOID(error);
+                rai::Ptree ptree_first;
+                rai::Ptree ptree_second;
+                first->SerializeJson(ptree_first);
+                second->SerializeJson(ptree_second);
+                ptree.put_child("block_first", ptree_first);
+                ptree.put_child("block_second", ptree_second);
+                std::stringstream ostream;
+                boost::property_tree::write_json(ostream, ptree);
+                ostream.flush();
+                copy_str = ostream.str();
             }
             else
             {
                 return;
             }
 
-            qt_main->application_.clipboard()->setText(block_str.c_str());
+            qt_main->application_.clipboard()->setText(copy_str.c_str());
         });
     menu->popup(view_->viewport()->mapToGlobal(pos));
 }
@@ -927,6 +986,21 @@ void rai::QtHistory::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             qt_main->PostEvent(
                 [](rai::QtMain& qt_main) { qt_main.history_.Refresh(); });
         });
+
+    main_.wallets_->observers_.fork_.Add(
+        [qt_main_w](const rai::Account& account) {
+            auto qt_main = qt_main_w.lock();
+            if (qt_main == nullptr) return;
+
+            if (account != qt_main->wallets_->SelectedAccount())
+            {
+                return;
+            }
+
+            qt_main->PostEvent(
+                [](rai::QtMain& qt_main) { qt_main.history_.Refresh(); });
+        });
+
     Refresh();
 }
 

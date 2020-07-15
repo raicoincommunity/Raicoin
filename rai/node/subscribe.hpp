@@ -34,6 +34,8 @@ public:
     void BlockConfirm(const std::shared_ptr<rai::Block>&, uint64_t);
     void BlockRollback(const std::shared_ptr<rai::Block>&);
     void BlockDrop(const std::shared_ptr<rai::Block>&);
+    void BlockFork(bool, const std::shared_ptr<rai::Block>&,
+                   const std::shared_ptr<rai::Block>&);
     void ConfirmReceivables(const rai::Account&);
     void Cutoff();
     void Erase(const rai::Account&);
