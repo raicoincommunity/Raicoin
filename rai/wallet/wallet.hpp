@@ -201,6 +201,7 @@ public:
     void ReceiveBlockConfirmNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockRollbackNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockQueryAck(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveForkNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveReceivablesQueryAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveReceivableInfoNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveMessage(const std::shared_ptr<rai::Ptree>&);
