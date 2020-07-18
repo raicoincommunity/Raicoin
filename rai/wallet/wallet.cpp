@@ -2656,6 +2656,28 @@ void rai::Wallets::ReceiveBlockQueryAck(
     
 }
 
+void rai::Wallets::ReceiveForkNotify(const std::shared_ptr<rai::Ptree>& message)
+{
+    auto account_o = message->get_optional<std::string>("account");
+    if (!account_o)
+    {
+        std::cout << "Wallets::ReceiveForkNotify: Failed to get account"
+                  << std::endl;
+        return;
+    }
+
+    rai::Account account;
+    bool error = account.DecodeAccount(*account_o);
+    if (error)
+    {
+        std::cout << "Wallets::ReceiveForkNotify: Failed to decode account="
+                  << *account_o << std::endl;
+        return;
+    }
+
+    SyncForks(account);
+}
+
 void rai::Wallets::ReceiveReceivablesQueryAck(
     const std::shared_ptr<rai::Ptree>& message)
 {
@@ -2882,6 +2904,10 @@ void rai::Wallets::ReceiveMessage(const std::shared_ptr<rai::Ptree>& message)
         else if (notify == "receivable_info")
         {
             ReceiveReceivableInfoNotify(message);
+        }
+        else if (notify == "fork_add" || notify == "fork_delete")
+        {
+            ReceiveForkNotify(message);
         }
     }
 }
