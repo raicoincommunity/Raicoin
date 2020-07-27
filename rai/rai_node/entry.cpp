@@ -48,7 +48,7 @@ int main(int argc, char* const* argv)
 {
     rai::Ptree ptree;
     rai::ErrorCode error_code;
-    std::stringstream stream = std::stringstream(rai::BETA_GENESIS_BLOCK);
+    std::stringstream stream = std::stringstream(rai::LIVE_GENESIS_BLOCK);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block(error_code, ptree);
     std::cout << "error_code:" << rai::ErrorString(error_code) << std::endl;
