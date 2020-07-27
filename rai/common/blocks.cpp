@@ -95,33 +95,30 @@ rai::BlockOpcode rai::StringToBlockOpcode(const std::string& str)
     {
         return rai::BlockOpcode::SEND;
     }
-
-    if (str == "receive")
+    else if (str == "receive")
     {
         return rai::BlockOpcode::RECEIVE;
     }
-
-    if (str == "change")
+    else if (str == "change")
     {
         return rai::BlockOpcode::CHANGE;
     }
-
-    if (str == "credit")
+    else if (str == "credit")
     {
         return rai::BlockOpcode::CREDIT;
     }
-
-    if (str == "reward")
+    else if (str == "reward")
     {
         return rai::BlockOpcode::REWARD;
     }
-
-    if (str == "destroy")
+    else if (str == "destroy")
     {
         return rai::BlockOpcode::DESTROY;
     }
-
-    return rai::BlockOpcode::INVALID;
+    else
+    {
+        return rai::BlockOpcode::INVALID;
+    }
 }
 
 rai::Block::Block() : signature_checked_(false), signature_error_(false)

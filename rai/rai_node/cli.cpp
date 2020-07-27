@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <boost/filesystem.hpp>
+#include <rai/common/parameters.hpp>
 #include <rai/secure/util.hpp>
 #include <rai/rai_node/daemon.hpp>
 
@@ -154,6 +155,14 @@ rai::ErrorCode ProcessSign(const boost::program_options::variables_map& vm,
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ErrorCode ProcessVersion(const boost::program_options::variables_map& vm,
+                              const boost::filesystem::path& data_path)
+{
+    std::cout << rai::RAI_VERSION_STRING << " " << rai::NetworkString()
+              << " network" << std::endl;
+    return rai::ErrorCode::SUCCESS;
+}
+
 }  // namespace
 
 void rai::CliAddOptions(boost::program_options::options_description& desc){
@@ -167,6 +176,7 @@ void rai::CliAddOptions(boost::program_options::options_description& desc){
         ("key_create", "Generate a random key pair and save it to <file>")
         ("key_show", "Show key pair infomation in the specified <file>")
         ("sign", "Sign <hash> with a specified <key>")
+        ("version", "Prints out version")
         ;
 
     // clang-format on
@@ -217,6 +227,10 @@ rai::ErrorCode rai::CliProcessOptions(
         else if (vm.count("sign"))
         {
             error_code = ProcessSign(vm, data_path);
+        }
+        else if (vm.count("version"))
+        {
+            error_code = ProcessVersion(vm, data_path);
         }
         else
         {

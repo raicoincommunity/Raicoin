@@ -99,7 +99,6 @@ rai::Ptree rai::MessageDumper::Get() const
     return result;
 }
 
-
 void rai::MessageDumper::On(const std::string& type, const std::string& ip)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -222,4 +221,122 @@ rai::Ptree rai::MessageDumper::ParseMessageNormal(
     result.put_child("header", header_ptree);
     result.put("body", rai::BytesToHex(body.data(), body.size()));
     return result;
+}
+
+rai::Ptree rai::BlockDumpEntry::Get() const
+{
+    rai::Ptree result;
+    result.put("timestamp", std::to_string(timestamp_));
+    result.put("operation", rai::BlockOperationToString(operation_));
+    result.put("error_code", static_cast<uint32_t>(error_code_));
+    if (error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        result.put("error", rai::ErrorString(error_code_));
+    }
+    rai::Ptree block;
+    block_->SerializeJson(block);
+    result.put_child("block", block);
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        block_->Serialize(stream);
+    }
+    result.put("block_raw", rai::BytesToHex(bytes.data(), bytes.size()));
+    result.put("block_hash", block_->Hash().StringHex());
+
+    return result;
+}
+
+rai::BlockDumper::BlockDumper() : on_(false), index_(0)
+{
+}
+
+void rai::BlockDumper::Dump(const rai::BlockProcessResult& result,
+                            const std::shared_ptr<rai::Block>& block)
+{
+    Dump(result, block, rai::Account());
+}
+
+void rai::BlockDumper::Dump(const rai::BlockProcessResult& result,
+                            const std::shared_ptr<rai::Block>& block,
+                            const rai::Account& root)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!on_ || block == nullptr)
+    {
+        return;
+    }
+
+    if (!account_.IsZero() && block->Account() != account_)
+    {
+        return;
+    }
+
+    if (!root_.IsZero() && root != root_)
+    {
+        return;
+    }
+
+    rai::BlockDumpEntry entry;
+    entry.timestamp_ = rai::CurrentTimestampMilliseconds();
+    entry.operation_ = result.operation_;
+    entry.error_code_ = result.error_code_;
+    entry.block_ = block;
+    if (index_ < rai::BlockDumper::MAX_SIZE)
+    {
+        entries_.push_back(entry);
+    }
+    else
+    {
+        entries_[index_ % rai::BlockDumper::MAX_SIZE] = entry;
+    }
+    ++index_;
+}
+
+rai::Ptree rai::BlockDumper::Get() const
+{
+    rai::Ptree result;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (index_ <= rai::BlockDumper::MAX_SIZE)
+    {
+        for (auto i = entries_.begin(), n = entries_.end(); i != n; ++i)
+        {
+            result.push_back(std::make_pair("", i->Get()));
+        }
+    }
+    else
+    {
+        uint64_t index = index_ % rai::BlockDumper::MAX_SIZE;
+        for (auto i = entries_.begin() + index, n = entries_.end(); i != n; ++i)
+        {
+            result.push_back(std::make_pair("", i->Get()));
+        }
+        for (auto i = entries_.begin(), n = entries_.begin() + index; i != n;
+             ++i)
+        {
+            result.push_back(std::make_pair("", i->Get()));
+        }
+    }
+
+    return result;
+}
+
+void rai::BlockDumper::On(const rai::Account& account, const rai::Account& root)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    on_ = true;
+    account_ = account;
+    root_ = root;
+    index_ = 0;
+    entries_.clear();
+}
+
+void rai::BlockDumper::Off()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    on_ = false;
+    account_.Clear();
+    root_.Clear();
+    index_ = 0;
+    entries_.clear();
 }

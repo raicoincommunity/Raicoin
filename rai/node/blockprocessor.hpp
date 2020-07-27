@@ -28,6 +28,8 @@ enum class BlockOperation : uint64_t
 
     DYNAMIC_BEGIN
 };
+std::string BlockOperationToString(rai::BlockOperation);
+rai::BlockOperation StringToBlockOperation(const std::string&);
 
 class BlockForced
 {
@@ -75,6 +77,7 @@ public:
     bool Busy() const;
     void Run();
     void Stop();
+    void Status(rai::Ptree&) const;
 
     static size_t constexpr MAX_BLOCKS = 256 * 1024;
     static size_t constexpr MAX_BLOCKS_FORK = 128 * 1024;
@@ -155,6 +158,7 @@ private:
     std::unordered_map<uint64_t, std::stack<rai::BlockDynamic>> blocks_dynamic_;
     std::unordered_map<uint64_t, std::unordered_set<rai::Account>>
         accounts_dynamic_;
+    std::unordered_map<uint64_t, rai::Account> roots_dynamic_;
 
     // mutex begin
     mutable std::mutex mutex_;
