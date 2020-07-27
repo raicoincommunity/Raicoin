@@ -198,3 +198,28 @@ TEST(parameters, BETA_GENESIS_BLOCK)
     ASSERT_EQ(public_key, block.Link());
     ASSERT_EQ(rai::BlockOpcode::RECEIVE, block.Opcode());
 }
+
+TEST(parameters, LIVE_GENESIS_BLOCK)
+{
+    rai::Ptree ptree;
+    rai::ErrorCode error_code;
+    std::stringstream stream(rai::LIVE_GENESIS_BLOCK);
+    boost::property_tree::read_json(stream, ptree);
+    rai::TxBlock block(error_code, ptree);
+    
+    ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
+    ASSERT_EQ(false, block.CheckSignature());
+    ASSERT_EQ(block.Balance(), rai::Amount(10010000 * rai::RAI));
+    ASSERT_EQ(rai::LIVE_EPOCH_TIMESTAMP, block.Timestamp());
+
+    rai::PublicKey public_key;
+    bool error = public_key.DecodeHex(rai::LIVE_PUBLIC_KEY);
+    ASSERT_EQ(false, error);
+    ASSERT_EQ(public_key, block.Account());
+    ASSERT_EQ(true, block.Previous().IsZero());
+    ASSERT_EQ(512, block.Credit());
+    ASSERT_EQ(0, block.Height());
+    ASSERT_EQ(1, block.Counter());
+    ASSERT_EQ(public_key, block.Link());
+    ASSERT_EQ(rai::BlockOpcode::RECEIVE, block.Opcode());
+}

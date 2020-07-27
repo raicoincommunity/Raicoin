@@ -36,7 +36,7 @@ public:
     bool CheckWhitelist(const boost::asio::ip::address_v4&) const;
 
     static uint16_t constexpr DEFAULT_PORT =
-        rai::RAI_NETWORK == rai::RaiNetworks::LIVE ? 7078 : 54301;
+        rai::RAI_NETWORK == rai::RaiNetworks::LIVE ? 7176 : 54301;
 
     boost::asio::ip::tcp::acceptor acceptor_;
     rai::RpcConfig config_;

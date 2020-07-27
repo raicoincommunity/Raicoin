@@ -37,7 +37,7 @@ uint64_t rai::EpochTimestamp()
         }
         case rai::RaiNetworks::LIVE:
         {
-            throw std::runtime_error("Live network epoch timestamp is missing");
+            return rai::LIVE_EPOCH_TIMESTAMP;
         }
         default:
         {
@@ -60,8 +60,7 @@ std::string rai::GenesisPublicKey()
         }
         case rai::RaiNetworks::LIVE:
         {
-            throw std::runtime_error(
-                "Live network genesis public key is missing");
+            return rai::LIVE_PUBLIC_KEY;
         }
         default:
         {
@@ -84,7 +83,7 @@ rai::Amount rai::GenesisBalance()
         }
         case rai::RaiNetworks::LIVE:
         {
-            throw std::runtime_error("Live network genesis balance is missing");
+            return rai::Amount(rai::LIVE_GENESIS_BALANCE * rai::RAI);
         }
         default:
         {
@@ -107,7 +106,7 @@ std::string rai::GenesisBlock()
         }
         case rai::RaiNetworks::LIVE:
         {
-            throw std::runtime_error("Live network genesis block is missing");
+            return rai::LIVE_GENESIS_BLOCK;
         }
         default:
         {

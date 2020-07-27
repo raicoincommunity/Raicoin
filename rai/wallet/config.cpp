@@ -46,8 +46,10 @@ std::vector<std::string> DefaultPreconfiguredReps()
         }
         case rai::RaiNetworks::LIVE:
         {
-            throw std::runtime_error(
-                "Wallet preconfigured representatives are missing");
+            result.push_back("rai_3h5s5bgaf1jp1rofe5umxan84kiwxj3ppeuyids7zzaxahsohzchcyxqzwp6");
+            result.push_back("rai_1os5ozxsjajpnkdj6zghzdy5fjncpa6egkjisgggutxkbmqicc8mjjfy87ja");
+            result.push_back("rai_1khj7pa81ffn3o44jfqopeoq3apxpdagpjo9gu1nwc6x9ccpjggjouhifkkw");
+            result.push_back("rai_1b5wb8hs5d3u5q8cnesk5xprr4damryn9xmrju7grdrtq6sxpanrwjo4s4r3");
             break;
         }
         default:
