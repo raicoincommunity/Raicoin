@@ -195,6 +195,7 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_COUNT     = 322,
     RPC_MISS_FIELD_HASH         = 323,
     RPC_INVALID_FIELD_HASH      = 324,
+    RPC_INVALID_FIELD_ROOT      = 325,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

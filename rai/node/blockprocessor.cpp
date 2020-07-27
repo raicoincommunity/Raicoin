@@ -3,6 +3,69 @@
 #include <rai/common/parameters.hpp>
 #include <rai/node/node.hpp>
 
+std::string rai::BlockOperationToString(rai::BlockOperation operation)
+{
+    switch (operation)
+    {
+        case rai::BlockOperation::INVALID:
+        {
+            return "invalid";
+        }
+        case rai::BlockOperation::APPEND:
+        {
+            return "append";
+        }
+        case rai::BlockOperation::PREPEND:
+        {
+            return "prepend";
+        }
+        case rai::BlockOperation::ROLLBACK:
+        {
+            return "rollback";
+        }
+        case rai::BlockOperation::DROP:
+        {
+            return "drop";
+        }
+        case rai::BlockOperation::CONFIRM:
+        {
+            return "confirm";
+        }
+        default:
+        {
+            return std::to_string(static_cast<uint64_t>(operation));
+        }
+    }
+}
+
+rai::BlockOperation rai::StringToBlockOperation(const std::string& str)
+{
+    if (str == "append")
+    {
+        return rai::BlockOperation::APPEND;
+    }
+    else if (str == "prepend")
+    {
+        return rai::BlockOperation::PREPEND;
+    }
+    else if (str == "rollback")
+    {
+        return rai::BlockOperation::ROLLBACK;
+    }
+    else if (str == "drop")
+    {
+        return rai::BlockOperation::DROP;
+    }
+    else if (str == "confirm")
+    {
+        return rai::BlockOperation::CONFIRM;
+    }
+    else
+    {
+        return rai::BlockOperation::INVALID;
+    }
+}
+
 rai::BlockForced::BlockForced(rai::BlockOperation operation,
                               const std::shared_ptr<rai::Block>& block)
     : operation_(static_cast<uint64_t>(operation)), block_(block)
@@ -49,6 +112,7 @@ void rai::BlockProcessor::Add(const std::shared_ptr<rai::Block>& block)
         rai::BlockProcessResult result{rai::BlockOperation::DROP,
                                        rai::ErrorCode::SUCCESS, 0};
         block_observer_(result, it->block_);
+        node_.dumpers_.block_.Dump(result, it->block_);
         blocks_.erase((++it).base());
     }
 
@@ -152,6 +216,17 @@ void rai::BlockProcessor::Stop()
     }
 }
 
+void rai::BlockProcessor::Status(rai::Ptree& status) const
+{
+    status.put("operation_id", std::to_string(operation_));
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    status.put("blocks_count", std::to_string(blocks_.size()));
+    status.put("forks_count", std::to_string(blocks_fork_.size()));
+    status.put("forced_count", std::to_string(blocks_forced_.size()));
+}
+
 uint32_t rai::BlockProcessor::Priority_(
     const std::shared_ptr<rai::Block>& block)
 {
@@ -206,6 +281,7 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
             rai::BlockProcessResult result{rai::BlockOperation::DROP,
                                            error_code, 0};
             block_observer_(result, block);
+            node_.dumpers_.block_.Dump(result, block);
             return;
         }
 
@@ -322,7 +398,7 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
 
     rai::BlockProcessResult result{rai::BlockOperation::APPEND, error_code, 0};
     block_observer_(result, block);
-
+    node_.dumpers_.block_.Dump(result, block);
 }
 
 void rai::BlockProcessor::ProcessBlockFork_(
@@ -492,6 +568,7 @@ void rai::BlockProcessor::ProcessBlockForced_(
         blocks_dynamic_[operation_new] = std::stack<rai::BlockDynamic>();
         blocks_dynamic_[operation_new].push(
             rai::BlockDynamic{rai::BlockOperation::APPEND, block});
+        roots_dynamic_[operation_new] = block->Account();
         ProcessBlockDynamic_(operation_new);
     }
     else if (operation == static_cast<uint64_t>(rai::BlockOperation::CONFIRM))
@@ -502,6 +579,7 @@ void rai::BlockProcessor::ProcessBlockForced_(
         blocks_dynamic_[operation_new] = std::stack<rai::BlockDynamic>();
         blocks_dynamic_[operation_new].push(
             rai::BlockDynamic{rai::BlockOperation::CONFIRM, block});
+        roots_dynamic_[operation_new] = block->Account();
         ProcessBlockDynamic_(operation_new);
     }
     else
@@ -563,6 +641,8 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
         rai::BlockProcessResult result{top.operation_, error_code,
                                        last_confirm_height};
         block_observer_(result, top.block_);
+        node_.dumpers_.block_.Dump(result, top.block_,
+                                   roots_dynamic_[operation]);
 
         if (error_code == rai::ErrorCode::SUCCESS)
         {
@@ -606,6 +686,7 @@ void rai::BlockProcessor::ProcessBlockDynamic_(uint64_t operation)
     blocks_dynamic_.erase(operation);
     UpdateForks_(accounts_dynamic_[operation]);
     accounts_dynamic_.erase(operation);
+    roots_dynamic_.erase(operation);
 }
 
 rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicAppend_(

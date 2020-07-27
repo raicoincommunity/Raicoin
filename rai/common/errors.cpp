@@ -741,6 +741,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid hash field";
         }
+        case rai::ErrorCode::RPC_INVALID_FIELD_ROOT:
+        {
+            return "[RPC] Invalid root field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";

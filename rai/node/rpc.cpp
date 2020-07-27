@@ -402,6 +402,28 @@ void rai::RpcHandler::Process()
         {
             BlockCount();
         }
+        else if (action == "block_dump")
+        {
+            BlockDump();
+        }
+        else if (action == "block_dump_off")
+        {
+            if (!CheckControl_())
+            {
+                BlockDumpOff();
+            }
+        }
+        else if (action == "block_dump_on")
+        {
+            if (!CheckControl_())
+            {
+                BlockDumpOn();
+            }
+        }
+        else if (action == "block_processor_status")
+        {
+            BlockProcessorStatus();
+        }
         else if (action == "block_publish")
         {
             BlockPublish();
@@ -472,6 +494,10 @@ void rai::RpcHandler::Process()
         {
             Receivables();
         }
+        else if (action == "rewardable")
+        {
+            Rewardable();
+        }
         else if (action == "rewardables")
         {
             Rewardables();
@@ -494,7 +520,10 @@ void rai::RpcHandler::Process()
         }
         else if (action == "stop")
         {
-            Stop();
+            if (!CheckLocal_())
+            {
+                Stop();
+            }
         }
         else if (action == "subscriber_count")
         {
@@ -729,6 +758,48 @@ void rai::RpcHandler::BlockCount()
     }
 
     response_.put("count", count);
+}
+
+
+void rai::RpcHandler::BlockDump()
+{
+    response_.put_child("blocks", node_.dumpers_.block_.Get());
+}
+
+void rai::RpcHandler::BlockDumpOff()
+{
+    node_.dumpers_.block_.Off();
+    response_.put("success", "");
+}
+
+void rai::RpcHandler::BlockDumpOn()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    if (error)
+    {
+        if (error_code_ != rai::ErrorCode::RPC_MISS_FIELD_ACCOUNT)
+        {
+            return;
+        }
+        error_code_ = rai::ErrorCode::SUCCESS;
+    }
+
+    rai::Account root;
+    auto root_o = request_.get_optional<std::string>("root");
+    if (root_o && root.DecodeAccount(*root_o))
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ROOT;
+        return;
+    }
+    
+    node_.dumpers_.block_.On(account, root);
+    response_.put("success", "");
+}
+
+void rai::RpcHandler::BlockProcessorStatus()
+{
+    node_.block_processor_.Status(response_);
 }
 
 void rai::RpcHandler::BlockPublish()
@@ -1174,6 +1245,34 @@ void rai::RpcHandler::Receivables()
     response_.put_child("receivables", receivables_ptree);
 }
 
+void rai::RpcHandler::Rewardable()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::BlockHash hash;
+    error = GetHash_(hash);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    rai::RewardableInfo rewardable;
+    error = node_.ledger_.RewardableInfoGet(transaction, account, hash,
+                                             rewardable);
+    if (error)
+    {
+        response_.put("miss", "");
+        return;
+    }
+
+    response_.put("source", rewardable.source_.StringAccount());
+    response_.put("amount", rewardable.amount_.StringDec());
+    response_.put("amount_in_rai", rewardable.amount_.StringBalance(rai::RAI) + " RAI");
+    response_.put("valid_timestamp",
+                  std::to_string(rewardable.valid_timestamp_));
+}
+
 void rai::RpcHandler::Rewardables()
 {
     rai::Account account;
@@ -1342,11 +1441,6 @@ void rai::RpcHandler::StatsClear()
 
 void rai::RpcHandler::Stop()
 {
-    if (ip_ != boost::asio::ip::address_v4::loopback())
-    {
-        error_code_ = rai::ErrorCode::RPC_NOT_LOCALHOST;
-        return;
-    }
     rpc_.Stop();
     node_.Stop();
     response_.put("success", "");
@@ -1354,7 +1448,7 @@ void rai::RpcHandler::Stop()
 
 void rai::RpcHandler::SubscriberCount()
 {
-    response_.put("acount", node_.subscriptions_.Size());
+    response_.put("count", node_.subscriptions_.Size());
 }
 
 void rai::RpcHandler::SyncerStatus()
@@ -1382,6 +1476,16 @@ bool rai::RpcHandler::CheckControl_()
     return true;
 }
 
+bool rai::RpcHandler::CheckLocal_()
+{
+    if (ip_ == boost::asio::ip::address_v4::loopback())
+    {
+        return false;
+    }
+
+    error_code_ = rai::ErrorCode::RPC_NOT_LOCALHOST;
+    return true;
+}
 
 bool rai::RpcHandler::GetAccount_(rai::Account& account)
 {

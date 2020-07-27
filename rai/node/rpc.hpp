@@ -77,6 +77,10 @@ public:
     void AccountSubscribe();
     void AccountUnsubscribe();
     void BlockCount();
+    void BlockDump();
+    void BlockDumpOff();
+    void BlockDumpOn();
+    void BlockProcessorStatus();
     void BlockPublish();
     void BlockQuery();
     void BlockQueryByPrevious();
@@ -95,6 +99,7 @@ public:
     void QuerierStatus();
     void ReceivableCount();
     void Receivables();
+    void Rewardable();
     void Rewardables();
     void RewarderStatus();
     void Stats();
@@ -119,6 +124,7 @@ public:
 
 private:
     bool CheckControl_();
+    bool CheckLocal_();
     bool GetAccount_(rai::Account&);
     bool GetCount_(uint64_t&);
     bool GetHash_(rai::BlockHash&);

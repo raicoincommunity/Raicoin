@@ -519,6 +519,14 @@ void rai::Airdrop::ProcessInvitedReps(const std::string& response)
 
 void rai::Airdrop::ProcessAirdrop(const rai::Account& account)
 {
+    if (!wallets_->Synced(account))
+    {
+        std::cout << "The account is synchronizing, account="
+                  << account.StringAccount() << std::endl;
+        Add(account, 300);
+        return;
+    }
+
     uint64_t now = rai::CurrentTimestamp();
     uint64_t day = 86400;
     if (now % day < AirdropDelay_(account))
