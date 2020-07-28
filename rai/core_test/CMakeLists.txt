@@ -7,6 +7,7 @@ add_executable (core_test
 	lmdb.cpp
 	numbers.cpp
 	test_util.cpp
+	invite.cpp
 )
 
 #target_compile_definitions(core_test
