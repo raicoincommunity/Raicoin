@@ -1,0 +1,68 @@
+{
+    "representatives": [
+        {
+            "account": "rai_3h5s5bgaf1jp1rofe5umxan84kiwxj3ppeuyids7zzaxahsohzchcyxqzwp6",
+            "description": "official node #1"
+        },
+        {
+            "account": "rai_1os5ozxsjajpnkdj6zghzdy5fjncpa6egkjisgggutxkbmqicc8mjjfy87ja",
+            "description": "official node #2"
+        },
+        {
+            "account": "rai_1khj7pa81ffn3o44jfqopeoq3apxpdagpjo9gu1nwc6x9ccpjggjouhifkkw",
+            "description": "official node #3"
+        },
+        {
+            "account": "rai_1b5wb8hs5d3u5q8cnesk5xprr4damryn9xmrju7grdrtq6sxpanrwjo4s4r3",
+            "description": "official node #4"
+        },
+        {
+            "account": "rai_391mam7h9gxedh3bg9ge44tmbt3c5mutott7ug99u6eqdouwgftzed1tz9i5",
+            "description": "official node #5"
+        },
+        {
+            "account": "rai_3fbshbikq9w5pz8hpm4bcp1ugzamkqq8sqpch6qd4oy1bwrwdzjpj6fyhbio",
+            "description": "official node #6"
+        },
+        {
+            "account": "rai_1pypba9m6biy44zhdw8csa5imd3aaw6w6nbhh58zijf4hrgfres44ate77ug",
+            "description": "official node #7"
+        },
+        {
+            "account": "rai_11nfiez6ubhgstcro88t8i3ucu9qze156tue5qg71fo3ghnoc1r8djbpnmqb",
+            "description": "official node #8"
+        },
+        {
+            "account": "rai_1gz6mxhbo444x383x1r4ea76nbwnnf4696ozwpfjkfuh5qi7wabu6fdemc6h",
+            "description": "official node #9"
+        },
+        {
+            "account": "rai_15m7mxx3guow47edzmiaoou1nqt88j63hnb6hjwi8i1k6wzsfz7i9kuyye8a",
+            "description": "official node #10"
+        },
+        {
+            "account": "rai_1p66d48udbjeea6at1aym7a5p9io966hrga4fnf13ywescic5toq58mu5sr8",
+            "description": "official node #11"
+        },
+        {
+            "account": "rai_1ytzjbtxwzxez5mh8px5sbns78tsfb1xn3ie5763uatrcpi3aqyt6wcdrpm1",
+            "description": "official node #12"
+        },
+        {
+            "account": "rai_3ich9rzfa33mofyunw4d31snjtu9ah74unjwkji1qwnak64j61a75e9kyzrf",
+            "description": "official node #13"
+        },
+        {
+            "account": "rai_3eyiwwhz9kzsiq651x5q3x5j4efzzh8muhw6e1bsxfu8gfcp71dbzy96eek3",
+            "description": "official node #14"
+        },
+        {
+            "account": "rai_3eiaxmgj374qw9wdrqdpdsu4uujx8z3utq8b8bwerrjc9mrthzcag3obydsd",
+            "description": "official node #15"
+        },
+        {
+            "account": "rai_1muooox7mmcbu1wjby4b1h9ckx6764cmp8ufi5das8bgbcz88rzenowa18tc",
+            "description": "official node #16"
+        }
+    ]
+}
