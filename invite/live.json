@@ -63,6 +63,10 @@
         {
             "account": "rai_1muooox7mmcbu1wjby4b1h9ckx6764cmp8ufi5das8bgbcz88rzenowa18tc",
             "description": "official node #16"
+        },
+        {
+            "account": "rai_191fcpnbhk6cxu53gxhmpe46wnburutudcj98aw1f1ddhibxg5mu7r85op1c",
+            "description": "donation 1, BTC hash=b545029d41933c0341ee0e32a39109c1aac5523113d8bd8e0fe0dfcfaec6464c"
         }
     ]
 }
