@@ -900,7 +900,13 @@ rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election) const
     }
     rai::uint256_t total_s(weight_total_.Number());
     result.confirm_ = first_s * 100 > total_s * rai::CONFIRM_WEIGHT_PERCENTAGE;
-    result.win_ = result.confirm_ || (EnoughOnlineWeight_() && first_s > second_s + result.not_voting_.Number());
+    result.win_ =
+        result.confirm_
+        || (EnoughOnlineWeight_()
+            && first_s > second_s + result.not_voting_.Number())
+        || (EnoughVotingWeight_(result.valid_)
+            && election.rounds_fork_ > rai::FORK_ELECTION_ROUNDS_THRESHOLD * 2
+            && first_s > second_s);
 
     auto it = election.blocks_.find(vec[0].first);
     if (it == election.blocks_.end())
@@ -1046,3 +1052,9 @@ bool rai::Elections::EnoughOnlineWeight_() const
     return online * 100 > total * rai::CONFIRM_WEIGHT_PERCENTAGE;
 }
 
+bool rai::Elections::EnoughVotingWeight_(const rai::Amount& valid) const
+{
+    rai::uint256_t voting(valid.Number());
+    rai::uint256_t total(weight_total_.Number());
+    return voting * 100 > total * rai::CONFIRM_WEIGHT_PERCENTAGE;
+}
