@@ -141,6 +141,7 @@ private:
         const rai::Election&) const;
     void UpdateWeightInfo_(std::unique_lock<std::mutex>&);
     bool EnoughOnlineWeight_() const;
+    bool EnoughVotingWeight_(const rai::Amount&) const;
 
     rai::Node& node_;
     mutable std::mutex mutex_;
