@@ -28,10 +28,10 @@ void rai::UdpNetwork::Receive()
 {
     if (!on_)
     {
-        rai::Log::NetworkReceive(node_, "Receiving packet stopped");
+        rai::Log::NetworkReceive("Receiving packet stopped");
         return;
     }
-    rai::Log::NetworkReceive(node_, "Receiving packet");
+    rai::Log::NetworkReceive("Receiving packet");
 
     std::unique_lock<std::mutex> lock(socket_mutex_);
     socket_.async_receive_from(
@@ -64,8 +64,7 @@ void rai::UdpNetwork::Process(const boost::system::error_code& error,
 
     if (error)
     {
-        rai::Log::Network(node_,
-                          boost::str(boost::format("UDP Receive error: %1%")
+        rai::Log::Network(boost::str(boost::format("UDP Receive error: %1%")
                                      % error.message()));
         rai::Stats::Add(rai::ErrorCode::UDP_RECEIVE, "ec=", error.message());
         Receive();
@@ -105,12 +104,12 @@ void rai::UdpNetwork::Send(
     std::unique_lock<std::mutex> lock(socket_mutex_);
 
     rai::Log::NetworkSend(
-        node_, boost::str(boost::format("Sending packet, size %1%") % size));
+        boost::str(boost::format("Sending packet, size %1%") % size));
     socket_.async_send_to(
         boost::asio::buffer(data, size), remote,
         [this, callback](const boost::system::error_code& ec, size_t size) {
             callback(ec, size);
-            rai::Log::NetworkSend(node_, "Packet sent");
+            rai::Log::NetworkSend("Packet sent");
             // TODO: stat
         });
 }

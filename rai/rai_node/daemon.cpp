@@ -5,7 +5,7 @@
 #include <boost/log/trivial.hpp>
 #include <rai/common/util.hpp>
 #include <rai/secure/util.hpp>
-#include <rai/node/log.hpp>
+#include <rai/common/log.hpp>
 #include <rai/node/node.hpp>
 
 rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,

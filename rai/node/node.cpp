@@ -621,7 +621,6 @@ public:
         if (message.IsRequest())
         {
             rai::Log::MessageHandshake(
-                node_,
                 boost::str(boost::format("Received handshake request "
                                          "message from %1% with timestamp %2% "
                                          "cookie %3% account %4%")
@@ -657,7 +656,6 @@ public:
         else
         {
             rai::Log::MessageHandshake(
-                node_,
                 boost::str(boost::format("Received handshake response "
                                          "message from %1% with account %2%")
                            % peer_endpoint % message.account_.StringAccount()));
@@ -1283,19 +1281,16 @@ void rai::Node::HandshakeRequest(const rai::Cookie& cookie,
         receiver = *proxy;
     }
 
-    rai::Log::MessageHandshake(
-        *this, boost::str(boost::format(
-                              "Send handshake request with cookie %1% to %2%")
-                          % cookie.cookie_.StringHex() % cookie.endpoint_));
+    rai::Log::MessageHandshake(boost::str(
+        boost::format("Send handshake request with cookie %1% to %2%")
+        % cookie.cookie_.StringHex() % cookie.endpoint_));
     // TODO: stat
     Send(request, receiver,
          [](rai::Node& node, const rai::Endpoint& peer_endpoint,
             const std::string& error) {
-             rai::Log::MessageHandshake(
-                 node,
-                 boost::str(boost::format(
-                                "Failed to send handshake request to %1% (%2%)")
-                            % peer_endpoint % error));
+             rai::Log::MessageHandshake(boost::str(
+                 boost::format("Failed to send handshake request to %1% (%2%)")
+                 % peer_endpoint % error));
              // TODO: stat
          });
 }
@@ -1313,23 +1308,19 @@ void rai::Node::HandshakeResponse(const rai::Endpoint& peer_endpoint,
         receiver = *proxy;
     }
 
-    rai::Log::MessageHandshake(
-        *this,
-        boost::str(boost::format(
-                       "Send handshake response with account %1% signature %2% "
-                       "to %3% for cookie %4% ")
-                   % account_.StringAccount() % signature.StringHex()
-                   % peer_endpoint % cookie.StringHex()));
+    rai::Log::MessageHandshake(boost::str(
+        boost::format("Send handshake response with account %1% signature %2% "
+                      "to %3% for cookie %4% ")
+        % account_.StringAccount() % signature.StringHex() % peer_endpoint
+        % cookie.StringHex()));
     // TODO: stat
 
     Send(response, receiver,
          [](rai::Node& node, const rai::Endpoint& peer_endpoint,
             const std::string& error) {
-             rai::Log::MessageHandshake(
-                 node, boost::str(
-                           boost::format(
-                               "Failed to send handshake response to %1% (%2%)")
-                           % peer_endpoint % error));
+             rai::Log::MessageHandshake(boost::str(
+                 boost::format("Failed to send handshake response to %1% (%2%)")
+                 % peer_endpoint % error));
              // TODO: stat
          });
 }
@@ -1649,11 +1640,9 @@ void rai::Node::ResolvePreconfiguredPeers()
                                       
                 if (ec)
                 {
-                    rai::Log::Network(
-                        *node_l,
-                        boost::str(boost::format(
-                                       "Failed to resolve address:%1%:%2%(%3%)")
-                                   % address % port % ec.message()));
+                    rai::Log::Network(boost::str(
+                        boost::format("Failed to resolve address:%1%:%2%(%3%)")
+                        % address % port % ec.message()));
                     return;
                 }
 
@@ -1951,13 +1940,14 @@ rai::ServiceRunner::ServiceRunner(rai::Node& node)
                 catch (const std::exception& e)
                 {
                     running = false;
-                    BOOST_LOG(node.log_) << "Service throw exception:" << e.what();
+                    BOOST_LOG(rai::Log::logger_)
+                        << "Service throw exception:" << e.what();
                     throw;
                 }
                 catch (...)
                 {
                     running = false;
-                    BOOST_LOG(node.log_) << "Service throw exception";
+                    BOOST_LOG(rai::Log::logger_) << "Service throw exception";
                 }
             }
         }));

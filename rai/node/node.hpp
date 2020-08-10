@@ -3,13 +3,12 @@
 #include <queue>
 #include <atomic>
 #include <boost/asio.hpp>
-#include <boost/log/sources/logger.hpp>
 #include <boost/multi_index/composite_key.hpp>
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
 #include <rai/common/stat.hpp>
 #include <rai/common/alarm.hpp>
-#include <rai/node/log.hpp>
+#include <rai/common/log.hpp>
 #include <rai/node/network.hpp>
 #include <rai/node/message.hpp>
 #include <rai/node/peer.hpp>
@@ -30,7 +29,6 @@ class NodeConfig
 {
 public:
     NodeConfig();
-    //NodeConfig(uint16_t, const rai::Log&);
 
     rai::ErrorCode DeserializeJson(bool&, rai::Ptree&);
     void SerializeJson(rai::Ptree&) const;
@@ -283,7 +281,6 @@ private:
     std::atomic<rai::NodeStatus> status_;
 
 public:
-    boost::log::sources::logger_mt log_;
     rai::NodeConfig config_;
     boost::asio::io_service& service_;
     rai::Alarm& alarm_;
