@@ -16,8 +16,6 @@ add_library (node
 	election.cpp
 	gapcache.hpp
 	gapcache.cpp
-	log.hpp
-	log.cpp
 	message.hpp
 	message.cpp
 	network.hpp

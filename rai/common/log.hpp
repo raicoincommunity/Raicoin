@@ -3,12 +3,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
+#include <boost/log/sources/logger.hpp>
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
 
 namespace rai
 {
-class Node;
 class LogConfig
 {
 public:
@@ -45,13 +45,18 @@ private:
 class Log
 {
 public:
+    Log() = delete;
+
     static void Init(const boost::filesystem::path&, const rai::LogConfig&);
-    static void Error(rai::Node&, const std::string&);
-    static void Network(rai::Node&, const std::string&);
-    static void NetworkSend(rai::Node&, const std::string&);
-    static void NetworkReceive(rai::Node&, const std::string&);
-    static void Message(rai::Node&, const std::string&);
-    static void MessageHandshake(rai::Node&, const std::string&);
-    static void Rpc(rai::Node&, const std::string&);
+    static void Error(const std::string&);
+    static void Network(const std::string&);
+    static void NetworkSend(const std::string&);
+    static void NetworkReceive(const std::string&);
+    static void Message(const std::string&);
+    static void MessageHandshake(const std::string&);
+    static void Rpc(const std::string&);
+
+    static rai::LogConfig config_;
+    static boost::log::sources::logger_mt logger_;
 };
 } // namespace rai

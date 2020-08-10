@@ -5,6 +5,8 @@ add_library (rai_common
 	blocks.hpp
 	errors.cpp
 	errors.hpp
+	log.cpp
+	log.hpp
 	numbers.cpp
 	numbers.hpp
 	util.cpp
@@ -15,6 +17,7 @@ add_library (rai_common
 	stat.hpp)
 target_link_libraries (rai_common
 	ed25519
+	${Boost_LIBRARIES}
 	${CRYPTOPP_LIBRARY})
 
 target_compile_definitions(rai_common

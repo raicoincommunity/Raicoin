@@ -3,7 +3,7 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <rai/common/stat.hpp>
-#include <rai/node/log.hpp>
+#include <rai/common/log.hpp>
 #include <rai/node/node.hpp>
 
 rai::RpcConfig::RpcConfig()
@@ -126,11 +126,9 @@ void rai::Rpc::Start()
     acceptor_.bind(endpoint, ec);
     if (ec)
     {
-        rai::Log::Network(
-            node_,
-            boost::str(
-                boost::format("Error while binding for RPC on port %1%: %2%")
-                % endpoint.port() % ec.message()));
+        rai::Log::Network(boost::str(
+            boost::format("Error while binding for RPC on port %1%: %2%")
+            % endpoint.port() % ec.message()));
         throw std::runtime_error(ec.message());
     }
 
@@ -167,11 +165,9 @@ void rai::Rpc::Accept()
             }
             else
             {
-                rai::Log::Network(
-                    this->node_,
-                    boost::str(
-                        boost::format("Error accepting RPC connections: %1%")
-                        % ec.message()));
+                rai::Log::Network(boost::str(
+                    boost::format("Error accepting RPC connections: %1%")
+                    % ec.message()));
             }
         });
 }
@@ -206,9 +202,8 @@ void rai::RpcConnection::Parse()
     }
     if (rpc_.CheckWhitelist(remote.address().to_v4()))
     {
-        rai::Log::Rpc(node_,
-                      boost::str(boost::format("RPC request from %1% denied")
-                                 % remote));
+        rai::Log::Rpc(
+            boost::str(boost::format("RPC request from %1% denied") % remote));
         return;
     }
 
@@ -223,8 +218,7 @@ void rai::RpcConnection::Read()
         [connection](const boost::system::error_code& ec, size_t size) {
             if (ec)
             {
-                rai::Log::Rpc(connection->node_,
-                              boost::str(boost::format("RPC read error:%1%")
+                rai::Log::Rpc(boost::str(boost::format("RPC read error:%1%")
                                          % ec.message()));
                 return;
             }
@@ -252,24 +246,20 @@ void rai::RpcConnection::Read()
                                          size_t size) {
                                 if (ec)
                                 {
-                                    rai::Log::Rpc(
-                                        connection->node_,
-                                        boost::str(
-                                            boost::format("RPC write error:%1%")
-                                            % ec.message()));
+                                    rai::Log::Rpc(boost::str(
+                                        boost::format("RPC write error:%1%")
+                                        % ec.message()));
                                     return;
                                 }
                             });
-                        rai::Log::Rpc(
-                            connection->node_,
-                            boost::str(
-                                boost::format("RPC request %1% completed in: "
-                                              "%2% microseconds")
-                                % request_id
-                                % std::chrono::duration_cast<
-                                      std::chrono::microseconds>(
-                                      std::chrono::steady_clock::now() - start)
-                                      .count()));
+                        rai::Log::Rpc(boost::str(
+                            boost::format("RPC request %1% completed in: "
+                                          "%2% microseconds")
+                            % request_id
+                            % std::chrono::duration_cast<
+                                  std::chrono::microseconds>(
+                                  std::chrono::steady_clock::now() - start)
+                                  .count()));
                     };
 
                 if (connection->request_.method()
@@ -296,7 +286,7 @@ void rai::RpcConnection::Write(const std::string& body, unsigned version)
 {
     if (responded_.test_and_set())
     {
-        rai::Log::Error(node_, "RPC already responded");
+        rai::Log::Error("RPC already responded");
         return;
     }
 

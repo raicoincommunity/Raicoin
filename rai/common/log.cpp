@@ -1,10 +1,12 @@
-#include <rai/node/log.hpp>
+#include <rai/common/log.hpp>
 
 #include <boost/log/expressions.hpp>
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/log/utility/setup/file.hpp>
-#include <rai/node/node.hpp>
+
+ rai::LogConfig rai::Log::config_;
+ boost::log::sources::logger_mt rai::Log::logger_;
 
 rai::LogConfig::LogConfig()
     : network_(true),
@@ -181,55 +183,55 @@ void rai::Log::Init(const boost::filesystem::path& path,
         boost::log::keywords::format   = "[%TimeStamp%]: %Message%");
 }
 
-void rai::Log::Error(rai::Node& node, const std::string& str)
+void rai::Log::Error(const std::string& str)
 {
-    BOOST_LOG(node.log_) << "[Error]" << str;
+    BOOST_LOG(rai::Log::logger_) << "[Error]" << str;
 }
 
-void rai::Log::Network(rai::Node& node, const std::string& str)
+void rai::Log::Network(const std::string& str)
 {
-    if (node.config_.log_.Network())
+    if (rai::Log::config_.Network())
     {
-        BOOST_LOG(node.log_) << str;
+        BOOST_LOG(rai::Log::logger_) << str;
     }
 }
 
-void rai::Log::NetworkSend(rai::Node& node, const std::string& str)
+void rai::Log::NetworkSend(const std::string& str)
 {
-    if (node.config_.log_.NetworkSend())
+    if (rai::Log::config_.NetworkSend())
     {
-        BOOST_LOG(node.log_) << str;
+        BOOST_LOG(rai::Log::logger_) << str;
     }
 }
 
-void rai::Log::NetworkReceive(rai::Node& node, const std::string& str)
+void rai::Log::NetworkReceive(const std::string& str)
 {
-    if (node.config_.log_.NetworkReceive())
+    if (rai::Log::config_.NetworkReceive())
     {
-        BOOST_LOG(node.log_) << str;
+        BOOST_LOG(rai::Log::logger_) << str;
     }
 }
 
-void rai::Log::Message(rai::Node& node, const std::string& str)
+void rai::Log::Message(const std::string& str)
 {
-    if (node.config_.log_.Message())
+    if (rai::Log::config_.Message())
     {
-        BOOST_LOG(node.log_) << str;
+        BOOST_LOG(rai::Log::logger_) << str;
     }
 }
 
-void rai::Log::MessageHandshake(rai::Node& node, const std::string& str)
+void rai::Log::MessageHandshake(const std::string& str)
 {
-    if (node.config_.log_.MessageHandshake())
+    if (rai::Log::config_.MessageHandshake())
     {
-        BOOST_LOG(node.log_) << str;
+        BOOST_LOG(rai::Log::logger_) << str;
     }
 }
 
-void rai::Log::Rpc(rai::Node& node, const std::string& str)
+void rai::Log::Rpc(const std::string& str)
 {
-    if (node.config_.log_.Rpc())
+    if (rai::Log::config_.Rpc())
     {
-        BOOST_LOG(node.log_) << str;
+        BOOST_LOG(rai::Log::logger_) << str;
     }
 }
