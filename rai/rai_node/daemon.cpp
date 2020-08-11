@@ -33,11 +33,15 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
         IF_NOT_SUCCESS_RETURN(error_code);
         node->Start();
 
-        std::unique_ptr<rai::Rpc> rpc =
-            rai::MakeRpc(service, *node, config.rpc_);
-        if (rpc && config.rpc_.enable_)
+        std::unique_ptr<rai::Rpc> rpc;
+        if (config.rpc_.enable_)
         {
-            rpc->Start();
+            rpc = rai::MakeRpc(service, config.rpc_.RpcConfig(),
+                               node->RpcHandlerMaker());
+            if (rpc != nullptr)
+            {
+                rpc->Start();
+            }
         }
 
         rai::ServiceRunner runner(*node);

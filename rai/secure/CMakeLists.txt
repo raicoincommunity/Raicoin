@@ -24,6 +24,8 @@ add_library (secure
 	http.hpp
 	websocket.cpp
 	websocket.hpp
+	rpc.cpp
+	rpc.hpp
 	)
 
 target_link_libraries(secure
