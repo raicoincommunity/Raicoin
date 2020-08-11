@@ -2,14 +2,15 @@
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
-#include <rai/common/stat.hpp>
 #include <rai/common/log.hpp>
+#include <rai/common/stat.hpp>
 #include <rai/node/node.hpp>
 
-rai::RpcConfig::RpcConfig()
+
+rai::NodeRpcConfig::NodeRpcConfig()
     : enable_(false),
       address_(boost::asio::ip::address_v4::any()),
-      port_(rai::Rpc::DEFAULT_PORT),
+      port_(rai::NodeRpcConfig::DEFAULT_PORT),
       enable_control_(false),
       whitelist_({
           boost::asio::ip::address_v4::loopback(),
@@ -17,8 +18,8 @@ rai::RpcConfig::RpcConfig()
 {
 }
 
-rai::ErrorCode rai::RpcConfig::DeserializeJson(bool& upgraded,
-                                               rai::Ptree& ptree)
+rai::ErrorCode rai::NodeRpcConfig::DeserializeJson(bool& upgraded,
+                                                   rai::Ptree& ptree)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     try
@@ -72,7 +73,7 @@ rai::ErrorCode rai::RpcConfig::DeserializeJson(bool& upgraded,
     return rai::ErrorCode::SUCCESS;
 }
 
-void rai::RpcConfig::SerializeJson(rai::Ptree& ptree) const
+void rai::NodeRpcConfig::SerializeJson(rai::Ptree& ptree) const
 {
     ptree.put("version", "1");
     ptree.put("enable", enable_);
@@ -89,8 +90,8 @@ void rai::RpcConfig::SerializeJson(rai::Ptree& ptree) const
     ptree.add_child("whitelist", whitelist);
 }
 
-rai::ErrorCode rai::RpcConfig::UpgradeJson(bool& upgraded, uint32_t version,
-                                           rai::Ptree& ptree) const
+rai::ErrorCode rai::NodeRpcConfig::UpgradeJson(bool& upgraded, uint32_t version,
+                                               rai::Ptree& ptree) const
 {
     switch (version)
     {
@@ -107,471 +108,185 @@ rai::ErrorCode rai::RpcConfig::UpgradeJson(bool& upgraded, uint32_t version,
     return rai::ErrorCode::SUCCESS;
 }
 
-rai::Rpc::Rpc(boost::asio::io_service& service, rai::Node& node,
-              const rai::RpcConfig& config)
-    : acceptor_(service),
-      config_(config),
-      node_(node),
-      stopped_(ATOMIC_FLAG_INIT)
+rai::RpcConfig rai::NodeRpcConfig::RpcConfig() const
 {
+    return rai::RpcConfig{address_, port_, enable_control_, whitelist_};
 }
 
-void rai::Rpc::Start()
-{
-    boost::asio::ip::tcp::endpoint endpoint(config_.address_, config_.port_);
-    acceptor_.open(endpoint.protocol());
-    acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-
-    boost::system::error_code ec;
-    acceptor_.bind(endpoint, ec);
-    if (ec)
-    {
-        rai::Log::Network(boost::str(
-            boost::format("Error while binding for RPC on port %1%: %2%")
-            % endpoint.port() % ec.message()));
-        throw std::runtime_error(ec.message());
-    }
-
-    acceptor_.listen();
-    // TODO: add observer
-
-    Accept();
-}
-
-void rai::Rpc::Stop()
-{
-    if (stopped_.test_and_set())
-    {
-        return;
-    }
-    acceptor_.close();
-}
-
-void rai::Rpc::Accept()
-{
-    auto connection = std::make_shared<rai::RpcConnection>(node_, *this);
-    acceptor_.async_accept(
-        connection->socket_,
-        [this, connection](const boost::system::error_code& ec) {
-            if (boost::asio::error::operation_aborted != ec
-                && acceptor_.is_open())
-            {
-                Accept();
-            }
-
-            if (!ec)
-            {
-                connection->Parse();
-            }
-            else
-            {
-                rai::Log::Network(boost::str(
-                    boost::format("Error accepting RPC connections: %1%")
-                    % ec.message()));
-            }
-        });
-}
-
-bool rai::Rpc::CheckWhitelist(const boost::asio::ip::address_v4& ip) const
-{
-    bool error = true;
-    for (const auto& i : config_.whitelist_)
-    {
-        if (ip == i)
-        {
-            error = false;
-            break;
-        }
-    }
-    return error;
-}
-
-rai::RpcConnection::RpcConnection(rai::Node& node, rai::Rpc& rpc)
-    : node_(node), rpc_(rpc), socket_(node.service_)
-{
-    responded_.clear();
-}
-
-void rai::RpcConnection::Parse()
-{
-    boost::system::error_code ec;
-    auto remote = socket_.remote_endpoint(ec);
-    if (ec)
-    {
-        return;
-    }
-    if (rpc_.CheckWhitelist(remote.address().to_v4()))
-    {
-        rai::Log::Rpc(
-            boost::str(boost::format("RPC request from %1% denied") % remote));
-        return;
-    }
-
-    Read();
-}
-
-void rai::RpcConnection::Read()
-{
-    auto connection = shared_from_this();
-    boost::beast::http::async_read(
-        socket_, buffer_, request_,
-        [connection](const boost::system::error_code& ec, size_t size) {
-            if (ec)
-            {
-                rai::Log::Rpc(boost::str(boost::format("RPC read error:%1%")
-                                         % ec.message()));
-                return;
-            }
-
-            connection->node_.Background([connection]() {
-                auto start = std::chrono::steady_clock::now();
-                auto version = connection->request_.version();
-                std::string request_id = boost::str(
-                    boost::format("%1%")
-                    % boost::io::group(
-                          std::hex, std::showbase,
-                          reinterpret_cast<uintptr_t>(connection.get())));
-
-                auto response_handler =
-                    [connection, version, start,
-                     request_id](const boost::property_tree::ptree& ptree) {
-                        std::stringstream ostream;
-                        boost::property_tree::write_json(ostream, ptree);
-                        ostream.flush();
-                        std::string body = ostream.str();
-                        connection->Write(body, version);
-                        boost::beast::http::async_write(
-                            connection->socket_, connection->response_,
-                            [connection](const boost::system::error_code& ec,
-                                         size_t size) {
-                                if (ec)
-                                {
-                                    rai::Log::Rpc(boost::str(
-                                        boost::format("RPC write error:%1%")
-                                        % ec.message()));
-                                    return;
-                                }
-                            });
-                        rai::Log::Rpc(boost::str(
-                            boost::format("RPC request %1% completed in: "
-                                          "%2% microseconds")
-                            % request_id
-                            % std::chrono::duration_cast<
-                                  std::chrono::microseconds>(
-                                  std::chrono::steady_clock::now() - start)
-                                  .count()));
-                    };
-
-                if (connection->request_.method()
-                    == boost::beast::http::verb::post)
-                {
-                    rai::RpcHandler rpc_handler(
-                        connection->node_, connection->rpc_,
-                        connection->request_.body(), request_id,
-                        connection->socket_.remote_endpoint().address().to_v4(),
-                        response_handler);
-                    rpc_handler.Process();
-                }
-                else
-                {
-                    rai::Ptree response;
-                    response.put("error", "Only POST requests are allowed");
-                    response_handler(response);
-                }
-            });
-        });
-}
-
-void rai::RpcConnection::Write(const std::string& body, unsigned version)
-{
-    if (responded_.test_and_set())
-    {
-        rai::Log::Error("RPC already responded");
-        return;
-    }
-
-    response_.set("Content-Type", "application/json");
-    response_.set("Access-Control-Allow-Origin", "*");
-    response_.set("Access-Control-Allow-Headers",
-                  "Accept, Accept-Language, Content-Language, Content-Type");
-    response_.set("Connection", "close");
-    response_.result(boost::beast::http::status::ok);
-    response_.body() = body;
-    response_.version(version);
-    response_.prepare_payload();
-}
-
-rai::RpcHandler::RpcHandler(
+rai::NodeRpcHandler::NodeRpcHandler(
     rai::Node& node, rai::Rpc& rpc, const std::string& body,
     const std::string& request_id, const boost::asio::ip::address_v4& ip,
     const std::function<void(const rai::Ptree&)>& send_response)
-    : node_(node),
-      rpc_(rpc),
-      body_(body),
-      request_id_(request_id),
-      ip_(ip),
-      send_response_(send_response),
-      error_code_(rai::ErrorCode::SUCCESS)
+    : RpcHandler(rpc, body, request_id, ip, send_response), node_(node)
 {
 }
 
-void rai::RpcHandler::Check()
+void rai::NodeRpcHandler::ProcessImpl()
 {
-    if (body_.size() > rai::RpcHandler::MAX_BODY_SIZE)
+    std::string action = request_.get<std::string>("action");
+
+    if (action == "account_count")
     {
-        error_code_ = rai::ErrorCode::RPC_HTTP_BODY_SIZE;
-        return;
+        AccountCount();
     }
-
-    int depth = 0;
-    for (auto ch : body_)
+    else if (action == "account_forks")
     {
-        if (ch == '[' || ch == '{')
-        {
-            ++depth;
-        }
-        else if (ch == ']' || ch == '}')
-        {
-            --depth;
-        }
-        else
-        {
-            continue;
-        }
-
-        if (depth < 0)
-        {
-            error_code_ = rai::ErrorCode::RPC_JSON;
-            return;
-        }
-
-        if (depth > rai::RpcHandler::MAX_JSON_DEPTH)
-        {
-            error_code_ = rai::ErrorCode::RPC_JSON_DEPTH;
-            return;
-        }
+        AccountForks();
     }
-}
-
-void rai::RpcHandler::Process()
-{
-    try
+    else if (action == "account_info")
     {
-        Check();
-        if (error_code_ != rai::ErrorCode::SUCCESS)
+        AccountInfo();
+    }
+    else if (action == "account_subscribe")
+    {
+        AccountSubscribe();
+    }
+    else if (action == "account_unsubscribe")
+    {
+        AccountUnsubscribe();
+    }
+    else if (action == "block_count")
+    {
+        BlockCount();
+    }
+    else if (action == "block_dump")
+    {
+        BlockDump();
+    }
+    else if (action == "block_dump_off")
+    {
+        if (!CheckControl_())
         {
-            Response();
-            return;
-        }
-
-        std::stringstream stream(body_);
-        boost::property_tree::read_json(stream, request_);
-        std::string action = request_.get<std::string>("action");
-
-        if (action == "account_count")
-        {
-            AccountCount();
-        }
-        else if (action == "account_forks")
-        {
-            AccountForks();
-        }
-        else if (action == "account_info")
-        {
-            AccountInfo();
-        }
-        else if (action == "account_subscribe")
-        {
-            AccountSubscribe();
-        }
-        else if (action == "account_unsubscribe")
-        {
-            AccountUnsubscribe();
-        }
-        else if (action == "block_count")
-        {
-            BlockCount();
-        }
-        else if (action == "block_dump")
-        {
-            BlockDump();
-        }
-        else if (action == "block_dump_off")
-        {
-            if (!CheckControl_())
-            {
-                BlockDumpOff();
-            }
-        }
-        else if (action == "block_dump_on")
-        {
-            if (!CheckControl_())
-            {
-                BlockDumpOn();
-            }
-        }
-        else if (action == "block_processor_status")
-        {
-            BlockProcessorStatus();
-        }
-        else if (action == "block_publish")
-        {
-            BlockPublish();
-        }
-        else if (action == "block_query")
-        {
-            BlockQuery();
-        }
-        else if (action == "bootstrap_status")
-        {
-            BootstrapStatus();
-        }
-        else if (action == "confirm_manager_status")
-        {
-            ConfirmManagerStatus();
-        }
-        else if (action == "election_count")
-        {
-            ElectionCount();
-        }
-        else if (action == "election_info")
-        {
-            ElectionInfo();
-        }
-        else if (action == "elections")
-        {
-            Elections();
-        }
-        else if (action == "forks")
-        {
-            Forks();
-        }
-        else if (action == "message_dump")
-        {
-            MessageDump();
-        }
-        else if (action == "message_dump_off")
-        {
-            if (!CheckControl_())
-            {
-                MessageDumpOff();
-            }
-        }
-        else if (action == "message_dump_on")
-        {
-            if (!CheckControl_())
-            {
-                MessageDumpOn();
-            }
-        }
-        else if (action == "peers")
-        {
-            Peers();
-        }
-        else if (action == "peers_verbose")
-        {
-            PeersVerbose();
-        }
-        else if (action == "querier_status")
-        {
-            QuerierStatus();
-        }
-        else if (action == "receivable_count")
-        {
-            ReceivableCount();
-        }
-        else if (action == "receivables")
-        {
-            Receivables();
-        }
-        else if (action == "rewardable")
-        {
-            Rewardable();
-        }
-        else if (action == "rewardables")
-        {
-            Rewardables();
-        }
-        else if (action == "rewarder_status")
-        {
-            RewarderStatus();
-        }
-        else if (action == "stats")
-        {
-            Stats();
-        }
-        else if (action == "stats_verbose")
-        {
-            StatsVerbose();
-        }
-        else if (action == "stats_clear")
-        {
-            StatsClear();
-        }
-        else if (action == "stop")
-        {
-            if (!CheckLocal_())
-            {
-                Stop();
-            }
-        }
-        else if (action == "subscriber_count")
-        {
-            SubscriberCount();
-        }
-        else if (action == "syncer_status")
-        {
-            SyncerStatus();
-        }
-        else
-        {
-            error_code_ = rai::ErrorCode::RPC_UNKNOWN_ACTION;
-        }
-        response_.put("ack", action);
-        auto request_id = request_.get_optional<std::string>("request_id");
-        if (request_id)
-        {
-            response_.put("request_id", *request_id);
+            BlockDumpOff();
         }
     }
-    catch (const std::exception& e)
+    else if (action == "block_dump_on")
     {
-        response_.put("exception", e.what());
-    }
-    catch (...)
-    {
-        error_code_ = rai::ErrorCode::RPC_GENERIC;
-    }
-
-    Response();
-}
-
-void rai::RpcHandler::Response()
-{
-    if (error_code_ != rai::ErrorCode::SUCCESS || response_.empty())
-    {
-        rai::Ptree ptree;
-        std::string error = "Empty response";
-        if (error_code_ != rai::ErrorCode::SUCCESS)
+        if (!CheckControl_())
         {
-            error = rai::ErrorString(error_code_);
+            BlockDumpOn();
         }
-        ptree.put("error", error);
-        ptree.put("error_code", static_cast<uint32_t>(error_code_));
-        send_response_(ptree);
+    }
+    else if (action == "block_processor_status")
+    {
+        BlockProcessorStatus();
+    }
+    else if (action == "block_publish")
+    {
+        BlockPublish();
+    }
+    else if (action == "block_query")
+    {
+        BlockQuery();
+    }
+    else if (action == "bootstrap_status")
+    {
+        BootstrapStatus();
+    }
+    else if (action == "confirm_manager_status")
+    {
+        ConfirmManagerStatus();
+    }
+    else if (action == "election_count")
+    {
+        ElectionCount();
+    }
+    else if (action == "election_info")
+    {
+        ElectionInfo();
+    }
+    else if (action == "elections")
+    {
+        Elections();
+    }
+    else if (action == "forks")
+    {
+        Forks();
+    }
+    else if (action == "message_dump")
+    {
+        MessageDump();
+    }
+    else if (action == "message_dump_off")
+    {
+        if (!CheckControl_())
+        {
+            MessageDumpOff();
+        }
+    }
+    else if (action == "message_dump_on")
+    {
+        if (!CheckControl_())
+        {
+            MessageDumpOn();
+        }
+    }
+    else if (action == "peers")
+    {
+        Peers();
+    }
+    else if (action == "peers_verbose")
+    {
+        PeersVerbose();
+    }
+    else if (action == "querier_status")
+    {
+        QuerierStatus();
+    }
+    else if (action == "receivable_count")
+    {
+        ReceivableCount();
+    }
+    else if (action == "receivables")
+    {
+        Receivables();
+    }
+    else if (action == "rewardable")
+    {
+        Rewardable();
+    }
+    else if (action == "rewardables")
+    {
+        Rewardables();
+    }
+    else if (action == "rewarder_status")
+    {
+        RewarderStatus();
+    }
+    else if (action == "stats")
+    {
+        Stats();
+    }
+    else if (action == "stats_verbose")
+    {
+        StatsVerbose();
+    }
+    else if (action == "stats_clear")
+    {
+        StatsClear();
+    }
+    else if (action == "stop")
+    {
+        if (!CheckLocal_())
+        {
+            Stop();
+        }
+    }
+    else if (action == "subscriber_count")
+    {
+        SubscriberCount();
+    }
+    else if (action == "syncer_status")
+    {
+        SyncerStatus();
     }
     else
     {
-        send_response_(response_);
-    }
-
-    if (error_code_ != rai::ErrorCode::SUCCESS)
-    {
-        rai::Stats::Add(error_code_);
+        error_code_ = rai::ErrorCode::RPC_UNKNOWN_ACTION;
     }
 }
 
-void rai::RpcHandler::AccountCount()
+void rai::NodeRpcHandler::AccountCount()
 {
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
@@ -587,7 +302,7 @@ void rai::RpcHandler::AccountCount()
     response_.put("count", count);
 }
 
-void rai::RpcHandler::AccountForks()
+void rai::NodeRpcHandler::AccountForks()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -613,7 +328,7 @@ void rai::RpcHandler::AccountForks()
             transaction.Abort();
             return;
         }
-        
+
         rai::Ptree fork;
         rai::Ptree block_first;
         rai::Ptree block_second;
@@ -626,7 +341,7 @@ void rai::RpcHandler::AccountForks()
     response_.put_child("forks", forks);
 }
 
-void rai::RpcHandler::AccountInfo()
+void rai::NodeRpcHandler::AccountInfo()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -687,7 +402,7 @@ void rai::RpcHandler::AccountInfo()
     response_.add_child("tail_block", tail_ptree);
 }
 
-void rai::RpcHandler::AccountSubscribe()
+void rai::NodeRpcHandler::AccountSubscribe()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -699,14 +414,14 @@ void rai::RpcHandler::AccountSubscribe()
 
     rai::Signature signature;
     bool has_signature = true;
-    error = GetSignature_(signature);
+    error              = GetSignature_(signature);
     if (error)
     {
         if (error_code_ != rai::ErrorCode::RPC_MISS_FIELD_SIGNATURE)
         {
             return;
         }
-        error_code_ = rai::ErrorCode::SUCCESS;
+        error_code_   = rai::ErrorCode::SUCCESS;
         has_signature = false;
     }
 
@@ -724,7 +439,7 @@ void rai::RpcHandler::AccountSubscribe()
     response_.put("verified", has_signature ? "true" : "false");
 }
 
-void rai::RpcHandler::AccountUnsubscribe()
+void rai::NodeRpcHandler::AccountUnsubscribe()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -734,13 +449,13 @@ void rai::RpcHandler::AccountUnsubscribe()
     response_.put("success", "");
 }
 
-void rai::RpcHandler::BlockCount()
+void rai::NodeRpcHandler::BlockCount()
 {
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
     size_t count = 0;
-    bool error = node_.ledger_.BlockCount(transaction, count);
+    bool error   = node_.ledger_.BlockCount(transaction, count);
     if (error)
     {
         error_code_ = rai::ErrorCode::LEDGER_BLOCK_COUNT;
@@ -750,19 +465,18 @@ void rai::RpcHandler::BlockCount()
     response_.put("count", count);
 }
 
-
-void rai::RpcHandler::BlockDump()
+void rai::NodeRpcHandler::BlockDump()
 {
     response_.put_child("blocks", node_.dumpers_.block_.Get());
 }
 
-void rai::RpcHandler::BlockDumpOff()
+void rai::NodeRpcHandler::BlockDumpOff()
 {
     node_.dumpers_.block_.Off();
     response_.put("success", "");
 }
 
-void rai::RpcHandler::BlockDumpOn()
+void rai::NodeRpcHandler::BlockDumpOn()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -782,17 +496,17 @@ void rai::RpcHandler::BlockDumpOn()
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ROOT;
         return;
     }
-    
+
     node_.dumpers_.block_.On(account, root);
     response_.put("success", "");
 }
 
-void rai::RpcHandler::BlockProcessorStatus()
+void rai::NodeRpcHandler::BlockProcessorStatus()
 {
     node_.block_processor_.Status(response_);
 }
 
-void rai::RpcHandler::BlockPublish()
+void rai::NodeRpcHandler::BlockPublish()
 {
     boost::optional<rai::Ptree&> block_ptree =
         request_.get_child_optional("block");
@@ -827,7 +541,7 @@ void rai::RpcHandler::BlockPublish()
     response_.put("success", "");
 }
 
-void rai::RpcHandler::BlockQuery()
+void rai::NodeRpcHandler::BlockQuery()
 {
     auto hash_o = request_.get_optional<std::string>("hash");
     if (hash_o)
@@ -839,7 +553,7 @@ void rai::RpcHandler::BlockQuery()
     BlockQueryByPrevious();
 }
 
-void rai::RpcHandler::BlockQueryByPrevious()
+void rai::NodeRpcHandler::BlockQueryByPrevious()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -937,7 +651,7 @@ void rai::RpcHandler::BlockQueryByPrevious()
     }
 }
 
-void rai::RpcHandler::BlockQueryByHash()
+void rai::NodeRpcHandler::BlockQueryByHash()
 {
     rai::BlockHash hash;
     bool error = GetHash_(hash);
@@ -975,23 +689,23 @@ void rai::RpcHandler::BlockQueryByHash()
     response_.put("status", "miss");
 }
 
-void rai::RpcHandler::BootstrapStatus()
+void rai::NodeRpcHandler::BootstrapStatus()
 {
     response_.put("count", node_.bootstrap_.Count());
     response_.put("waiting_syncer", node_.bootstrap_.WaitingSyncer());
 }
 
-void rai::RpcHandler::ConfirmManagerStatus()
+void rai::NodeRpcHandler::ConfirmManagerStatus()
 {
     response_ = node_.confirm_manager_.Status();
 }
 
-void rai::RpcHandler::ElectionCount()
+void rai::NodeRpcHandler::ElectionCount()
 {
     response_.put("count", std::to_string(node_.elections_.Size()));
 }
 
-void rai::RpcHandler::ElectionInfo()
+void rai::NodeRpcHandler::ElectionInfo()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -1008,7 +722,7 @@ void rai::RpcHandler::ElectionInfo()
     response_.put_child("election", election);
 }
 
-void rai::RpcHandler::Elections()
+void rai::NodeRpcHandler::Elections()
 {
     auto elections = node_.elections_.GetAll();
     response_.put("count", std::to_string(elections.size()));
@@ -1023,7 +737,7 @@ void rai::RpcHandler::Elections()
     response_.put_child("elections", elections_ptree);
 }
 
-void rai::RpcHandler::Forks()
+void rai::NodeRpcHandler::Forks()
 {
     rai::Account account(0);
     bool error = GetAccount_(account);
@@ -1033,14 +747,14 @@ void rai::RpcHandler::Forks()
     }
 
     uint64_t height = 0;
-    error = GetHeight_(height);
+    error           = GetHeight_(height);
     if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_HEIGHT)
     {
         return;
     }
 
     uint64_t count = 1000;
-    error = GetCount_(count);
+    error          = GetCount_(count);
     if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_COUNT)
     {
         return;
@@ -1093,18 +807,18 @@ void rai::RpcHandler::Forks()
     response_.put_child("forks", forks);
 }
 
-void rai::RpcHandler::MessageDump()
+void rai::NodeRpcHandler::MessageDump()
 {
     response_.put_child("messages", node_.dumpers_.message_.Get());
 }
 
-void rai::RpcHandler::MessageDumpOff()
+void rai::NodeRpcHandler::MessageDumpOff()
 {
     node_.dumpers_.message_.Off();
     response_.put("success", "");
 }
 
-void rai::RpcHandler::MessageDumpOn()
+void rai::NodeRpcHandler::MessageDumpOn()
 {
     std::string type;
     auto type_o = request_.get_optional<std::string>("type");
@@ -1121,12 +835,12 @@ void rai::RpcHandler::MessageDumpOn()
         ip = *ip_o;
     }
     rai::StringTrim(ip, " \r\n\t");
-    
+
     node_.dumpers_.message_.On(type, ip);
     response_.put("success", "");
 }
 
-void rai::RpcHandler::Peers()
+void rai::NodeRpcHandler::Peers()
 {
     rai::Ptree ptree;
     std::vector<rai::Peer> peers = node_.peers_.List();
@@ -1142,7 +856,7 @@ void rai::RpcHandler::Peers()
     response_.add_child("peers", ptree);
 }
 
-void rai::RpcHandler::PeersVerbose()
+void rai::NodeRpcHandler::PeersVerbose()
 {
     rai::Ptree ptree;
     std::vector<rai::Peer> peers = node_.peers_.List();
@@ -1153,18 +867,18 @@ void rai::RpcHandler::PeersVerbose()
     response_.add_child("peers", ptree);
 }
 
-void rai::RpcHandler::QuerierStatus()
+void rai::NodeRpcHandler::QuerierStatus()
 {
     response_.put("entries", node_.block_queries_.Size());
 }
 
-void rai::RpcHandler::ReceivableCount()
+void rai::NodeRpcHandler::ReceivableCount()
 {
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
     size_t count = 0;
-    bool error = node_.ledger_.ReceivableInfoCount(transaction, count);
+    bool error   = node_.ledger_.ReceivableInfoCount(transaction, count);
     if (error)
     {
         error_code_ = rai::ErrorCode::LEDGER_RECEIVABLE_INFO_COUNT;
@@ -1174,14 +888,14 @@ void rai::RpcHandler::ReceivableCount()
     response_.put("count", count);
 }
 
-void rai::RpcHandler::Receivables()
+void rai::NodeRpcHandler::Receivables()
 {
     rai::Account account;
     bool error = GetAccount_(account);
     IF_ERROR_RETURN_VOID(error);
 
     uint64_t count = 0;
-    error = GetCount_(count);
+    error          = GetCount_(count);
     IF_ERROR_RETURN_VOID(error);
 
     std::string type_str("all");
@@ -1206,10 +920,10 @@ void rai::RpcHandler::Receivables()
     }
     else
     {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE; 
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE;
         return;
     }
-    
+
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
     rai::ReceivableInfos receivables;
@@ -1235,7 +949,7 @@ void rai::RpcHandler::Receivables()
     response_.put_child("receivables", receivables_ptree);
 }
 
-void rai::RpcHandler::Rewardable()
+void rai::NodeRpcHandler::Rewardable()
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -1248,8 +962,8 @@ void rai::RpcHandler::Rewardable()
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
     rai::RewardableInfo rewardable;
-    error = node_.ledger_.RewardableInfoGet(transaction, account, hash,
-                                             rewardable);
+    error =
+        node_.ledger_.RewardableInfoGet(transaction, account, hash, rewardable);
     if (error)
     {
         response_.put("miss", "");
@@ -1258,19 +972,20 @@ void rai::RpcHandler::Rewardable()
 
     response_.put("source", rewardable.source_.StringAccount());
     response_.put("amount", rewardable.amount_.StringDec());
-    response_.put("amount_in_rai", rewardable.amount_.StringBalance(rai::RAI) + " RAI");
+    response_.put("amount_in_rai",
+                  rewardable.amount_.StringBalance(rai::RAI) + " RAI");
     response_.put("valid_timestamp",
                   std::to_string(rewardable.valid_timestamp_));
 }
 
-void rai::RpcHandler::Rewardables()
+void rai::NodeRpcHandler::Rewardables()
 {
     rai::Account account;
     bool error = GetAccount_(account);
     IF_ERROR_RETURN_VOID(error);
 
     uint64_t count = 0;
-    error = GetCount_(count);
+    error          = GetCount_(count);
     IF_ERROR_RETURN_VOID(error);
     if (count == 0 || count > 10000)
     {
@@ -1295,7 +1010,7 @@ void rai::RpcHandler::Rewardables()
         if (error)
         {
             error_code_ = rai::ErrorCode::LEDGER_REWARDABLE_INFO_GET;
-            rai::Stats::Add(error_code_, "RpcHandler::Rewardables");
+            rai::Stats::Add(error_code_, "NodeRpcHandler::Rewardables");
             return;
         }
         rewardables.emplace(info.amount_, std::make_pair(hash, info));
@@ -1321,12 +1036,12 @@ void rai::RpcHandler::Rewardables()
     response_.put_child("rewardables", rewardables_ptree);
 }
 
-void rai::RpcHandler::RewarderStatus()
+void rai::NodeRpcHandler::RewarderStatus()
 {
     node_.rewarder_.Status(response_);
 }
 
-void rai::RpcHandler::Stats()
+void rai::NodeRpcHandler::Stats()
 {
     boost::optional<std::string> type_o =
         request_.get_optional<std::string>("type");
@@ -1354,13 +1069,12 @@ void rai::RpcHandler::Stats()
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE;
         return;
     }
-    
+
     response_.put("type", "error");
     response_.put_child("stats", stats_ptree);
 }
 
-
-void rai::RpcHandler::StatsVerbose()
+void rai::NodeRpcHandler::StatsVerbose()
 {
     boost::optional<std::string> type_o =
         request_.get_optional<std::string>("type");
@@ -1383,7 +1097,7 @@ void rai::RpcHandler::StatsVerbose()
             if (!stat.details_.empty())
             {
                 rai::Ptree desc_ptree;
-                for (const auto& desc: stat.details_)
+                for (const auto& desc : stat.details_)
                 {
                     rai::Ptree entry;
                     entry.put("", desc);
@@ -1395,7 +1109,7 @@ void rai::RpcHandler::StatsVerbose()
             {
                 stat_ptree.put("details", "");
             }
-            
+
             stats_ptree.push_back(std::make_pair("", stat_ptree));
         }
     }
@@ -1404,14 +1118,14 @@ void rai::RpcHandler::StatsVerbose()
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE;
         return;
     }
-    
+
     response_.put("type", "error");
     response_.put_child("stats", stats_ptree);
 }
 
-void rai::RpcHandler::StatsClear()
+void rai::NodeRpcHandler::StatsClear()
 {
-     boost::optional<std::string> type_o =
+    boost::optional<std::string> type_o =
         request_.get_optional<std::string>("type");
     if (!type_o)
     {
@@ -1429,194 +1143,22 @@ void rai::RpcHandler::StatsClear()
     }
 }
 
-void rai::RpcHandler::Stop()
+void rai::NodeRpcHandler::Stop()
 {
-    rpc_.Stop();
     node_.Stop();
     response_.put("success", "");
 }
 
-void rai::RpcHandler::SubscriberCount()
+void rai::NodeRpcHandler::SubscriberCount()
 {
     response_.put("count", node_.subscriptions_.Size());
 }
 
-void rai::RpcHandler::SyncerStatus()
+void rai::NodeRpcHandler::SyncerStatus()
 {
     rai::SyncStat stat = node_.syncer_.Stat();
     response_.put("total", stat.total_);
     response_.put("miss", stat.miss_);
     response_.put("size", node_.syncer_.Size());
     response_.put("queries", node_.syncer_.Queries());
-}
-
-bool rai::RpcHandler::CheckControl_()
-{
-    if (ip_ == boost::asio::ip::address_v4::loopback())
-    {
-        return false;
-    }
-
-    if (rpc_.config_.enable_control_)
-    {
-        return false;
-    }
-
-    error_code_ = rai::ErrorCode::RPC_ENABLE_CONTROL;
-    return true;
-}
-
-bool rai::RpcHandler::CheckLocal_()
-{
-    if (ip_ == boost::asio::ip::address_v4::loopback())
-    {
-        return false;
-    }
-
-    error_code_ = rai::ErrorCode::RPC_NOT_LOCALHOST;
-    return true;
-}
-
-bool rai::RpcHandler::GetAccount_(rai::Account& account)
-{
-    auto account_o = request_.get_optional<std::string>("account");
-    if (!account_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_ACCOUNT;
-        return true;
-    }
-
-    if (account.DecodeAccount(*account_o))
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT;
-        return true;
-    }
-
-    return false;
-}
-
-bool rai::RpcHandler::GetCount_(uint64_t& count)
-{
-    auto count_o = request_.get_optional<std::string>("count");
-    if (!count_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_COUNT;
-        return true;
-    }
-
-    bool error = rai::StringToUint(*count_o, count);
-    if (error)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_COUNT;
-        return true;
-    }
-
-    return false;
-}
-
-bool rai::RpcHandler::GetHash_(rai::BlockHash& hash)
-{
-    auto hash_o = request_.get_optional<std::string>("hash");
-    if (!hash_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_HASH;
-        return true;
-    }
-
-    bool error = hash.DecodeHex(*hash_o);
-    if (error)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_HASH;
-        return true;
-    }
-
-    return false;
-}
-
-bool rai::RpcHandler::GetHeight_(uint64_t& height)
-{
-    auto height_o = request_.get_optional<std::string>("height");
-    if (!height_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_HEIGHT;
-        return true;
-    }
-
-    bool error = rai::StringToUint(*height_o, height);
-    if (error)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_HEIGHT;
-        return  true;
-    }
-
-    return false;
-}
-
-bool rai::RpcHandler::GetPrevious_(rai::BlockHash& previous)
-{
-    auto previous_o = request_.get_optional<std::string>("previous");
-    if (!previous_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_PREVIOUS;
-        return true;
-    }
-
-    bool error = previous.DecodeHex(*previous_o);
-    if (error)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_PREVIOUS;
-        return true;
-    }
-
-    return false;
-}
-
-bool rai::RpcHandler::GetSignature_(rai::Signature& signature)
-{
-    auto signature_o = request_.get_optional<std::string>("signature");
-    if (!signature_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_SIGNATURE;
-        return true;
-    }
-
-    bool error = signature.DecodeHex(*signature_o);
-    if (error)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_SIGNATURE;
-        return true;
-    }
-
-    return false;
-}
-
-bool rai::RpcHandler::GetTimestamp_(uint64_t& timestamp)
-{
-    auto timestamp_o = request_.get_optional<std::string>("timestamp");
-    if (!timestamp_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TIMESTAMP;
-        return true;
-    }
-
-    bool error = rai::StringToUint(*timestamp_o, timestamp);
-    if (error)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TIMESTAMP;
-        return true;
-    }
-
-    return false;
-}
-
-
-std::unique_ptr<rai::Rpc> rai::MakeRpc(boost::asio::io_service& service,
-                                       rai::Node& node,
-                                       const rai::RpcConfig& config)
-{
-    std::unique_ptr<rai::Rpc> impl;
-
-    impl.reset(new rai::Rpc(service, node, config));
-
-    return impl;
 }

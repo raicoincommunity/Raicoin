@@ -24,6 +24,6 @@ public:
     rai::ErrorCode UpgradeJson(bool&, uint32_t, rai::Ptree&) const;
 
     rai::NodeConfig node_;
-    rai::RpcConfig rpc_;
+    rai::NodeRpcConfig rpc_;
 };
 }

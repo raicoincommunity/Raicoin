@@ -1919,6 +1919,17 @@ void rai::Node::SetStatus(rai::NodeStatus status)
     status_ = status;
 }
 
+rai::RpcHandlerMaker rai::Node::RpcHandlerMaker()
+{
+    return [this](rai::Rpc& rpc, const std::string& body,
+                  const std::string& request_id,
+                  const boost::asio::ip::address_v4& ip,
+                  const std::function<void(const rai::Ptree&)>& send_response)
+               -> std::unique_ptr<rai::RpcHandler> {
+        return std::make_unique<rai::NodeRpcHandler>(
+            *this, rpc, body, request_id, ip, send_response);
+    };
+}
 
 rai::ServiceRunner::ServiceRunner(rai::Node& node)
 {
