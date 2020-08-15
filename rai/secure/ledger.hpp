@@ -1,5 +1,6 @@
 #pragma once
 #include <unordered_map>
+#include <rai/common/parameters.hpp>
 #include <rai/common/blocks.hpp>
 #include <rai/secure/util.hpp>
 #include <rai/secure/store.hpp>
@@ -68,6 +69,7 @@ public:
     bool Deserialize(rai::Stream&);
     bool Confirmed(uint64_t) const;
     bool Valid() const;
+    bool Limit() const;
 
     rai::BlockType type_;
     uint16_t forks_;

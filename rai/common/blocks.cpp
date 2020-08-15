@@ -259,6 +259,11 @@ std::string rai::ExtensionTypeToString(rai::ExtensionType type)
             result = "note";
             break;
         }
+        case rai::ExtensionType::UNIQUE_ID:
+        {
+            result = "unique_id";
+            break;
+        }
         default:
         {
             result = std::to_string(static_cast<uint16_t>(type));
@@ -285,6 +290,10 @@ rai::ExtensionType rai::StringToExtensionType(const std::string& str)
     else if ("note" == str)
     {
         return rai::ExtensionType::NOTE;
+    }
+    else if ("unique_id" == str)
+    {
+        return rai::ExtensionType::UNIQUE_ID;
     }
     else
     {
@@ -313,6 +322,38 @@ bool rai::ExtensionAppend(rai::ExtensionType type, const std::string& value,
             rai::Write(stream, length);
             rai::Write(stream,
                        std::vector<uint8_t>(value.begin(), value.end()));
+            break;
+        }
+        default:
+        {
+            return true;
+        }
+    }
+
+    extensions.insert(extensions.end(), extension.begin(), extension.end());
+    return false;
+}
+
+
+bool rai::ExtensionAppend(rai::ExtensionType type, uint64_t value,
+                          std::vector<uint8_t>& extensions)
+{
+    if (extensions.size() > std::numeric_limits<uint16_t>::max())
+    {
+        return true;
+    }
+
+    uint16_t length = 0;
+    std::vector<uint8_t> extension;
+    switch (type)
+    {
+        case rai::ExtensionType::UNIQUE_ID:
+        {
+            rai::VectorStream stream(extension);
+            rai::Write(stream, type);
+            length = sizeof(uint64_t);
+            rai::Write(stream, length);
+            rai::Write(stream, value);
             break;
         }
         default:
@@ -383,6 +424,24 @@ bool rai::ExtensionsToPtree(const std::vector<uint8_t>& data, rai::Ptree& tree)
                     reinterpret_cast<const char*>(value.data()), value.size());
                 break;
             }
+            case rai::ExtensionType::UNIQUE_ID:
+            {
+                if (length != sizeof(uint64_t))
+                {
+                    error_info.put("error", "invalid unique_id value length");
+                    error_info.put("type", rai::ExtensionTypeToString(type));
+                    error_info.put("length", std::to_string(length));
+                    tree.push_back(std::make_pair("", error_info));
+                    return true;
+                }
+                uint64_t unique_id = 0;
+                {
+                    rai::BufferStream stream(value.data(), value.size());
+                    rai::Read(stream, unique_id);
+                }
+                value_str = std::to_string(unique_id);
+                break;
+            }
             default:
             {
                 value_str = rai::BytesToHex(value.data(), value.size());
@@ -424,6 +483,17 @@ rai::ErrorCode rai::PtreeToExtensions(const rai::Ptree& tree,
                 {
                     value = std::vector<uint8_t>(value_str.begin(),
                                                  value_str.end());
+                    break;
+                }
+                case rai::ExtensionType::UNIQUE_ID:
+                {
+                    uint64_t unique_id = 0;
+                    bool error = rai::StringToUint(value_str, unique_id);
+                    IF_ERROR_RETURN(error, error_code);
+                    {
+                        rai::VectorStream stream_l(value);
+                        rai::Write(stream_l, unique_id);
+                    }
                     break;
                 }
                 default:

@@ -99,12 +99,9 @@ rai::ErrorCode rai::WalletConfig::DeserializeJson(bool& update,
 
         error_code = rai::ErrorCode::JSON_CONFIG_WALLET_SERVER;
         auto server = ptree.get_optional<std::string>("server");
-        if (server)
+        if (!server || server_.Parse(*server))
         {
-            if (server_.Parse(*server))
-            {
-                return error_code;
-            }
+            return error_code;
         }
 
         error_code = rai::ErrorCode::JSON_CONFIG_WALLET_PRECONFIGURED_REP;

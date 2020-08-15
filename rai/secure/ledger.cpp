@@ -143,6 +143,11 @@ bool rai::AccountInfo::Valid() const
     return true;
 }
 
+bool rai::AccountInfo::Limit() const
+{
+    return forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp());
+}
+
 rai::ReceivableInfo::ReceivableInfo(const rai::Account& source,
                                     const rai::Amount& amount,
                                     uint64_t timestamp)

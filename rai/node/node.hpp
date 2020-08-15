@@ -315,15 +315,4 @@ public:
     rai::ActiveAccounts active_accounts_;
 };
 
-class ServiceRunner
-{
-public:
-    ServiceRunner(rai::Node&);
-    ~ServiceRunner();
-    void Join();
-
-private:
-    std::vector<std::thread> threads_;
-};
-
 } // namespace rai

@@ -168,6 +168,9 @@ enum class ErrorCode : int
     JSON_CONFIG_INVITED_REPS_URL         = 282,
     JSON_CONFIG_WALLET                   = 283,
     JSON_CONFIG_AIRDROP_MISS             = 284,
+    JSON_CONFIG_AUTO_CREDIT              = 285,
+    JSON_CONFIG_AUTO_RECEIVE             = 286,
+    JSON_CONFIG_RECEIVE_MINIMUM          = 287,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                 = 300,
@@ -196,6 +199,10 @@ enum class ErrorCode : int
     RPC_MISS_FIELD_HASH         = 323,
     RPC_INVALID_FIELD_HASH      = 324,
     RPC_INVALID_FIELD_ROOT      = 325,
+    RPC_MISS_FIELD_TO           = 326,
+    RPC_INVALID_FIELD_TO        = 327,
+    RPC_MISS_FIELD_AMOUNT       = 328,
+    RPC_INVALID_FIELD_AMOUNT    = 329,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

@@ -6,6 +6,7 @@
 #include <rai/common/util.hpp>
 #include <rai/secure/util.hpp>
 #include <rai/common/log.hpp>
+#include <rai/common/runner.hpp>
 #include <rai/node/node.hpp>
 
 rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
@@ -44,7 +45,7 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
             }
         }
 
-        rai::ServiceRunner runner(*node);
+        rai::ServiceRunner runner(service, config.node_.io_threads_);
         runner.Join();
     }
     catch (const std::exception& e)

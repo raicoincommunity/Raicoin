@@ -3,9 +3,9 @@
 #include <iostream>
 #include <rai/common/errors.hpp>
 #include <rai/common/numbers.hpp>
-#include <rai/rai_airdrop/airdrop.hpp>
+#include <rai/common/runner.hpp>
+#include <rai/rai_wallet_rpc/wallet_rpc.hpp>
 #include <rai/secure/util.hpp>
-
 
 namespace
 {
@@ -31,23 +31,39 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm)
             IF_NOT_SUCCESS_RETURN(error_code);
             key.Get(seed);
         }
-
-        rai::AirdropConfig config;
-        boost::filesystem::path config_path = dir / "airdrop_config.json";
-        if (!boost::filesystem::exists(config_path))
+        else
         {
-            return rai::ErrorCode::JSON_CONFIG_AIRDROP_MISS;
+            if (!boost::filesystem::exists(dir / "wallet_data.ldb"))
+            {
+                std::cout << "Error: please specify a key file to create wallet"
+                          << std::endl;
+                return rai::ErrorCode::SUCCESS;
+            }
         }
+
+        rai::WalletRpcConfig config;
+        boost::filesystem::path config_path = dir / "wallet_rpc_config.json";
         std::fstream config_file;
         error_code = rai::FetchObject(config, config_path, config_file);
         config_file.close();
         IF_NOT_SUCCESS_RETURN(error_code);
+        if (!config.callback_url_)
+        {
+            return rai::ErrorCode::JSON_CONFIG_CALLBACK_URL;
+        }
+        if (config.wallet_.server_.protocol_ == "wss"
+            && !boost::filesystem::exists("cacert.pem"))
+        {
+            std::cout << "Error: can't find cacert.pem" << std::endl;
+            return rai::ErrorCode::SUCCESS;
+        }
 
         boost::asio::io_service service;
         rai::Alarm alarm(service);
+        boost::asio::io_service service_wallets;
         std::shared_ptr<rai::Wallets> wallets = std::make_shared<rai::Wallets>(
-            error_code, service, alarm, dir, config.wallet_,
-            rai::BlockType::AD_BLOCK, seed, 32);
+            error_code, service_wallets, alarm, dir, config.wallet_,
+            rai::BlockType::TX_BLOCK, seed);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
             return error_code;
@@ -94,28 +110,40 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm)
                 return rai::ErrorCode::PASSWORD_ERROR;
             }
         }
-
-        auto airdrop = std::make_shared<rai::Airdrop>(wallets, config);
         wallets->Start();
-        airdrop->Start();
+        std::cout << "Selected account:"
+                  << wallets->SelectedAccount().StringAccount() << std::endl;
 
-        airdrop->Join();
-        wallets->Stop();
+        auto wallet_rpc = std::make_shared<rai::WalletRpc>(wallets, config);
+
+        std::unique_ptr<rai::Rpc> rpc =
+            rai::MakeRpc(service, config.rpc_, wallet_rpc->RpcHandlerMaker());
+        if (rpc != nullptr)
+        {
+            rpc->Start();
+        }
+        else
+        {
+            std::cout << "Make RPC failed\n";
+            return rai::ErrorCode::GENERIC;
+        }
+
+        rai::ServiceRunner runner(service, 1);
+        runner.Join();
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Error while running node (" << e.what() << ")\n";
+        std::cerr << "Error while running wallet_rpc (" << e.what() << ")\n";
     }
     return rai::ErrorCode::SUCCESS;
 }
 }  // namespace
 
-#if 1
 int main(int argc, char* const* argv)
 {
     boost::program_options::options_description desc("Command line options");
     desc.add_options()("key", boost::program_options::value<std::string>(),
-                       "Define key file for daemon command");
+                       "Define key file for wallet seed");
 
     boost::program_options::variables_map vm;
     try
@@ -146,26 +174,3 @@ int main(int argc, char* const* argv)
 
     return 0;
 }
-
-#else
-#include <rai/secure/http.hpp>
-int main()
-{
-    uint32_t constexpr num = 129;
-    std::array<uint32_t, num> a = {0,};
-    for (uint32_t i = 0; i < 1000 * num; ++i)
-    {
-        auto r = rai::Random(0, num - 1);
-        a[r]++;
-    }
-
-    uint64_t count = 0;
-    for (uint32_t i = 0; i < num; ++i)
-    {
-        count += a[i];
-        std::cout << i << ":" << a[i] << std::endl;
-    }
-    std::cout << "total:" << count << std::endl;
-    return 0;
-}
-#endif

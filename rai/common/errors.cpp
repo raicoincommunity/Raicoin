@@ -28,7 +28,7 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::EXTENSIONS_LENGTH:
         {
-            return "Invalid extensions length";
+            return "The extensions exceed maximum size";
         }
         case rai::ErrorCode::UNKNOWN_COMMAND:
         {
@@ -312,7 +312,7 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::REWARD_TO_ACCOUNT:
         {
-            return "Invalid reward_to account in config.json";
+            return "Invalid reward_to account in config file";
         }
         case rai::ErrorCode::WALLET_ACCOUNT_IN_SYNC:
         {
@@ -500,138 +500,137 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
-            return "Failed to parse version from config.json";
+            return "Failed to parse version from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC:
         {
-            return "Failed to parse rpc from config.json";
+            return "Failed to parse rpc from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_NODE:
         {
-            return "Failed to parse node from config.json";
+            return "Failed to parse node from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_NODE_VERSION:
         {
-            return "Failed to parse node version from config.json";
+            return "Failed to parse node version from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG:
         {
-            return "Failed to parse log from config.json";
+            return "Failed to parse log from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_VERSION:
         {
-            return "Failed to parse log version from config.json";
+            return "Failed to parse log version from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_TO_CERR:
         {
-            return "Failed to parse log_to_cerr from config.json";
+            return "Failed to parse log_to_cerr from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_MAX_SIZE:
         {
-            return "Failed to parse log max_size from config.json";
+            return "Failed to parse log max_size from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_ROTATION_SIZE:
         {
-            return "Failed to parse log rotation_size from config.json";
+            return "Failed to parse log rotation_size from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_FLUSH:
         {
-            return "Failed to parse log flush from config.json";
+            return "Failed to parse log flush from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_NODE_PORT:
         {
-            return "Failed to parse node port from config.json";
+            return "Failed to parse node port from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_NODE_IO_THREADS:
         {
-            return "Failed to parse node io_threads from config.json";
+            return "Failed to parse node io_threads from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_NETWORK:
         {
-            return "Failed to parse log network from config.json";
+            return "Failed to parse log network from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_NETWORK_SEND:
         {
-            return "Failed to parse log network_send from config.json";
+            return "Failed to parse log network_send from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_NETWORK_RECEIVE:
         {
-            return "Failed to parse log network_receive from config.json";
+            return "Failed to parse log network_receive from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_MESSAGE:
         {
-            return "Failed to parse log message from config.json";
+            return "Failed to parse log message from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_MESSAGE_HANDSHAKE:
         {
-            return "Failed to parse log message_handshake from config.json";
+            return "Failed to parse log message_handshake from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_PRECONFIGURED_PEERS:
         {
-            return "Failed to parse node preconfigured_peers from config.json";
+            return "Failed to parse node preconfigured_peers from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC_ENABLE:
         {
-            return "Failed to parse rpc enable from config.json";
+            return "Failed to parse rpc enable from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC_VERSION:
         {
-            return "Failed to parse rpc version from config.json";
+            return "Failed to parse rpc version from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC_ADDRESS:
         {
-            return "Failed to parse rpc address from config.json";
+            return "Failed to parse rpc address from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC_PORT:
         {
-            return "Failed to parse rpc port from config.json";
+            return "Failed to parse rpc port from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC_ENABLE_CONTROL:
         {
-            return "Failed to parse rpc enable_control from config.json";
+            return "Failed to parse rpc enable_control from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_RPC_WHITELIST:
         {
-            return "Failed to parse rpc whitelist from config.json";
+            return "Failed to parse rpc whitelist from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_LOG_RPC:
         {
-            return "Failed to parse log rpc from config.json";
+            return "Failed to parse log rpc from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_WALLET_VERSION:
         {
-            return "Failed to parse version from wallet_config.json";
+            return "Failed to parse version from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_WALLET_SERVER:
         {
-            return "Failed to parse server from wallet_config.json";
+            return "Failed to parse server from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_CALLBACK_URL:
         {
-            return "Failed to parse callback_url from config.json";
+            return "Failed to parse callback_url from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_WALLET_PRECONFIGURED_REP:
         {
             return "Failed to parse preconfigured_representatives from "
-                   "wallet_config.json";
+                   "config file";
         }
         case rai::ErrorCode::JSON_CONFIG_REWARD_TO:
         {
-            return "Failed to parse reward_to from config.json";
+            return "Failed to parse reward_to from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_DAILY_REWARD_TIMES:
         {
-            return "Failed to parse daily_reward_times from config.json";
+            return "Failed to parse daily_reward_times from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_ONLINE_STATS_URL:
         {
-            return "Failed to parse online_statistics_url from "
-                   "airdrop_config.json";
+            return "Failed to parse online_statistics_url from config file";
         }
         case rai::ErrorCode::JSON_CONFIG_INVITED_REPS_URL:
         {
-            return "Failed to parse invited_representatives_url from "
-                   "airdrop_config.json";
+            return "Failed to parse invited_representatives_url from config "
+                   "file";
         }
         case rai::ErrorCode::JSON_CONFIG_WALLET:
         {
@@ -639,7 +638,19 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::JSON_CONFIG_AIRDROP_MISS:
         {
-            return "Missing airdrop_config.json";
+            return "Missing config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_AUTO_CREDIT:
+        {
+            return "Failed to parse auto_credit from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_AUTO_RECEIVE:
+        {
+            return "Failed to parse auto_receive from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_RECEIVE_MINIMUM:
+        {
+            return "Failed to parse receive_minimum from config file";
         }
         case rai::ErrorCode::RPC_GENERIC:
         {
@@ -744,6 +755,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_INVALID_FIELD_ROOT:
         {
             return "[RPC] Invalid root field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_TO:
+        {
+            return "[RPC] The to field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TO:
+        {
+            return "[RPC] Invalid to field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_AMOUNT:
+        {
+            return "[RPC] The to amount is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_AMOUNT:
+        {
+            return "[RPC] Invalid amount field";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

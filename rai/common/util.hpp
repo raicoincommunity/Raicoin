@@ -170,6 +170,11 @@ bool StringToUint(const std::string& str, T& value)
     try
     {
         unsigned long long ull = std::stoull(str);
+        if (std::to_string(ull) != str)
+        {
+            return true;
+        }
+
         if (ull > std::numeric_limits<T>::max())
         {
             return true;
