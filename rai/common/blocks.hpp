@@ -82,12 +82,15 @@ enum class ExtensionType : uint16_t
     INVALID     = 0,
     SUB_ACCOUNT = 1,
     NOTE        = 2,
+    UNIQUE_ID   = 3,
 
     RESERVED_MAX = 1023,
 };
 std::string ExtensionTypeToString(rai::ExtensionType);
 rai::ExtensionType StringToExtensionType(const std::string&);
 bool ExtensionAppend(rai::ExtensionType, const std::string&,
+                     std::vector<uint8_t>&);
+bool ExtensionAppend(rai::ExtensionType, uint64_t,
                      std::vector<uint8_t>&);
 
 bool ExtensionsToPtree(const std::vector<uint8_t>&, rai::Ptree&);

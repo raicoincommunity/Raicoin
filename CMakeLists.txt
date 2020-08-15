@@ -231,6 +231,7 @@ add_subdirectory(rai/node)
 add_subdirectory(rai/rai_node)
 add_subdirectory(rai/wallet)
 add_subdirectory(rai/rai_airdrop)
+add_subdirectory(rai/rai_wallet_rpc)
 
 if (RAI_GUI)
 	if (WIN32)

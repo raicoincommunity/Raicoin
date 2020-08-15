@@ -615,6 +615,11 @@ rai::Wallets::Wallets(rai::ErrorCode& error_code,
     InitReceived_(transaction);
 }
 
+rai::Wallets::~Wallets()
+{
+    Stop();
+}
+
 std::shared_ptr<rai::Wallets> rai::Wallets::Shared()
 {
     return shared_from_this();
@@ -1889,7 +1894,7 @@ void rai::Wallets::ProcessAccountReceive(
         uint16_t credit = 1;
         uint64_t now = rai::CurrentTimestamp();
         uint64_t timestamp = now <= receivable_info.timestamp_
-                                 ? receivable_info.timestamp_ + 1
+                                 ? receivable_info.timestamp_
                                  : now;
         if (timestamp > now + 60)
         {
@@ -1950,11 +1955,16 @@ void rai::Wallets::ProcessAccountReceive(
 
         uint64_t now = rai::CurrentTimestamp();
         uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
+        if (timestamp < receivable_info.timestamp_)
+        {
+            timestamp = receivable_info.timestamp_;
+        }
         if (timestamp > now + 60)
         {
             callback(rai::ErrorCode::BLOCK_TIMESTAMP, block);
             return;
         }
+        
         if (account_info.forks_ > rai::MaxAllowedForks(timestamp))
         {
             callback(rai::ErrorCode::ACCOUNT_LIMITED, block);

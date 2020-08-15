@@ -312,7 +312,6 @@ bool rai::uint128_union::DecodeBalance(const rai::uint128_t& scale,
     str.append(max_frac_len - frac_len, '0');
     rai::StringLeftTrim(str, "0");
 
-    std::cout << str << std::endl;
     bool error = DecodeDec(str);
     if (error)
     {

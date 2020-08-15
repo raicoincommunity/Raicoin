@@ -19,7 +19,14 @@ rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
 {
     if (ssl)
     {
-        ctx_.load_verify_file("cacert.pem");
+        try
+        {
+            ctx_.load_verify_file("cacert.pem");
+        }
+        catch(...)
+        {
+            throw std::runtime_error("Failed to load cacert.pem");
+        }
     }
 }
 

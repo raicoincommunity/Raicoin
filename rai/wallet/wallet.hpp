@@ -123,6 +123,7 @@ class Wallets : public std::enable_shared_from_this<rai::Wallets>
 public:
     Wallets(rai::ErrorCode&, boost::asio::io_service&, rai::Alarm&,
             const boost::filesystem::path&, const rai::WalletConfig&, rai::BlockType, const rai::RawKey& = rai::RawKey(), uint32_t = 1);
+    ~Wallets();
     std::shared_ptr<rai::Wallets> Shared();
 
     void AccountBalance(const rai::Account&, rai::Amount&);

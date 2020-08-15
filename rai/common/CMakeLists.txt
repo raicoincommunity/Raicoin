@@ -13,6 +13,8 @@ add_library (rai_common
 	util.hpp
 	parameters.cpp
 	parameters.hpp
+	runner.cpp
+	runner.hpp
 	stat.cpp
 	stat.hpp)
 target_link_libraries (rai_common
