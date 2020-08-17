@@ -11,7 +11,7 @@ rai::Rpc::Rpc(boost::asio::io_service& service, const rai::RpcConfig& config,
       acceptor_(service),
       config_(config),
       make_handler_(maker),
-      stopped_(ATOMIC_FLAG_INIT)
+      stopped_{ATOMIC_FLAG_INIT}
 {
 }
 
