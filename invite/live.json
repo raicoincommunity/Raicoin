@@ -83,6 +83,18 @@
         {
             "account": "rai_1ixzpqrr4eezo4dwo5ryjeixdpukhi1cgf4q6etmxpeeate7z6w1akjyma8g",
             "description": "donation 5, BTC hash=d63467ee650d6c298f18fd61f27688c257e6fb56d5049b115c3a132e734ab9d5"
+        },
+        {
+            "account": "rai_1zpsjpcmpccgeckziybgw46piofid64mpzb9143buqthnkg1ixqyetp7xqaa",
+            "description": "donation 6, BTC hash=f750bbd5994e39a8393c49ffc372bc6f13b3594f7be118210dcb6abc91e3f2a3"
+        },
+        {
+            "account": "rai_1cx1rx8fzakfz6x7c9hgas3oxacfw5ecxwcp9s3gjssr8n7sk786n97gwqox",
+            "description": "donation 7, BTC hash=d884724b3c2a8498dc68f06399b3a22f78106ae18ea9ff94022f031444b67a76"
+        },
+        {
+            "account": "rai_1uq9a8ru7a98dmna6txmjjnsioboa11bk4rk4npqi6f6bc5zp5k45e8qmqfs",
+            "description": "donation 8, BTC hash=a06bf587ded0a7da8783dceea242d43ad0d560e93195cd33700eb6e6bda631e7"
         }
     ]
 }
