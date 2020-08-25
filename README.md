@@ -3,7 +3,7 @@
 <hr />
 
 **github repositories**: https://github.com/RaicoinCommunity  
-**Website**: https://raicoin.org
-**Wiki**: https://github.com/raicoincommunity/Raicoin/wiki
+**Website**: https://raicoin.org  
+**Wiki**: https://github.com/raicoincommunity/Raicoin/wiki  
 **Announcement**：https://bitcointalk.org/index.php?topic=5188094.0  
 
