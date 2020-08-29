@@ -1828,6 +1828,13 @@ rai::Amount rai::Node::RepWeight(const rai::Account& account)
     return result;
 }
 
+rai::Amount rai::Node::RepWeightTotal()
+{
+    rai::Amount weight;
+    ledger_.RepWeightTotalGet(weight);
+    return weight;
+}
+
 void rai::Node::RepWeights(rai::RepWeights& result)
 {
     ledger_.RepWeightsGet(result.total_, result.weights_);
@@ -1929,4 +1936,31 @@ rai::RpcHandlerMaker rai::Node::RpcHandlerMaker()
         return std::make_unique<rai::NodeRpcHandler>(
             *this, rpc, body, request_id, ip, send_response);
     };
+}
+
+rai::Amount rai::Node::Supply()
+{
+    rai::Amount total = RepWeightTotal();
+    rai::Amount genesis = rai::GenesisBalance();
+    rai::Amount airdrop(genesis.Number() - rai::AIRDROP_ACCOUNTS);
+    if (total <= airdrop)
+    {
+        return rai::Amount(0);
+    }
+
+    uint64_t now = rai::CurrentTimestamp();
+    if (now < rai::EpochTimestamp() + rai::AIRDROP_DURATION + 3600)
+    {
+        return total - airdrop;
+    }
+
+    if (now >= rai::EpochTimestamp() + rai::AIRDROP_DURATION + 3600 + 80000)
+    {
+        return total;
+    }
+
+    rai::uint128_t destroyed =
+        airdrop.Number()
+        * (now - rai::EpochTimestamp() - rai::AIRDROP_DURATION - 3600) / 80000;
+    return total - rai::Amount(destroyed);
 }

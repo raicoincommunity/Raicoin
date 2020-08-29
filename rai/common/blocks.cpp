@@ -326,7 +326,18 @@ bool rai::ExtensionAppend(rai::ExtensionType type, const std::string& value,
         }
         default:
         {
-            return true;
+            if (type <= rai::ExtensionType::RESERVED_MAX)
+            {
+                return true;
+            }
+            std::vector<uint8_t> bytes;
+            bool error = rai::HexToBytes(value, bytes);
+            IF_ERROR_RETURN(error, true);
+            rai::VectorStream stream(extension);
+            rai::Write(stream, type);
+            length = static_cast<uint16_t>(bytes.size());
+            rai::Write(stream, length);
+            rai::Write(stream, bytes);
         }
     }
 

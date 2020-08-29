@@ -251,6 +251,7 @@ public:
     void RepWeightSub(rai::Transaction&, const rai::Account&,
                       const rai::Amount&);
     bool RepWeightGet(const rai::Account&, rai::Amount&) const;
+    void RepWeightTotalGet(rai::Amount&) const;
     void RepWeightsGet(rai::Amount&,
                        std::unordered_map<rai::Account, rai::Amount>&) const;
     bool WalletInfoPut(rai::Transaction&, uint32_t, const rai::WalletInfo&);
