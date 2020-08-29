@@ -64,6 +64,8 @@ public:
     void MessageDump();
     void MessageDumpOff();
     void MessageDumpOn();
+    void NodeAccount();
+    void PeerCount();
     void Peers();
     void PeersVerbose();
     void QuerierStatus();
@@ -77,6 +79,7 @@ public:
     void StatsClear();
     void Stop();
     void SubscriberCount();
+    void Supply();
     void SyncerStatus();
 
     rai::Node& node_;

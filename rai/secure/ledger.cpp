@@ -1500,6 +1500,12 @@ bool rai::Ledger::RepWeightGet(const rai::Account& representative,
     return false;
 }
 
+void rai::Ledger::RepWeightTotalGet(rai::Amount& total) const
+{
+    std::lock_guard<std::mutex> lock(rep_weights_mutex_);
+    total = total_rep_weight_;
+}
+
 void rai::Ledger::RepWeightsGet(
     rai::Amount& total,
     std::unordered_map<rai::Account, rai::Amount>& weights) const

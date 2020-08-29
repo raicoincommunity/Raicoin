@@ -136,11 +136,7 @@ rai::ErrorCode rai::WalletConfig::DeserializeJson(bool& update,
 void rai::WalletConfig::SerializeJson(rai::Ptree& ptree) const
 {
     ptree.put("version", "1");
-
-    if (DefaultServer() != server_.String())
-    {
-        ptree.put("server", server_.String());
-    }
+    ptree.put("server", server_.String());
 
     rai::Ptree preconfigured_reps;
     for (const auto& i : preconfigured_reps_)

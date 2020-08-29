@@ -221,6 +221,14 @@ void rai::NodeRpcHandler::ProcessImpl()
             MessageDumpOn();
         }
     }
+    else if (action == "node_account")
+    {
+        NodeAccount();
+    }
+    else if (action == "peer_count")
+    {
+        PeerCount();
+    }
     else if (action == "peers")
     {
         Peers();
@@ -275,6 +283,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     else if (action == "subscriber_count")
     {
         SubscriberCount();
+    }
+    else if (action == "supply")
+    {
+        Supply();
     }
     else if (action == "syncer_status")
     {
@@ -840,6 +852,16 @@ void rai::NodeRpcHandler::MessageDumpOn()
     response_.put("success", "");
 }
 
+void rai::NodeRpcHandler::NodeAccount()
+{
+    response_.put("account", node_.account_.StringAccount());
+}
+
+void rai::NodeRpcHandler::PeerCount()
+{
+    response_.put("count", node_.peers_.Size());
+}
+
 void rai::NodeRpcHandler::Peers()
 {
     rai::Ptree ptree;
@@ -1152,6 +1174,13 @@ void rai::NodeRpcHandler::Stop()
 void rai::NodeRpcHandler::SubscriberCount()
 {
     response_.put("count", node_.subscriptions_.Size());
+}
+
+void rai::NodeRpcHandler::Supply()
+{
+    rai::Amount supply = node_.Supply();
+    response_.put("amount", supply.StringDec());
+    response_.put("amount_in_rai", supply.StringBalance(rai::RAI) + " RAI");
 }
 
 void rai::NodeRpcHandler::SyncerStatus()

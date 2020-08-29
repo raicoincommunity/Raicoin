@@ -264,6 +264,7 @@ public:
     void QueueGapCaches(const rai::BlockHash&);
     void AgeGapCaches();
     rai::Amount RepWeight(const rai::Account&);
+    rai::Amount RepWeightTotal();
     void RepWeights(rai::RepWeights&);
     void UpdatePeerWeights();
     bool IsQualifiedRepresentative();
@@ -271,6 +272,7 @@ public:
     rai::NodeStatus Status() const;
     void SetStatus(rai::NodeStatus);
     rai::RpcHandlerMaker RpcHandlerMaker();
+    rai::Amount Supply();
 
     template <typename T>
     void Background(T action)

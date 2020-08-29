@@ -452,10 +452,35 @@ rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
     auto note_o = request.get_optional<std::string>("note");
     if (note_o && !note_o->empty())
     {
-        rai::ExtensionAppend(rai::ExtensionType::NOTE, *note_o, extensions);
+        error =
+            rai::ExtensionAppend(rai::ExtensionType::NOTE, *note_o, extensions);
+        IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
     }
 
     // other extensions here
+
+    auto custom_o = request.get_child_optional("custom_extensions");
+    if (custom_o && !custom_o->empty())
+    {
+        try
+        {
+            for (const auto& i : *custom_o)
+            {
+                auto type_str = i.second.get<std::string>("type");
+                uint16_t type;
+                error = rai::StringToUint(type_str, type);
+                IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
+                auto value = i.second.get<std::string>("value");
+                error = rai::ExtensionAppend(
+                    static_cast<rai::ExtensionType>(type), value, extensions);
+                IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
+            }
+        }
+        catch(...)
+        {
+            return rai::ErrorCode::EXTENSION_APPEND;
+        }
+    }
 
     if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
     {

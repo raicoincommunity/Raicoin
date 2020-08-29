@@ -318,6 +318,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "The account is synchronizing, please try later";
         }
+        case rai::ErrorCode::EXTENSION_APPEND:
+        {
+            return "Failed to append extension to block";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";
