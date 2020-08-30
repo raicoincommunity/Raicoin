@@ -107,6 +107,10 @@
         {
             "account": "rai_18xx93aarczbnb1xoxs4ik5i7jf6gtfp6qknc84w64c9918mjmjh91wi456m",
             "description": "donation 11, BTC hash=dbc7ded87f759f851d0af1b9e1ac5cbdc688e35f47c21c088c0f0449d1fa0777"
+        },
+        {
+            "account": "rai_1mnnmzd38p1wih1k4amcc57zqtkih8hzf1sqz75y3x8eiapygqp888fawh4i",
+            "description": "donation 12, NANO hash=32AE3898B820605B52E03E0AE2C682C9A87E850E75B6ED795792F8B5E33727DD"
         }
     ]
 }
