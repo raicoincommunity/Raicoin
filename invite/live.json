@@ -111,6 +111,26 @@
         {
             "account": "rai_1mnnmzd38p1wih1k4amcc57zqtkih8hzf1sqz75y3x8eiapygqp888fawh4i",
             "description": "donation 12, NANO hash=32AE3898B820605B52E03E0AE2C682C9A87E850E75B6ED795792F8B5E33727DD"
+        },
+        {
+            "account": "rai_1khqi4nogeco6jdd99hpq3c9wmxg3ub5as81zaoznje7tr1b4rucbwjrk47e",
+            "description": "donation 13, NANO hash=B3CB0E8D08D0F186F39127884E6286545C5E5FB50CC9C880185F2E983BEDDCED"
+        },
+        {
+            "account": "rai_1qp3wfdaby173oyh79djya63bmbhek5w1n1yii1gi3yomtd9nt5pey9wgtsf",
+            "description": "donation 14, NANO hash=E785C208224EBD45E82E1234BBC958E18CFC25934740E416BAEA1FC154C02DC7"
+        },
+        {
+            "account": "rai_1s5t3rjqc7pe1btjkqar568a1eimw559kc587arirftforyxciia6hkxpzeu",
+            "description": "donation 15, NANO hash=E785C208224EBD45E82E1234BBC958E18CFC25934740E416BAEA1FC154C02DC7"
+        },
+        {
+            "account": "rai_13qwp91zeqsfmiymxpk6si75171e77y8i5wpy1m8unhn193qhwuqhqb5eg4e",
+            "description": "donation 16, BTC hash=45239e21bd18eaa3cd70375a4a18a6de71ecf2ba93768238e073f76c7ae784c1"
+        },
+        {
+            "account": "rai_168tcpg7oyb6po9yrmg5reeoyxbc6oem6oxz9q9ngb6k4j9drgmmr7wpp13c",
+            "description": "donation 17, BTC hash=84df699b234b51dde378cea9102cd437531508eaa58f651613773bbde2d3504b"
         }
     ]
 }
