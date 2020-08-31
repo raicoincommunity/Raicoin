@@ -131,6 +131,10 @@
         {
             "account": "rai_168tcpg7oyb6po9yrmg5reeoyxbc6oem6oxz9q9ngb6k4j9drgmmr7wpp13c",
             "description": "donation 17, BTC hash=84df699b234b51dde378cea9102cd437531508eaa58f651613773bbde2d3504b"
+        },
+        {
+            "account": "rai_36fukex8awde7gcgsynb6j7etqmu7nxfof8pyfzkimgugt6xopqoo4xc9nt9",
+            "description": "donation 18, BTC hash=bd66436c793e06009eab323858b6523d49598dde3dcb3db9084ae8c2d1369d03"
         }
     ]
 }
