@@ -125,16 +125,24 @@
             "description": "donation 15, NANO hash=E785C208224EBD45E82E1234BBC958E18CFC25934740E416BAEA1FC154C02DC7"
         },
         {
-            "account": "rai_13qwp91zeqsfmiymxpk6si75171e77y8i5wpy1m8unhn193qhwuqhqb5eg4e",
+            "account": "rai_3k1jmpuun5axs5rmsu3gfap6b5w3xwyesa3knsdyr57dqz99mhwc7wm6mhky",
             "description": "donation 16, BTC hash=45239e21bd18eaa3cd70375a4a18a6de71ecf2ba93768238e073f76c7ae784c1"
         },
         {
-            "account": "rai_168tcpg7oyb6po9yrmg5reeoyxbc6oem6oxz9q9ngb6k4j9drgmmr7wpp13c",
+            "account": "rai_1qzj9jrq6rkmqibjibuypmci78j7f83e5za85xoykzofdxskk968ge75i4fd",
             "description": "donation 17, BTC hash=84df699b234b51dde378cea9102cd437531508eaa58f651613773bbde2d3504b"
         },
         {
             "account": "rai_36fukex8awde7gcgsynb6j7etqmu7nxfof8pyfzkimgugt6xopqoo4xc9nt9",
             "description": "donation 18, BTC hash=bd66436c793e06009eab323858b6523d49598dde3dcb3db9084ae8c2d1369d03"
+        },
+        {
+            "account": "rai_3uwqc3z56npn5n7g6u3fwq31qjhoq6tkx6q198j3ptppd33szs3rig8srd98",
+            "description": "donation 19, BTC hash=bd66436c793e06009eab323858b6523d49598dde3dcb3db9084ae8c2d1369d03"
+        },
+        {
+            "account": "rai_3mn188eyr63f75d44x66r9156m9x8pndbwgka1uxmbdhkeqp67cmpoeph8yq",
+            "description": "donation 20, BTC hash=bd66436c793e06009eab323858b6523d49598dde3dcb3db9084ae8c2d1369d03"
         }
     ]
 }
