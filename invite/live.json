@@ -147,6 +147,14 @@
         {
             "account": "rai_3zn5ngustcarc847rirpi3jjhg88x1h45wfr6k3srdmjbfn8o6juxkzjr963",
             "description": "donation 21, NANO hash=D35201E51E1A55589267DA5C239C5B5BC53E05F34E62A955368EC10C054BB598"
+        },
+        {
+            "account": "rai_3zhkq3gqkn5aysffkspn3kxe5jafbrqmwzdrnhmwjetnwwxymhhdhzmia4zy",
+            "description": "donation 22, BTC hash=cb81773218ed5a3743c777d2528dd7184e333dd53fa5ddf3365b5ef54bb2adcd"
+        },
+        {
+            "account": "rai_315za3ym1d97kouhzcwtbnmrb9kja71codj415bnizh1fmm5yz5kop1fzs1d",
+            "description": "donation 23, BTC hash=cb81773218ed5a3743c777d2528dd7184e333dd53fa5ddf3365b5ef54bb2adcd"
         }
     ]
 }
