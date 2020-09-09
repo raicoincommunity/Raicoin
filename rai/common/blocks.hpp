@@ -281,4 +281,7 @@ std::unique_ptr<rai::Block> DeserializeBlockJson(rai::ErrorCode&,
                                                  const rai::Ptree&);
 
 std::unique_ptr<rai::Block> DeserializeBlock(rai::ErrorCode&, rai::Stream&);
+std::unique_ptr<rai::Block> DeserializeBlockUnverify(rai::ErrorCode&,
+                                                     rai::Stream&);
+
 }  // namespace rai

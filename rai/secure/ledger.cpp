@@ -446,7 +446,7 @@ bool rai::Ledger::BlockGet(rai::Transaction& transaction,
 
     rai::BufferStream stream(value.Data(), value.Size());
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block                     = rai::DeserializeBlock(error_code, stream);
+    block = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
@@ -468,7 +468,7 @@ bool rai::Ledger::BlockGet(rai::Transaction& transaction,
 
     rai::BufferStream stream(value.Data(), value.Size());
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block                     = rai::DeserializeBlock(error_code, stream);
+    block = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
@@ -805,12 +805,12 @@ bool rai::Ledger::ForkGet(rai::Transaction& transaction,
 
     rai::BufferStream stream(value.Data(), value.Size());
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    first                     = rai::DeserializeBlock(error_code, stream);
+    first = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
     }
-    second = rai::DeserializeBlock(error_code, stream);
+    second = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
@@ -832,12 +832,12 @@ bool rai::Ledger::ForkGet(const rai::Iterator& it,
 
     rai::BufferStream stream(data, size);
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    first = rai::DeserializeBlock(error_code, stream);
+    first = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
     }
-    second = rai::DeserializeBlock(error_code, stream);
+    second = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
@@ -980,12 +980,12 @@ bool rai::Ledger::NextFork(rai::Transaction& transaction, rai::Account& account,
     }
     rai::BufferStream data_stream(data, size);
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    first = rai::DeserializeBlock(error_code, data_stream);
+    first = rai::DeserializeBlockUnverify(error_code, data_stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
     }
-    second = rai::DeserializeBlock(error_code, data_stream);
+    second = rai::DeserializeBlockUnverify(error_code, data_stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;
@@ -1462,7 +1462,7 @@ bool rai::Ledger::RollbackBlockGet(rai::Transaction& transaction,
 
     rai::BufferStream stream(value.Data(), value.Size());
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block = rai::DeserializeBlock(error_code, stream);
+    block = rai::DeserializeBlockUnverify(error_code, stream);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         return true;

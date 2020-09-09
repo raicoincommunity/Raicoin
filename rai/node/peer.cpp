@@ -994,6 +994,10 @@ std::vector<rai::Peer> rai::Peers::RandomPeers_(size_t max) const
     }
 
     size_t low = max * peers_low_weight_.size() / total;
+    if (low == 0 && peers_low_weight_.size() > 0 && max > 1)
+    {
+        low = 1;
+    }
     size_t normal = max - low;
     if (normal < max / 2)
     {

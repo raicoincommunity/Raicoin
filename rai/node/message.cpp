@@ -548,7 +548,8 @@ rai::ErrorCode rai::PublishMessage::Deserialize(rai::Stream& stream)
     }
 
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block_                    = DeserializeBlock(error_code, stream);
+    // verify in 
+    block_ = DeserializeBlockUnverify(error_code, stream);
     return error_code;
 }
 
@@ -625,7 +626,7 @@ rai::ErrorCode rai::ConfirmMessage::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    block_                    = DeserializeBlock(error_code, stream);
+    block_ = DeserializeBlock(error_code, stream);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     return rai::ErrorCode::SUCCESS;
@@ -743,7 +744,7 @@ rai::ErrorCode rai::QueryMessage::Deserialize(rai::Stream& stream)
             || QueryStatus() == rai::QueryStatus::FORK)
         {
             rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-            block_                    = DeserializeBlock(error_code, stream);
+            block_ = DeserializeBlock(error_code, stream);
             IF_NOT_SUCCESS_RETURN(error_code);
         }
     }

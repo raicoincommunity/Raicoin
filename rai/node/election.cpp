@@ -29,29 +29,34 @@ rai::RepVoteInfo::RepVoteInfo(bool conflict_found, const rai::Amount& weight,
 {
 }
 
-uint64_t rai::RepVoteInfo::WeightFactor() const
+uint64_t rai::RepVoteInfo::WeightFactor(uint64_t allow) const
 {
     uint64_t now = rai::CurrentTimestamp();
     uint64_t result = 0;
-    if (last_vote_.timestamp_ <= now - rai::MAX_TIMESTAMP_DIFF * 2)
+    if (allow = 0 || allow > rai::MAX_TIMESTAMP_DIFF)
+    {
+        return 0;
+    }
+
+    if (last_vote_.timestamp_ <= now - allow * 2)
     {
         result = 0;
     }
-    else if (last_vote_.timestamp_ <= now - rai::MAX_TIMESTAMP_DIFF)
+    else if (last_vote_.timestamp_ <= now - allow)
     {
         uint64_t diff =
-            last_vote_.timestamp_ + rai::MAX_TIMESTAMP_DIFF * 2 - now;
-        result = diff * 100 / rai::MAX_TIMESTAMP_DIFF;
+            last_vote_.timestamp_ + allow * 2 - now;
+        result = diff * 100 / allow;
     }
-    else if (last_vote_.timestamp_ <= now + rai::MAX_TIMESTAMP_DIFF)
+    else if (last_vote_.timestamp_ <= now + allow)
     {
         result =  100;
     }
-    else if (last_vote_.timestamp_ <= now + rai::MAX_TIMESTAMP_DIFF * 2)
+    else if (last_vote_.timestamp_ <= now + allow * 2)
     {
         uint64_t diff =
-            now + rai::MAX_TIMESTAMP_DIFF * 2 - last_vote_.timestamp_;
-        result =  diff * 100 / rai::MAX_TIMESTAMP_DIFF;
+            now + allow * 2 - last_vote_.timestamp_;
+        result =  diff * 100 / allow;
     }
     else
     {
@@ -76,9 +81,12 @@ rai::Election::Election()
       wins_(0),
       confirms_(0),
       winner_(0),
+      fork_broadcast_delay_(0),
       wakeup_(std::chrono::steady_clock::now()
               + rai::Elections::NON_FORK_ELECTION_DELAY)
 {
+    fork_broadcast_delay_ = rai::random_pool.GenerateWord32(
+        1, rai::Elections::FORK_ELECTION_DELAY.count() - 8);
 }
 
 void rai::Election::AddBlock(const std::shared_ptr<rai::Block>& block)
@@ -826,6 +834,20 @@ bool rai::Elections::CheckConflict_(const rai::Vote& first,
 
 rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election) const
 {
+    if (election.ForkFound())
+    {
+        return Tally_(election, rai::Elections::FORK_ELECTION_INTERVAL.count()
+                                    * rai::FORK_ELECTION_ROUNDS_THRESHOLD);
+    }
+    else
+    {
+        return Tally_(election, rai::Elections::FORK_ELECTION_DELAY.count());
+    }
+}
+
+rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election,
+                                           uint64_t time_diff) const
+{
     rai::ElectionStatus result;
     std::unordered_set<rai::Account> reps_not_voting(online_reps_);
     std::unordered_map<rai::BlockHash, rai::Amount> candidates;
@@ -847,7 +869,7 @@ rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election) const
             continue;
         }
 
-        uint64_t factor = vote.second.WeightFactor();
+        uint64_t factor = vote.second.WeightFactor(time_diff);
         rai::uint256_t weight(it->second.Number());
         weight = weight * factor / 100;
         rai::Amount adjust(static_cast<rai::uint128_t>(weight));
@@ -997,7 +1019,21 @@ std::chrono::steady_clock::time_point rai::Elections::NextWakeup_(
     auto now = std::chrono::steady_clock::now();
     if (election.ForkFound())
     {
-        return now + rai::Elections::FORK_ELECTION_INTERVAL;
+        if (election.broadcast_)
+        {
+            std::cout << "Broadcast delay:" << election.fork_broadcast_delay_
+                      << std::endl;
+            return now + std::chrono::seconds(election.fork_broadcast_delay_);
+        }
+        else
+        {
+            std::cout << "Election delay:"
+                      << (rai::Elections::FORK_ELECTION_INTERVAL.count()
+                          - election.fork_broadcast_delay_)
+                      << std::endl;
+            return now + rai::Elections::FORK_ELECTION_INTERVAL
+                   - std::chrono::seconds(election.fork_broadcast_delay_);
+        }
     }
 
     uint32_t shift = election.rounds_ / 5;

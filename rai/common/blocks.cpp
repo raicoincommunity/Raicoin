@@ -657,9 +657,6 @@ rai::ErrorCode rai::TxBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, signature_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error = CheckSignature_();
-    IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
-
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -1042,9 +1039,6 @@ rai::ErrorCode rai::RepBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, signature_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error =  CheckSignature_();
-    IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
-
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -1398,9 +1392,6 @@ rai::ErrorCode rai::AdBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, signature_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
-    error = CheckSignature_();
-    IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
-
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -1657,6 +1648,26 @@ std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
 
 std::unique_ptr<rai::Block> rai::DeserializeBlock(rai::ErrorCode& error_code,
                                                   rai::Stream& stream)
+{
+    std::unique_ptr<rai::Block> result =
+        rai::DeserializeBlockUnverify(error_code, stream);
+    if (error_code != rai::ErrorCode::SUCCESS || result == nullptr)
+    {
+        return nullptr;
+    }
+
+    bool error = result->CheckSignature();
+    if (error)
+    {
+        error_code = rai::ErrorCode::SIGNATURE;
+        return nullptr;
+    }
+
+    return result;
+}
+
+std::unique_ptr<rai::Block> rai::DeserializeBlockUnverify(
+    rai::ErrorCode& error_code, rai::Stream& stream)
 {
     std::unique_ptr<rai::Block> result(nullptr);
 
