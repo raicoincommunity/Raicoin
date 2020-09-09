@@ -1592,8 +1592,7 @@ void rai::Wallets::ProcessAccountCredit(
     rai::BlockOpcode opcode = rai::BlockOpcode::CREDIT;
 
     uint16_t credit = head->Credit() + credit_inc;
-    if (credit_inc >= rai::MAX_ACCOUNT_CREDIT
-        || credit > rai::MAX_ACCOUNT_CREDIT)
+    if (credit <= head->Credit())
     {
         callback(rai::ErrorCode::ACCOUNT_MAX_CREDIT, block);
         return;

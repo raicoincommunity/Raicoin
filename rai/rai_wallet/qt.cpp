@@ -38,6 +38,21 @@ void ShowLineSuccess(QLineEdit& line)
     line.setStyleSheet("QLineEdit { color: blue }");
 }
 
+void ShowLabelError(QLabel& label)
+{
+    label.setStyleSheet("QLabel { color: red }");
+}
+
+void ShowLabelDefault(QLabel& label)
+{
+    label.setStyleSheet("QLabel { color: black }");
+}
+
+void ShowLabelSuccess(QLabel& label)
+{
+    label.setStyleSheet("QLabel { color: blue }");
+}
+
 }  // namespace
 
 bool rai::QtEventProcessor::event(QEvent* event)
@@ -1061,7 +1076,7 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                 qt_main->send_.destination_->text().toStdString();
             rai::StringTrim(destination_str, " \r\n\t");
             rai::AccountParser parser(destination_str);
-            if (error)
+            if (parser.Error())
             {
                 ShowLineError(*qt_main->send_.destination_);
                 error_info = "Bad destination account";
@@ -1803,7 +1818,7 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                 qt_main->settings_.increase_->text().toStdString();
 
             uint32_t tx = 0;
-            error       = rai::StringToUint(increase_str, tx);
+            error = rai::StringToUint(increase_str, tx);
             if (error || tx == 0)
             {
                 error = true;
@@ -2710,15 +2725,637 @@ void rai::QtSignVerify::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
     });
 }
 
+rai::QtCreateBlock::QtCreateBlock(rai::QtMain& qt_main)
+    : window_(new QWidget),
+      layout_(new QVBoxLayout),
+      group_(new QButtonGroup),
+      group_layout_(new QHBoxLayout),
+      send_(new QRadioButton("Send")),
+      receive_(new QRadioButton("Receive")),
+      change_(new QRadioButton("Change")),
+      credit_(new QRadioButton("Credit")),
+      source_label_(new QLabel ("Source:")),
+      source_(new QLineEdit),
+      destination_label_(new QLabel ("Destination:")),
+      destination_(new QLineEdit),
+      amount_label_(new QLabel ("Amount:")),
+      amount_(new QLineEdit),
+      representative_label_(new QLabel ("Representative:")),
+      representative_(new QLineEdit),
+      credit_label_(new QLabel("Credit To Increase:")),
+      credit_amount_(new QLineEdit),
+      block_(new QPlainTextEdit),
+      status_(new QLabel),
+      create_json_(new QPushButton("Create Json")),
+      create_raw_(new QPushButton("Create Raw")),
+      back_(new QPushButton("Back")),
+      main_(qt_main)
+{
+    group_->addButton(send_);
+    group_->addButton(receive_);
+    group_->addButton(change_);
+    group_->addButton(credit_);
+    group_->setId(send_, 0);
+    group_->setId(receive_, 1);
+    group_->setId(change_, 2);
+    group_->setId(credit_, 3);
+    group_layout_->addWidget(send_);
+    group_layout_->addWidget(receive_);
+    group_layout_->addWidget(change_);
+    group_layout_->addWidget(credit_);
+
+    layout_->addLayout(group_layout_);
+    layout_->addWidget(source_label_);
+    layout_->addWidget(source_);
+    layout_->addWidget(destination_label_);
+    layout_->addWidget(destination_);
+    layout_->addWidget(amount_label_);
+    layout_->addWidget(amount_);
+    layout_->addWidget(representative_label_);
+    layout_->addWidget(representative_);
+    layout_->addWidget(credit_label_);
+    layout_->addWidget(credit_amount_);
+    layout_->addWidget(block_);
+    layout_->addWidget(status_);
+    layout_->addWidget(create_json_);
+    layout_->addWidget(create_raw_);
+    layout_->addWidget(back_);
+
+    window_->setLayout(layout_);
+}
+
+void rai::QtCreateBlock::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
+{
+    QObject::connect(send_, &QRadioButton::toggled, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        if (send_->isChecked())
+        {
+            HideAll();
+            ShowSend();
+        }
+    });
+
+    QObject::connect(receive_, &QRadioButton::toggled, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        if (receive_->isChecked())
+        {
+            HideAll();
+            ShowReceive();
+        }
+    });
+
+    QObject::connect(change_, &QRadioButton::toggled, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        if (change_->isChecked())
+        {
+            HideAll();
+            ShowChange();
+        }
+    });
+
+    QObject::connect(credit_, &QRadioButton::toggled, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        if (credit_->isChecked())
+        {
+            HideAll();
+            ShowCredit();
+        }
+    });
+
+    QObject::connect(create_json_, &QPushButton::released, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        Create(false);
+    });
+
+    QObject::connect(create_raw_, &QPushButton::released, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        Create(true);
+    });
+
+    QObject::connect(back_, &QPushButton::released, [qt_main_w]() {
+        if (auto qt_main = qt_main_w.lock())
+        {
+            qt_main->Pop();
+        } 
+    });
+
+    send_->click();
+}
+
+void rai::QtCreateBlock::HideAll()
+{
+    source_label_->hide();
+    source_->hide();
+    destination_label_->hide();
+    destination_->hide();
+    amount_label_->hide();
+    amount_->hide();
+    representative_label_->hide();
+    representative_->hide();
+    credit_label_->hide();
+    credit_amount_->hide();
+    block_->setPlainText("");
+    ShowDefault("");
+}
+
+void rai::QtCreateBlock::ShowSend()
+{
+    destination_label_->show();
+    destination_->show();
+    amount_label_->show();
+    amount_->show();
+}
+
+void rai::QtCreateBlock::ShowReceive()
+{
+    source_label_->show();
+    source_->show();
+    amount_label_->show();
+    amount_->show();
+}
+
+void rai::QtCreateBlock::ShowChange()
+{
+    representative_label_->show();
+    representative_->show();
+}
+
+void rai::QtCreateBlock::ShowCredit()
+{
+    credit_label_->show();
+    credit_amount_->show();
+}
+
+void rai::QtCreateBlock::Create(bool raw)
+{
+    auto wallet_id = main_.wallets_->SelectedWalletId();
+    if (main_.wallets_->WalletLocked(wallet_id))
+    {
+        ShowError(rai::ErrorCode::WALLET_LOCKED);
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    auto& ledger = main_.wallets_->ledger_;
+    rai::Transaction transaction(error_code, ledger, false);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ShowError(error_code);
+        return;
+    }
+
+    rai::AccountInfo info;
+    rai::Account account = main_.wallets_->SelectedAccount();
+    ledger.AccountInfoGet(transaction, account, info);
+
+    std::shared_ptr<rai::Block> head(nullptr);
+    if (info.Valid())
+    {
+        bool error = ledger.BlockGet(transaction, info.head_, head);
+        if (error)
+        {
+            ShowError(rai::ErrorCode::LEDGER_BLOCK_GET);
+            return;
+        }
+    }
+
+    if (!info.Valid() && group_->checkedId() != 1)
+    {
+        ShowError("The account's first block should be a receive block");
+        return;
+    }
+
+    std::unique_ptr<rai::Block> block(nullptr);
+    switch (group_->checkedId())
+    {
+        case 0:
+        {
+            block = CreateSend(account, info, head);
+            break;
+        }
+        case 1:
+        {
+            block = CreateReceive(account, info, head);
+            break;
+        }
+        case 2:
+        {
+            block = CreateChange(account, info, head);
+            break;
+        }
+        case 3:
+        {
+            block = CreateCredit(account, info, head);
+            break;
+        }
+        default:
+        {
+            break;
+        }
+    }
+
+    if (block == nullptr)
+    {
+        return;
+    }
+
+    std::string show;
+    if (raw)
+    {
+        std::vector<uint8_t> bytes;
+        {
+            rai::VectorStream stream(bytes);
+            block->Serialize(stream);
+        }
+        show = rai::BytesToHex(bytes.data(), bytes.size());
+    }
+    else
+    {
+        show = block->Json();
+    }
+    block_->setPlainText(show.c_str());
+    ShowSuccess("Block Created");
+}
+
+std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateSend(
+    const rai::Account& account, const rai::AccountInfo& info,
+    std::shared_ptr<rai::Block>& head)
+{
+    std::string destination_str = destination_->text().toStdString();
+    rai::StringTrim(destination_str, " \r\n\t");
+    rai::AccountParser parser(destination_str);
+    if (parser.Error())
+    {
+        ShowError("Bad destination account");
+        return nullptr;
+    }
+
+    rai::Account destination = parser.Account();
+    std::string sub_account  = parser.SubAccount();
+
+    std::vector<uint8_t> extensions;
+    if (!sub_account.empty())
+    {
+        rai::ExtensionAppend(rai::ExtensionType::SUB_ACCOUNT, sub_account,
+                             extensions);
+    }
+
+    std::string amount_str = amount_->text().toStdString();
+    rai::StringTrim(amount_str, "\r\n\t ");
+    rai::Amount amount;
+    bool error = amount.DecodeBalance(main_.rendering_ratio_, amount_str);
+    if (error)
+    {
+        ShowError("Bad amount number");
+        return nullptr;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::SEND;
+    uint16_t credit = head->Credit();
+
+    uint64_t now = rai::CurrentTimestamp();
+    uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
+    if (timestamp > now + 60)
+    {
+        ShowError(rai::ErrorCode::BLOCK_TIMESTAMP);
+        return nullptr;
+    }
+    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+        return nullptr;
+    }
+    
+    uint32_t counter =
+        rai::SameDay(timestamp, head->Timestamp()) ? head->Counter() + 1 : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_ACTION_CREDIT);
+        return nullptr;
+    }
+    uint64_t height = head->Height() + 1;
+    rai::BlockHash previous = info.head_;
+    if (head->Balance() < amount)
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_ACTION_BALANCE);
+        return nullptr;
+    }
+    rai::Amount balance = head->Balance() - amount;
+    rai::uint256_union link = destination;
+
+    if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
+    {
+        ShowError(rai::ErrorCode::EXTENSIONS_LENGTH);
+        return nullptr;
+    }
+
+    rai::Ptree extensions_ptree;
+    if (rai::ExtensionsToPtree(extensions, extensions_ptree))
+    {
+        ShowError(rai::ErrorCode::GENERIC);
+        return nullptr;
+    }
+
+    rai::RawKey private_key;
+    auto wallet = main_.wallets_->SelectedWallet();
+    rai::ErrorCode error_code  = wallet->PrivateKey(account, private_key);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ShowError(error_code);
+        return nullptr;
+    }
+
+    if (info.type_ == rai::BlockType::TX_BLOCK)
+    {
+        return std::make_unique<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account, previous,
+            head->Representative(), balance, link, extensions.size(),
+            extensions, private_key, account);
+    }
+    else
+    {
+        ShowError(rai::ErrorCode::BLOCK_TYPE);
+        return nullptr;
+    }
+}
+
+std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateReceive(
+    const rai::Account& account, const rai::AccountInfo& info,
+    std::shared_ptr<rai::Block>& head)
+{
+    std::string source_str = source_->text().toStdString();
+    rai::StringTrim(source_str, " \r\n\t");
+    rai::BlockHash source;
+    bool error = source.DecodeHex(source_str);
+    if (error)
+    {
+        ShowError("Invalid source");
+        return nullptr;
+    }
+
+    std::string amount_str = amount_->text().toStdString();
+    rai::StringTrim(amount_str, "\r\n\t ");
+    rai::Amount amount;
+    error = amount.DecodeBalance(main_.rendering_ratio_, amount_str);
+    if (error)
+    {
+        ShowError("Bad amount number");
+        return nullptr;
+    }
+
+    if (!info.Valid())
+    {
+        rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
+        uint16_t credit         = 1;
+        uint64_t timestamp      = rai::CurrentTimestamp();
+        uint32_t counter        = 1;
+        uint64_t height         = 0;
+        rai::BlockHash previous(0);
+        if (amount < rai::CreditPrice(timestamp))
+        {
+            ShowError(rai::ErrorCode::WALLET_RECEIVABLE_LESS_THAN_CREDIT);
+            return nullptr;
+        }
+        rai::Amount balance     = amount - rai::CreditPrice(timestamp);
+        rai::uint256_union link = source;
+        rai::Account rep        = main_.wallets_->RandomRepresentative();
+        rai::RawKey private_key;
+        auto wallet               = main_.wallets_->SelectedWallet();
+        rai::ErrorCode error_code = wallet->PrivateKey(account, private_key);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            ShowError(error_code);
+            return nullptr;
+        }
+
+        return std::make_unique<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account, previous, rep,
+            balance, link, 0, std::vector<uint8_t>(), private_key, account);
+    }
+    else
+    {
+        rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
+        uint16_t credit         = head->Credit();
+
+        uint64_t timestamp = rai::CurrentTimestamp();
+
+        if (info.forks_ > rai::MaxAllowedForks(timestamp))
+        {
+            ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+            return nullptr;
+        }
+
+        uint32_t counter = rai::SameDay(timestamp, head->Timestamp())
+                               ? head->Counter() + 1
+                               : 1;
+        if (counter
+            > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+        {
+            ShowError(rai::ErrorCode::ACCOUNT_ACTION_CREDIT);
+            return nullptr;
+        }
+        uint64_t height         = head->Height() + 1;
+        rai::BlockHash previous = info.head_;
+        rai::Amount balance     = head->Balance() + amount;
+        rai::uint256_union link = source;
+        rai::RawKey private_key;
+        auto wallet = main_.wallets_->SelectedWallet();
+        rai::ErrorCode error_code = wallet->PrivateKey(account, private_key);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            ShowError(error_code);
+            return nullptr;
+        }
+
+        if (info.type_ == rai::BlockType::TX_BLOCK)
+        {
+            return std::make_unique<rai::TxBlock>(
+                opcode, credit, counter, timestamp, height, account, previous,
+                head->Representative(), balance, link, 0, std::vector<uint8_t>(),
+                private_key, account);
+        }
+        else
+        {
+            ShowError(rai::ErrorCode::BLOCK_TYPE);
+            return nullptr;
+        }
+    }
+}
+
+std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateChange(
+    const rai::Account& account, const rai::AccountInfo& info,
+    std::shared_ptr<rai::Block>& head)
+{
+    std::string rep_str = representative_->text().toStdString();
+    rai::StringTrim(rep_str, " \r\n\t");
+    rai::Account rep;
+    bool error = rep.DecodeAccount(rep_str);
+    if (error)
+    {
+        ShowError("Invalid representative account");
+        return nullptr;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::CHANGE;
+    uint16_t credit = head->Credit();
+
+    uint64_t now = rai::CurrentTimestamp();
+    uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
+    if (timestamp > now + 60)
+    {
+        ShowError(rai::ErrorCode::BLOCK_TIMESTAMP);
+        return nullptr;
+    }
+    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+        return  nullptr;
+    }
+
+    uint32_t counter =
+        rai::SameDay(timestamp, head->Timestamp()) ? head->Counter() + 1 : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_ACTION_CREDIT);
+        return nullptr;
+    }
+    uint64_t height = head->Height() + 1;
+    rai::BlockHash previous = info.head_;
+    rai::Amount balance = head->Balance();
+    rai::uint256_union link(0);
+    rai::RawKey private_key;
+    auto wallet = main_.wallets_->SelectedWallet();
+    rai::ErrorCode error_code = wallet->PrivateKey(account, private_key);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ShowError(error_code);
+        return nullptr;
+    }
+
+    if (info.type_ == rai::BlockType::TX_BLOCK)
+    {
+        return std::make_unique<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account, previous, rep,
+            balance, link, 0, std::vector<uint8_t>(), private_key, account);
+    }
+    else
+    {
+        ShowError(rai::ErrorCode::BLOCK_TYPE);
+        return nullptr;
+    }
+}
+
+std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateCredit(
+    const rai::Account& account, const rai::AccountInfo& info,
+    std::shared_ptr<rai::Block>& head)
+{
+    std::string credit_str = credit_amount_->text().toStdString();
+    rai::StringTrim(credit_str, " \r\n\t");
+    uint16_t credit_inc = 0;
+    bool error = rai::StringToUint(credit_str, credit_inc);
+    if (error || 0 == credit_inc)
+    {
+        ShowError("Invalid credit number");
+        return nullptr;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::CREDIT;
+    uint16_t credit = head->Credit() + credit_inc;
+    if (credit <= head->Credit())
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_MAX_CREDIT);
+        return nullptr;
+    }
+
+    uint64_t now = rai::CurrentTimestamp();
+    uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
+    if (timestamp > now + 60)
+    {
+        ShowError(rai::ErrorCode::BLOCK_TIMESTAMP);
+        return nullptr;
+    }
+    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+        return nullptr;
+    }
+
+    uint32_t counter =
+        rai::SameDay(timestamp, head->Timestamp()) ? head->Counter() + 1 : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_ACTION_CREDIT);
+        return nullptr;
+    }
+
+    uint64_t height = head->Height() + 1;
+    rai::BlockHash previous = info.head_;
+
+    rai::Amount cost(rai::CreditPrice(timestamp).Number() * credit_inc);
+    if (cost > head->Balance())
+    {
+        ShowError(rai::ErrorCode::ACCOUNT_ACTION_BALANCE);
+        return nullptr;
+    }
+    rai::Amount balance = head->Balance() - cost;
+
+    rai::uint256_union link(0);
+    rai::RawKey private_key;
+    auto wallet = main_.wallets_->SelectedWallet();
+    rai::ErrorCode error_code = wallet->PrivateKey(account, private_key);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ShowError(error_code);
+        return nullptr;
+    }
+
+    return std::make_unique<rai::TxBlock>(
+        opcode, credit, counter, timestamp, height, account, previous,
+        head->Representative(), balance, link, 0, std::vector<uint8_t>(),
+        private_key, account);
+}
+
+void rai::QtCreateBlock::ShowError(const std::string& show)
+{
+    ShowLabelError(*status_);
+    status_->setText(show.c_str());
+}
+
+void rai::QtCreateBlock::ShowError(rai::ErrorCode error_code)
+{
+    ShowError(rai::ErrorString(error_code));
+}
+
+void rai::QtCreateBlock::ShowSuccess(const std::string& show)
+{
+    ShowLabelSuccess(*status_);
+    status_->setText(show.c_str());
+}
+
+void rai::QtCreateBlock::ShowDefault(const std::string& show)
+{
+    ShowLabelDefault(*status_);
+    status_->setText(show.c_str());
+}
+
 rai::QtAdvanced::QtAdvanced(rai::QtMain& qt_main)
     : window_(new QWidget),
       layout_(new QVBoxLayout),
       sign_verify_button_(new QPushButton("Sign/verify message")),
+      create_block_button_(new QPushButton("Create Block")),
       back_(new QPushButton("Back")),
       main_(qt_main),
-      sign_verify_(qt_main)
+      sign_verify_(qt_main),
+      create_block_(qt_main)
 {
     layout_->addWidget(sign_verify_button_);
+    layout_->addWidget(create_block_button_);
     layout_->addStretch();
     layout_->addWidget(back_);
 
@@ -2728,12 +3365,21 @@ rai::QtAdvanced::QtAdvanced(rai::QtMain& qt_main)
 void rai::QtAdvanced::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
 {
     sign_verify_.Start(qt_main_w);
+    create_block_.Start(qt_main_w);
 
     QObject::connect(
         sign_verify_button_, &QPushButton::released, [qt_main_w]() {
             if (auto qt_main = qt_main_w.lock())
             {
                 qt_main->Push(qt_main->advanced_.sign_verify_.window_);
+            }
+        });
+
+    QObject::connect(
+        create_block_button_, &QPushButton::released, [this, qt_main_w]() {
+            if (auto qt_main = qt_main_w.lock())
+            {
+                qt_main->Push(create_block_.window_);
             }
         });
 

@@ -302,6 +302,63 @@ public:
     rai::QtMain& main_;
 };
 
+class QtCreateBlock
+{
+public:
+    QtCreateBlock(rai::QtMain&);
+
+    void Start(const std::weak_ptr<rai::QtMain>&);
+    void HideAll();
+    void ShowSend();
+    void ShowReceive();
+    void ShowChange();
+    void ShowCredit();
+    void Create(bool);
+    std::unique_ptr<rai::Block> CreateSend(const rai::Account&,
+                                           const rai::AccountInfo&,
+                                           std::shared_ptr<rai::Block>&);
+    std::unique_ptr<rai::Block> CreateReceive(const rai::Account&,
+                                              const rai::AccountInfo&,
+                                              std::shared_ptr<rai::Block>&);
+    std::unique_ptr<rai::Block> CreateChange(const rai::Account&,
+                                             const rai::AccountInfo&,
+                                             std::shared_ptr<rai::Block>&);
+    std::unique_ptr<rai::Block> CreateCredit(const rai::Account&,
+                                             const rai::AccountInfo&,
+                                             std::shared_ptr<rai::Block>&);
+
+    void ShowError(const std::string&);
+    void ShowError(rai::ErrorCode);
+    void ShowSuccess(const std::string&);
+    void ShowDefault(const std::string&);
+
+    QWidget* window_;
+    QVBoxLayout* layout_;
+    QButtonGroup* group_;
+    QHBoxLayout* group_layout_;
+    QRadioButton* send_;
+    QRadioButton* receive_;
+    QRadioButton* change_;
+    QRadioButton* credit_;
+    QLabel* source_label_;
+    QLineEdit* source_;
+    QLabel* destination_label_;
+    QLineEdit* destination_;
+    QLabel* amount_label_;
+    QLineEdit* amount_;
+    QLabel* representative_label_;
+    QLineEdit* representative_;
+    QLabel* credit_label_;
+    QLineEdit* credit_amount_;
+    QPlainTextEdit* block_;
+    QLabel* status_;
+    QPushButton* create_json_;
+    QPushButton* create_raw_;
+    QPushButton* back_;
+
+    rai::QtMain& main_;
+};
+
 class QtAdvanced
 {
 public:
@@ -312,10 +369,12 @@ public:
     QWidget* window_;
     QVBoxLayout* layout_;
     QPushButton* sign_verify_button_;
+    QPushButton* create_block_button_;
     QPushButton* back_;
 
     rai::QtMain& main_;
     rai::QtSignVerify sign_verify_;
+    rai::QtCreateBlock create_block_;
 };
 
 class QtMain : public std::enable_shared_from_this<rai::QtMain>
