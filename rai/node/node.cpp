@@ -1684,7 +1684,7 @@ void rai::Node::ReceiveBlock(const std::shared_ptr<rai::Block>& block,
     // CPU consuming operation
     if (block->CheckSignature())
     {
-        // TODO:stat
+        rai::Stats::Add(rai::ErrorCode::SIGNATURE);
         return;
     }
     

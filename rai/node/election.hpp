@@ -30,7 +30,7 @@ class RepVoteInfo
 public:
     RepVoteInfo();
     RepVoteInfo(bool, const rai::Amount&, const rai::Vote&);
-    uint64_t WeightFactor() const;
+    uint64_t WeightFactor(uint64_t) const;
 
     bool conflict_found_;
     rai::Amount weight_;
@@ -61,6 +61,7 @@ public:
     uint32_t rounds_fork_;
     uint32_t wins_;
     uint32_t confirms_;
+    uint32_t fork_broadcast_delay_;
     rai::BlockHash winner_;
     std::chrono::steady_clock::time_point wakeup_;
     std::unordered_map<rai::BlockHash, rai::BlockReference> blocks_;
@@ -106,9 +107,9 @@ public:
     size_t Size() const;
 
     static std::chrono::seconds constexpr FORK_ELECTION_DELAY =
-        std::chrono::seconds(16);
+        std::chrono::seconds(32);
     static std::chrono::seconds constexpr FORK_ELECTION_INTERVAL =
-        std::chrono::seconds(16);
+        std::chrono::seconds(32);
     static std::chrono::seconds constexpr NON_FORK_ELECTION_DELAY =
         std::chrono::seconds(1);
     static std::chrono::seconds constexpr NON_FORK_ELECTION_INTERVAL =
@@ -135,6 +136,7 @@ private:
                        const std::chrono::steady_clock::time_point&);
     bool CheckConflict_(const rai::Vote&, const rai::Vote&) const;
     rai::ElectionStatus Tally_(const rai::Election&) const;
+    rai::ElectionStatus Tally_(const rai::Election&, uint64_t) const;
     void RequestConfirms_(const rai::Election&);
     void BroadcastConfirms_(const rai::Election&);
     std::chrono::steady_clock::time_point NextWakeup_(
