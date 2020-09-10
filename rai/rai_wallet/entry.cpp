@@ -6,7 +6,7 @@
 #include <rai/secure/util.hpp>
 #include <rai/rai_wallet/qt.hpp>
 #include <rai/rai_wallet/icon.hpp>
-#include <rai/wallet/config.hpp>
+#include <rai/rai_wallet/config.hpp>
 
 namespace
 {
@@ -36,23 +36,20 @@ rai::ErrorCode Run(QApplication& application,
     {
         rai::QtEventProcessor processor;
         boost::filesystem::path config_path = data_path / "wallet_config.json";
-        rai::WalletConfig config;
-        if (boost::filesystem::exists(config_path))
+        rai::QtWalletConfig config;
+        std::fstream config_file;
+        error_code = rai::FetchObject(config, config_path, config_file);
+        config_file.close();
+        if (error_code != rai::ErrorCode::SUCCESS)
         {
-            std::fstream config_file;
-            error_code = rai::FetchObject(config, config_path, config_file);
-            config_file.close();
-            if (error_code != rai::ErrorCode::SUCCESS)
-            {
-                ShowError(error_code);
-                return error_code;
-            }
+            ShowError(error_code);
+            return error_code;
         }
 
         boost::asio::io_service service;
         rai::Alarm alarm(service);
         std::shared_ptr<rai::Wallets> wallets = std::make_shared<rai::Wallets>(
-            error_code, service, alarm, data_path, config,
+            error_code, service, alarm, data_path, config.wallet_,
             rai::BlockType::TX_BLOCK);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
@@ -60,14 +57,15 @@ rai::ErrorCode Run(QApplication& application,
             return error_code;
         }
 
+        auto gui = std::make_shared<rai::QtMain>(application, processor,
+                                                 wallets, config_path, config);
+
         QObject::connect(&application, &QApplication::aboutToQuit, [&]() {
+            gui->Stop();
             wallets->Stop();
         });
 
-        std::shared_ptr<rai::QtMain> gui(nullptr);
         application.postEvent(&processor, new rai::QtEvent([&]() {
-            gui =
-                std::make_shared<rai::QtMain>(application, processor, wallets);
             gui->Start();
             wallets->Start();
             gui->window_->show();

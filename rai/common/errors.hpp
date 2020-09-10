@@ -111,6 +111,7 @@ enum class ErrorCode : int
     REWARD_TO_ACCOUNT                    = 101,
     WALLET_ACCOUNT_IN_SYNC               = 102,
     EXTENSION_APPEND                     = 103,
+    ACCOUNT_RESTRICTED                   = 104,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

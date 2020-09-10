@@ -322,6 +322,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to append extension to block";
         }
+        case rai::ErrorCode::ACCOUNT_RESTRICTED:
+        {
+            return "Account is restricted";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

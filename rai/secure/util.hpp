@@ -78,4 +78,24 @@ rai::ErrorCode FetchObject(T& object, const boost::filesystem::path& path,
     }
     return error_code;
 }
+
+// Write a json object to the stream
+template <typename T>
+rai::ErrorCode WriteObject(T& object, const boost::filesystem::path& path,
+                           std::fstream& stream)
+{
+    rai::Ptree ptree;
+    object.SerializeJson(ptree);
+    stream.open(path.string(), std::ios_base::out | std::ios_base::trunc);
+    try
+    {
+        boost::property_tree::write_json(stream, ptree);
+    }
+    catch (const std::runtime_error&)
+    {
+        return rai::ErrorCode::WRITE_FILE;
+    }
+    return rai::ErrorCode::SUCCESS;
+}
+
 }  // namespace rai

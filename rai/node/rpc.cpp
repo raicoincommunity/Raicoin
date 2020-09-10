@@ -388,8 +388,7 @@ void rai::NodeRpcHandler::AccountInfo()
         response_.put("confirmed_height", info.confirmed_height_);
     }
     response_.put("forks", info.forks_);
-    response_.put("limited",
-                  info.forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp()));
+    response_.put("restricted", info.Restricted());
 
     std::shared_ptr<rai::Block> head_block(nullptr);
     error = node_.ledger_.BlockGet(transaction, info.head_, head_block);
@@ -759,14 +758,14 @@ void rai::NodeRpcHandler::Forks()
     }
 
     uint64_t height = 0;
-    error           = GetHeight_(height);
+    error = GetHeight_(height);
     if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_HEIGHT)
     {
         return;
     }
 
     uint64_t count = 1000;
-    error          = GetCount_(count);
+    error = GetCount_(count);
     if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_COUNT)
     {
         return;

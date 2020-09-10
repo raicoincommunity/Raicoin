@@ -1179,6 +1179,13 @@ rai::QtReceive::QtReceive(rai::QtMain& qt_main)
       view_(new QTableView),
       receive_(new QPushButton("Receive")),
       receive_all_(new QPushButton("Receive all")),
+      separator_(new QFrame),
+      group_(new QButtonGroup),
+      group_layout_(new QHBoxLayout),
+      auto_receive_(new QLabel("Auto receive:")),
+      yes_(new QRadioButton("Yes")),
+      no_(new QRadioButton("No")),
+      separator_2_(new QFrame),
       back_(new QPushButton("Back")),
       main_(qt_main)
 {
@@ -1194,6 +1201,24 @@ rai::QtReceive::QtReceive(rai::QtMain& qt_main)
     layout_->addWidget(view_);
     layout_->addWidget(receive_);
     layout_->addWidget(receive_all_);
+
+    separator_->setFrameShape(QFrame::HLine);
+    separator_->setFrameShadow(QFrame::Sunken);
+    layout_->addWidget(separator_);
+
+    group_->addButton(yes_);
+    group_->addButton(no_);
+    group_->setId(yes_, 0);
+    group_->setId(no_, 1);
+    group_layout_->addWidget(auto_receive_);
+    group_layout_->addWidget(yes_);
+    group_layout_->addWidget(no_);
+    layout_->addLayout(group_layout_);
+
+    separator_2_->setFrameShape(QFrame::HLine);
+    separator_2_->setFrameShadow(QFrame::Sunken);
+    layout_->addWidget(separator_2_);
+
     layout_->addWidget(back_);
 
     layout_->setContentsMargins(0, 0, 0, 0);
@@ -1412,8 +1437,31 @@ void rai::QtReceive::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             });
     });
 
+    QObject::connect(yes_, &QRadioButton::toggled, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        if (yes_->isChecked())
+        {
+            main_.auto_receive_ = true;
+            main_.SaveConfig();
+            main_.AutoReceiveNotify();
+        }
+    });
+
+    QObject::connect(no_, &QRadioButton::toggled, [this, qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+        if (no_->isChecked())
+        {
+            main_.auto_receive_ = false;
+            main_.SaveConfig();
+            main_.AutoReceiveNotify();
+        }
+    });
+
     main_.wallets_->observers_.block_.Add(
-        [qt_main_w](const std::shared_ptr<rai::Block>& block, bool rollback) {
+        [this, qt_main_w](const std::shared_ptr<rai::Block>& block,
+                          bool rollback) {
             auto qt_main = qt_main_w.lock();
             if (qt_main == nullptr) return;
 
@@ -1424,6 +1472,14 @@ void rai::QtReceive::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                     qt_main.receive_.Refresh();
                 }
             });
+
+            if (!rollback && block->Opcode() == rai::BlockOpcode::CREDIT)
+            {
+                if (main_.auto_receive_)
+                {
+                    main_.AutoReceiveNotify();
+                }
+            }
         });
 
     main_.wallets_->observers_.selected_account_.Add(
@@ -1436,7 +1492,7 @@ void rai::QtReceive::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
         });
 
     main_.wallets_->observers_.receivable_.Add(
-        [qt_main_w](const rai::Account& account) {
+        [this, qt_main_w](const rai::Account& account) {
             auto qt_main = qt_main_w.lock();
             if (qt_main == nullptr) return;
 
@@ -1446,9 +1502,59 @@ void rai::QtReceive::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                     qt_main.receive_.Refresh();
                 }
             });
+
+            if (main_.auto_receive_)
+            {
+                main_.AutoReceiveNotify();
+            }
+        });
+
+    main_.wallets_->observers_.wallet_locked_.Add(
+        [this, qt_main_w](bool locked) {
+            auto qt_main = qt_main_w.lock();
+            if (qt_main == nullptr) return;
+
+            if (!locked && main_.auto_receive_)
+            {
+                main_.AutoReceiveNotify();
+            }
+        });
+
+    main_.wallets_->observers_.connection_status_.Add(
+        [this, qt_main_w](rai::WebsocketStatus status) {
+            auto qt_main = qt_main_w.lock();
+            if (qt_main == nullptr) return;
+
+            if (status == rai::WebsocketStatus::CONNECTED)
+            {
+                if (main_.auto_receive_)
+                {
+                    main_.AutoReceiveNotify();
+                }
+            }
+        });
+
+    main_.wallets_->observers_.synced_.Add(
+        [this, qt_main_w](const rai::Account& account, bool synced) {
+            auto qt_main = qt_main_w.lock();
+            if (qt_main == nullptr) return;
+
+            if (synced && main_.auto_receive_)
+            {
+                main_.AutoReceiveNotify();
+            }
         });
 
     Refresh();
+
+    if (main_.auto_receive_)
+    {
+        yes_->click();
+    }
+    else
+    {
+        no_->click();
+    }
 }
 
 rai::QtSettings::QtSettings(rai::QtMain& qt_main)
@@ -3392,8 +3498,12 @@ void rai::QtAdvanced::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
 }
 
 rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
-                    const std::shared_ptr<rai::Wallets>& wallets)
+                    const std::shared_ptr<rai::Wallets>& wallets,
+                    const boost::filesystem::path& path,
+                    const rai::QtWalletConfig& config)
     : wallets_(wallets),
+      config_path_(path),
+      config_(config),
       application_(application),
       window_(new QWidget),
       layout_(new QVBoxLayout),
@@ -3420,7 +3530,13 @@ rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
       qt_wallets_(*this),
       advanced_(*this),
       processor_(processor),
-      rendering_ratio_(rai::RAI)
+      rendering_ratio_(rai::RAI),
+      auto_receive_(config.auto_receive_),
+      stopped_(false),
+      waiting_(false),
+      empty_(false),
+      error_code_(rai::ErrorCode::SUCCESS),
+      thread_([this]() { Run(); })
 {
     entry_window_layout_->addWidget(history_label_);
     entry_window_layout_->addWidget(history_.window_);
@@ -3578,4 +3694,218 @@ void rai::QtMain::Start()
     accounts_.Start(this_w);
     qt_wallets_.Start(this_w);
     advanced_.Start(this_w);
+}
+
+void rai::QtMain::SaveConfig()
+{
+    config_.auto_receive_ = auto_receive_;
+    std::fstream config_file;
+    rai::WriteObject(config_, config_path_, config_file);
+    config_file.close();
+}
+
+void rai::QtMain::Run()
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    while (!stopped_)
+    {
+        if (!auto_receive_)
+        {
+            std::cout << "Auto receive: false\n";
+            condition_.wait(lock);
+            continue;
+        }
+
+        if (waiting_)
+        {
+            std::cout << "Auto receive: waiting\n";
+            condition_.wait_for(lock, std::chrono::seconds(5));
+            continue;
+        }
+
+        if (error_code_ != rai::ErrorCode::SUCCESS)
+        {
+            std::cout << "Auto receive: error:" << static_cast<uint32_t>(error_code_) << std::endl;
+            error_code_ = rai::ErrorCode::SUCCESS;
+            condition_.wait_for(lock, std::chrono::seconds(5));
+            continue;
+        }
+
+        ProcessAutoReceive_(lock);
+
+        if (empty_)
+        {
+            std::cout << "Auto receive: empty\n";
+            condition_.wait_for(lock, std::chrono::seconds(300));
+        }
+    }
+}
+
+void rai::QtMain::Stop()
+{
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (stopped_)
+        {
+            return;
+        }
+        stopped_ = true;
+    }
+
+    condition_.notify_all();
+    if (thread_.joinable())
+    {
+        thread_.join();
+    }
+}
+
+void rai::QtMain::AutoReceiveNotify()
+{
+    condition_.notify_all();
+}
+
+void rai::QtMain::AutoReceiveCallback(rai::ErrorCode error_code,
+                                      const std::shared_ptr<rai::Block>& block)
+{
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        error_code_ = error_code;
+        waiting_ = false;
+    }
+
+    condition_.notify_all();
+}
+
+void rai::QtMain::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock)
+{
+    empty_ = true;
+    lock.unlock();
+
+    bool receive = false;
+    rai::BlockHash link;
+    rai::Account account;
+    std::shared_ptr<rai::Wallet> wallet(nullptr);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    do
+    {
+        if (!wallets_->Connected())
+        {
+            break;
+        }
+
+        rai::Ledger& ledger = wallets_->ledger_;
+        rai::Transaction transaction(error_code, ledger, false);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+
+        auto wallets = wallets_->SharedWallets();
+        for (auto& w : wallets)
+        {
+            wallet = w;
+            auto accounts = wallet->Accounts();
+            for (auto& i : accounts)
+            {
+                account = i.second.first;
+                error_code = wallets_->AccountActionPreCheck(wallet, account);
+                if (error_code != rai::ErrorCode::SUCCESS)
+                {
+                    continue;
+                }
+
+                rai::ReceivableInfos receivables;
+                bool error = ledger.ReceivableInfosGet(
+                    transaction, account, rai::ReceivableInfosType::ALL,
+                    receivables, 1);
+                if (error)
+                {
+                    std::cout << "QtMain::ProcessAutoReceive_: failed to get "
+                                 "receivables"
+                              << std::endl;
+                    continue;
+                }
+
+                auto it = receivables.begin();
+                if (it == receivables.end())
+                {
+                    continue;
+                }
+
+                uint64_t now = rai::CurrentTimestamp();
+                rai::Amount receive_mininum(rai::CreditPrice(now).Number()
+                                            / 10);
+                if (it->first.amount_ < receive_mininum)
+                {
+                    continue;
+                }
+
+                rai::AccountInfo info;
+                error = ledger.AccountInfoGet(transaction, account, info);
+                if (error || !info.Valid())
+                {
+                    if (it->first.amount_ < rai::CreditPrice(now))
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    if (info.Restricted())
+                    {
+                        continue;
+                    }
+
+                    std::shared_ptr<rai::Block> block(nullptr);
+                    error = ledger.BlockGet(transaction, info.head_, block);
+                    if (error)
+                    {
+                        std::cout << "QtMain::ProcessAutoReceive_: failed to "
+                                     "get block, hash="
+                                  << info.head_.StringHex() << std::endl;
+                        continue;
+                    }
+
+                    if (block->Limited())
+                    {
+                        continue;
+                    }
+                }
+
+                receive = true;
+                link = it->second;
+                break;
+            }
+
+            if (receive)
+            {
+                break;
+            }
+        }
+    } while(0);
+    lock.lock();
+
+    if (!receive)
+    {
+        return;
+    }
+    empty_ = false;
+    waiting_ = true;
+
+    lock.unlock();
+
+    error_code = wallets_->AccountReceive(
+        wallet, account, link,
+        [this](rai::ErrorCode error_code,
+               const std::shared_ptr<rai::Block>& block) {
+            AutoReceiveCallback(error_code, block);
+        });
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        AutoReceiveCallback(error_code, nullptr);
+    }
+    std::cout << "Auto receive: account=" << account.StringAccount()
+              << ", source=" << link.StringHex() << std::endl;
+
+    lock.lock();
 }

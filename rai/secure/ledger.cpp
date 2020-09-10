@@ -143,7 +143,7 @@ bool rai::AccountInfo::Valid() const
     return true;
 }
 
-bool rai::AccountInfo::Limit() const
+bool rai::AccountInfo::Restricted() const
 {
     return forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp());
 }

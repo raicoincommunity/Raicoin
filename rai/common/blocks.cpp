@@ -186,6 +186,12 @@ bool rai::Block::ForkWith(const rai::Block& other) const
     return true;
 }
 
+bool rai::Block::Limited() const
+{
+    return rai::SameDay(Timestamp(), rai::CurrentTimestamp())
+           && (Counter() >= Credit() * rai::TRANSACTIONS_PER_CREDIT);
+}
+
 size_t rai::Block::Size() const
 {
     std::vector<uint8_t> bytes;

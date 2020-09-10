@@ -33,7 +33,7 @@ uint64_t rai::RepVoteInfo::WeightFactor(uint64_t allow) const
 {
     uint64_t now = rai::CurrentTimestamp();
     uint64_t result = 0;
-    if (allow = 0 || allow > rai::MAX_TIMESTAMP_DIFF)
+    if (allow == 0 || allow > rai::MAX_TIMESTAMP_DIFF)
     {
         return 0;
     }
@@ -99,7 +99,9 @@ void rai::Election::AddBlock(const std::shared_ptr<rai::Block>& block)
         {
             fork_found_ = true;
             wakeup_ = std::chrono::steady_clock::now()
-                      + rai::Elections::FORK_ELECTION_DELAY;
+                    + rai::Elections::FORK_ELECTION_DELAY
+                    + std::chrono::seconds(fork_broadcast_delay_);
+            broadcast_ = true;
         }
     }
     else
@@ -1021,16 +1023,10 @@ std::chrono::steady_clock::time_point rai::Elections::NextWakeup_(
     {
         if (election.broadcast_)
         {
-            std::cout << "Broadcast delay:" << election.fork_broadcast_delay_
-                      << std::endl;
             return now + std::chrono::seconds(election.fork_broadcast_delay_);
         }
         else
         {
-            std::cout << "Election delay:"
-                      << (rai::Elections::FORK_ELECTION_INTERVAL.count()
-                          - election.fork_broadcast_delay_)
-                      << std::endl;
             return now + rai::Elections::FORK_ELECTION_INTERVAL
                    - std::chrono::seconds(election.fork_broadcast_delay_);
         }
