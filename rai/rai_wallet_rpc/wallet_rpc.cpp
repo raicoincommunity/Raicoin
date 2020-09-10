@@ -239,8 +239,7 @@ void rai::WalletRpcHandler::AccountInfo()
         response_.put("confirmed_height", info.confirmed_height_);
     }
     response_.put("forks", info.forks_);
-    response_.put("limited",
-                  info.forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp()));
+    response_.put("restricted", info.Restricted());
 
     std::shared_ptr<rai::Block> head_block(nullptr);
     error = main_.ledger_.BlockGet(transaction, info.head_, head_block);
@@ -869,7 +868,7 @@ void rai::WalletRpc::ProcessAutoCredit_(std::unique_lock<std::mutex>& lock,
 
         rai::AccountInfo info;
         bool error = ledger_.AccountInfoGet(transaction, account, info);
-        if (error || !info.Valid() || info.Limit())
+        if (error || !info.Valid() || info.Restricted())
         {
             break;
         }
@@ -982,7 +981,7 @@ void rai::WalletRpc::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock,
         }
         else
         {
-            if (info.Limit())
+            if (info.Restricted())
             {
                 break;
             }

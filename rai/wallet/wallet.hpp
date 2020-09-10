@@ -145,9 +145,16 @@ public:
                                const rai::AccountActionCallback&);
     rai::ErrorCode AccountReceive(const rai::Account&, const rai::BlockHash&,
                                   const rai::AccountActionCallback&);
+
+    rai::ErrorCode AccountActionPreCheck(const std::shared_ptr<rai::Wallet>&,
+                                         const rai::Account&);
+    rai::ErrorCode AccountReceive(const std::shared_ptr<rai::Wallet>&,
+                                  const rai::Account&, const rai::BlockHash&,
+                                  const rai::AccountActionCallback&);
     void BlockQuery(const rai::Account&, uint64_t, const rai::BlockHash&);
     void BlockPublish(const std::shared_ptr<rai::Block>&);
     void ConnectToServer();
+    bool Connected() const;
     rai::ErrorCode ChangePassword(const std::string&);
     rai::ErrorCode CreateAccount();
     rai::ErrorCode CreateAccount(uint32_t&);

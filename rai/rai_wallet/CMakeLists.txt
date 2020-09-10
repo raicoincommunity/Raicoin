@@ -13,6 +13,8 @@ add_executable (rai_wallet
 	${RES}
 	qt.hpp
 	qt.cpp
+	config.hpp
+	config.cpp
 	entry.cpp)
 
 target_link_libraries (rai_wallet

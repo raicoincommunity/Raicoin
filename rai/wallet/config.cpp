@@ -50,6 +50,10 @@ std::vector<std::string> DefaultPreconfiguredReps()
             result.push_back("rai_1os5ozxsjajpnkdj6zghzdy5fjncpa6egkjisgggutxkbmqicc8mjjfy87ja");
             result.push_back("rai_1khj7pa81ffn3o44jfqopeoq3apxpdagpjo9gu1nwc6x9ccpjggjouhifkkw");
             result.push_back("rai_1b5wb8hs5d3u5q8cnesk5xprr4damryn9xmrju7grdrtq6sxpanrwjo4s4r3");
+            result.push_back("rai_391mam7h9gxedh3bg9ge44tmbt3c5mutott7ug99u6eqdouwgftzed1tz9i5");
+            result.push_back("rai_3fbshbikq9w5pz8hpm4bcp1ugzamkqq8sqpch6qd4oy1bwrwdzjpj6fyhbio");
+            result.push_back("rai_1pypba9m6biy44zhdw8csa5imd3aaw6w6nbhh58zijf4hrgfres44ate77ug");
+            result.push_back("rai_11nfiez6ubhgstcro88t8i3ucu9qze156tue5qg71fo3ghnoc1r8djbpnmqb");
             break;
         }
         default:

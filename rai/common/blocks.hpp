@@ -41,6 +41,7 @@ public:
     bool CheckSignature() const;
     bool operator!=(const rai::Block&) const;
     bool ForkWith(const rai::Block&) const;
+    bool Limited() const;
     size_t Size() const;
 
     virtual ~Block()                                          = default;

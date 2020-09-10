@@ -945,6 +945,45 @@ rai::ErrorCode rai::Wallets::AccountReceive(
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ErrorCode rai::Wallets::AccountActionPreCheck(
+    const std::shared_ptr<rai::Wallet>& wallet, const rai::Account& account)
+{
+    if (!wallet->ValidPassword())
+    {
+        return rai::ErrorCode::WALLET_LOCKED;
+    }
+
+    if (!wallet->IsMyAccount(account))
+    {
+        return rai::ErrorCode::WALLET_ACCOUNT_GET;
+    }
+
+    if (!Synced(account))
+    {
+        return rai::ErrorCode::WALLET_ACCOUNT_IN_SYNC;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Wallets::AccountReceive(
+    const std::shared_ptr<rai::Wallet>& wallet, const rai::Account& account,
+    const rai::BlockHash& source, const rai::AccountActionCallback& callback)
+{
+    rai::ErrorCode error_code = AccountActionPreCheck(wallet, account);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    std::weak_ptr<rai::Wallets> this_w(Shared());
+    QueueAction(rai::WalletActionPri::HIGH, [this_w, wallet, account, source,
+                                             callback]() {
+        if (auto this_s = this_w.lock())
+        {
+            this_s->ProcessAccountReceive(wallet, account, source, callback);
+        }
+    });
+    return rai::ErrorCode::SUCCESS;
+}
+
 void rai::Wallets::BlockQuery(const rai::Account& account, uint64_t height,
                               const rai::BlockHash& previous)
 {
@@ -974,6 +1013,19 @@ void rai::Wallets::ConnectToServer()
         i->Run();
         service_runner_.Notify();
     }
+}
+
+bool rai::Wallets::Connected() const
+{
+    for (const auto& i : websockets_)
+    {
+        if (i->Status() == rai::WebsocketStatus::CONNECTED)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 rai::ErrorCode rai::Wallets::ChangePassword(const std::string& password)

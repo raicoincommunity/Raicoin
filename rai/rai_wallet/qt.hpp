@@ -1,14 +1,17 @@
 #pragma once
 
 #include <set>
+#include <atomic>
 #include <memory>
 #include <Qt>
 #include <QtGui>
 #include <QtWidgets>
+#include <boost/filesystem.hpp>
 #include <rai/common/errors.hpp>
 #include <rai/common/numbers.hpp>
 #include <rai/common/alarm.hpp>
 #include <rai/wallet/wallet.hpp>
+#include <rai/rai_wallet/config.hpp>
 
 namespace rai
 {
@@ -176,6 +179,13 @@ public:
     QTableView* view_;
     QPushButton* receive_;
     QPushButton* receive_all_;
+    QFrame* separator_;
+    QButtonGroup* group_;
+    QHBoxLayout* group_layout_;
+    QLabel* auto_receive_;
+    QRadioButton* yes_;
+    QRadioButton* no_;
+    QFrame* separator_2_;
     QPushButton* back_;
 
     rai::QtMain& main_;
@@ -381,7 +391,8 @@ class QtMain : public std::enable_shared_from_this<rai::QtMain>
 {
 public:
     QtMain(QApplication& application, rai::QtEventProcessor&,
-           const std::shared_ptr<rai::Wallets>&);
+           const std::shared_ptr<rai::Wallets>&, const boost::filesystem::path&,
+           const rai::QtWalletConfig&);
     QtMain(const rai::QtMain&) = delete;
 
     std::string FormatBalance(const rai::Amount&) const;
@@ -392,8 +403,16 @@ public:
     void Push(QWidget*);
     std::shared_ptr<rai::QtMain> Shared();
     void Start();
+    void SaveConfig();
+    void Run();
+    void Stop();
+    void AutoReceiveNotify();
+    void AutoReceiveCallback(rai::ErrorCode,
+                             const std::shared_ptr<rai::Block>&);
 
     std::shared_ptr<rai::Wallets> wallets_;
+    boost::filesystem::path config_path_;
+    rai::QtWalletConfig config_;
     QApplication& application_;
     QWidget* window_;
     QVBoxLayout* layout_;
@@ -423,5 +442,17 @@ public:
 
     rai::QtEventProcessor& processor_;
     rai::uint128_t rendering_ratio_;
+    std::atomic<bool> auto_receive_;
+
+private:
+    void ProcessAutoReceive_(std::unique_lock<std::mutex>&);
+
+    std::condition_variable condition_;
+    mutable std::mutex mutex_;
+    bool stopped_;
+    bool waiting_;
+    bool empty_;
+    rai::ErrorCode error_code_;
+    std::thread thread_;
 };
 }
