@@ -163,6 +163,48 @@ rai::ErrorCode ProcessVersion(const boost::program_options::variables_map& vm,
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ErrorCode ProcessConfigCreate(
+    const boost::program_options::variables_map& vm,
+    const boost::filesystem::path& data_path)
+{
+    boost::filesystem::path config_path = data_path / "config.json";
+    if (boost::filesystem::exists(config_path))
+    {
+        std::cout << "Error: the config file already exists:" << config_path
+                  << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    if (!vm.count("forward_reward_to"))
+    {
+        std::cout << "Error: please specify the 'forward_reward_to' parameter"
+                  << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    rai::Account account;
+    bool error =
+        account.DecodeAccount(vm["forward_reward_to"].as<std::string>());
+    if (error)
+    {
+        std::cout << "Error: invalid 'forward_reward_to' parameter" << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    rai::DaemonConfig config(data_path);
+    config.node_.forward_reward_to_ = account;
+
+    std::fstream config_file;
+    rai::ErrorCode error_code =
+        rai::WriteObject(config, config_path, config_file);
+    config_file.close();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    std::cout << "Success, the config file was saved to:" << config_path
+              << std::endl;
+    return rai::ErrorCode::SUCCESS;
+}
+
 }  // namespace
 
 void rai::CliAddOptions(boost::program_options::options_description& desc){
@@ -177,6 +219,8 @@ void rai::CliAddOptions(boost::program_options::options_description& desc){
         ("key_show", "Show key pair infomation in the specified <file>")
         ("sign", "Sign <hash> with a specified <key>")
         ("version", "Prints out version")
+        ("config_create", "Generate the config.json file")
+        ("forward_reward_to", boost::program_options::value<std::string>(), "Specify a wallet account to receive node reward")
         ;
 
     // clang-format on
@@ -194,7 +238,6 @@ rai::ErrorCode rai::CliProcessOptions(
         {
             data_path =
                 boost::filesystem::path(vm["data_path"].as<std::string>());
-            std::cout << data_path.string() << std::endl;
             if (data_path.string().find(".") == 0)
             {
                 data_path = boost::filesystem::canonical(data_path);
@@ -231,6 +274,10 @@ rai::ErrorCode rai::CliProcessOptions(
         else if (vm.count("version"))
         {
             error_code = ProcessVersion(vm, data_path);
+        }
+        else if (vm.count("config_create"))
+        {
+            error_code = ProcessConfigCreate(vm, data_path);
         }
         else
         {
