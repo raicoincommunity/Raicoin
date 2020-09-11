@@ -112,6 +112,9 @@ enum class ErrorCode : int
     WALLET_ACCOUNT_IN_SYNC               = 102,
     EXTENSION_APPEND                     = 103,
     ACCOUNT_RESTRICTED                   = 104,
+    LEDGER_SOURCE_PUT                    = 105,
+    LEDGER_VERSION_PUT                   = 106,
+    LEDGER_UNKNOWN_VERSION               = 107,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

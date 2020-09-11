@@ -254,6 +254,12 @@ public:
     void RepWeightTotalGet(rai::Amount&) const;
     void RepWeightsGet(rai::Amount&,
                        std::unordered_map<rai::Account, rai::Amount>&) const;
+    bool SourcePut(rai::Transaction&, const rai::BlockHash&);
+    bool SourcePut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
+    bool SourceGet(rai::Transaction&, const rai::BlockHash&,
+                   std::shared_ptr<rai::Block>&) const;
+    bool SourceDel(rai::Transaction&, const rai::BlockHash&);
+    bool SourceExists(rai::Transaction&, const rai::BlockHash&) const;
     bool WalletInfoPut(rai::Transaction&, uint32_t, const rai::WalletInfo&);
     bool WalletInfoGet(rai::Transaction&, uint32_t, rai::WalletInfo&) const;
     bool WalletInfoGetAll(
@@ -268,6 +274,11 @@ public:
         std::vector<std::pair<uint32_t, rai::WalletAccountInfo>>&) const;
     bool SelectedWalletIdPut(rai::Transaction&, uint32_t);
     bool SelectedWalletIdGet(rai::Transaction&, uint32_t&) const;
+    bool VersionPut(rai::Transaction&, uint32_t);
+    bool VersionGet(rai::Transaction&, uint32_t&) const;
+
+    rai::ErrorCode UpgradeWallet(rai::Transaction&);
+    rai::ErrorCode UpgradeWalletV1V2(rai::Transaction&);
 
 private:
     friend class rai::Transaction;

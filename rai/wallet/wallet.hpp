@@ -190,7 +190,8 @@ public:
     void ProcessBlock(const std::shared_ptr<rai::Block>&, bool);
     void ProcessBlockRollback(const std::shared_ptr<rai::Block>&);
     void ProcessReceivableInfo(const rai::Account&, const rai::BlockHash&,
-                               const rai::ReceivableInfo&);
+                               const rai::ReceivableInfo&,
+                               const std::shared_ptr<rai::Block>&);
     void QueueAccountInfo(const rai::Account&, const rai::AccountInfo&);
     void QueueAccountForks(
         const rai::Account&,
@@ -200,7 +201,8 @@ public:
     void QueueBlock(const std::shared_ptr<rai::Block>&, bool);
     void QueueBlockRollback(const std::shared_ptr<rai::Block>&);
     void QueueReceivable(const rai::Account&, const rai::BlockHash&,
-                         const rai::Amount&, const rai::Account&, uint64_t);
+                         const rai::Amount&, const rai::Account&, uint64_t,
+                         const std::shared_ptr<rai::Block>&);
     rai::Account RandomRepresentative() const;
     void ReceivablesQuery(const rai::Account&);
     void ReceiveAccountInfoQueryAck(const std::shared_ptr<rai::Ptree>&);
@@ -213,9 +215,6 @@ public:
     void ReceiveReceivablesQueryAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveReceivableInfoNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveMessage(const std::shared_ptr<rai::Ptree>&);
-    bool Received(const rai::BlockHash&) const;
-    void ReceivedAdd(const rai::BlockHash&);
-    void ReceivedDel(const rai::BlockHash&);
     void Send(const rai::Ptree&);
     std::vector<std::shared_ptr<rai::Wallet>> SharedWallets() const;
     void Start();
@@ -270,7 +269,6 @@ public:
 
 private:
     rai::ErrorCode ActionCommonCheck_() const;
-    void InitReceived_(rai::Transaction&);
     uint32_t NewWalletId_() const;
     void RegisterObservers_();
     bool Rollback_(rai::Transaction&, const rai::Account&);
@@ -286,7 +284,6 @@ private:
     mutable std::mutex mutex_;
     bool stopped_;
     uint32_t selected_wallet_id_;
-    std::unordered_set<rai::BlockHash> received_;
     std::unordered_set<rai::Account> synced_;
     std::vector<std::pair<uint32_t, std::shared_ptr<rai::Wallet>>> wallets_;
     std::multimap<rai::WalletActionPri, std::function<void()>,

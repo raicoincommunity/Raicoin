@@ -309,7 +309,7 @@ void rai::Rewarder::Run()
             {
                 delay = 5;
             }
-            else if (error_code == rai::ErrorCode::ACCOUNT_LIMITED)
+            else if (error_code == rai::ErrorCode::ACCOUNT_RESTRICTED)
             {
                 delay = 60;
             }
@@ -602,7 +602,7 @@ rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
         }
         if (info.forks_ > rai::MaxAllowedForks(timestamp))
         {
-            return rai::ErrorCode::ACCOUNT_LIMITED;
+            return rai::ErrorCode::ACCOUNT_RESTRICTED;
         }
 
         uint32_t counter =
@@ -677,7 +677,7 @@ rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        return rai::ErrorCode::ACCOUNT_LIMITED;
+        return rai::ErrorCode::ACCOUNT_RESTRICTED;
     }
 
     uint32_t counter =

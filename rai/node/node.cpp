@@ -794,10 +794,9 @@ public:
             transaction, message.block_->Account(), account_info);
         if (!error)
         {
-            if (account_info.forks_
-                > rai::MaxAllowedForks(rai::CurrentTimestamp()))
+            if (account_info.Restricted())
             {
-                rai::Stats::Add(rai::ErrorCode::ACCOUNT_LIMITED,
+                rai::Stats::Add(rai::ErrorCode::ACCOUNT_RESTRICTED,
                                 message.block_->Account().StringAccount());
                 return;
             }

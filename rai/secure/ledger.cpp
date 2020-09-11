@@ -265,11 +265,20 @@ rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node)
     : store_(store), total_rep_weight_(0)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
-    rai::Transaction transaction(error_code, *this, false);
+    rai::Transaction transaction(error_code, *this, true);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     if (is_node)
     {
         InitRepWeights_(transaction);
+    }
+    else
+    {
+        error_code = UpgradeWallet(transaction);
+    }
+    
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        transaction.Abort();
     }
 }
 
@@ -1515,6 +1524,102 @@ void rai::Ledger::RepWeightsGet(
     weights = rep_weights_;
 }
 
+bool rai::Ledger::SourcePut(rai::Transaction& transaction,
+                            const rai::BlockHash& source)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+
+    rai::MdbVal key(source);
+    uint8_t junk = 0;
+    rai::MdbVal value(sizeof(junk), &junk);
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.sources_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::SourcePut(rai::Transaction& transaction,
+                            const rai::BlockHash& source,
+                            const rai::Block& block)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        block.Serialize(stream);
+    }
+    rai::MdbVal key(source);
+    rai::MdbVal value(bytes.size(), bytes.data());
+
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.sources_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::SourceGet(rai::Transaction& transaction,
+                            const rai::BlockHash& source,
+                            std::shared_ptr<rai::Block>& block) const
+{
+    block = nullptr;
+    rai::MdbVal key(source);
+    rai::MdbVal value;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.sources_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    uint8_t junk;
+    if (value.Size() > sizeof(junk))
+    {
+        rai::BufferStream stream(value.Data(), value.Size());
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        block = rai::DeserializeBlockUnverify(error_code, stream);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool rai::Ledger::SourceDel(rai::Transaction& transaction,
+                            const rai::BlockHash& source)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    rai::MdbVal key(source);
+    return store_.Del(transaction.mdb_transaction_, store_.sources_, key,
+                      nullptr);
+}
+
+bool rai::Ledger::SourceExists(rai::Transaction& transaction,
+                               const rai::BlockHash& source) const
+{
+    rai::MdbVal key(source);
+    rai::MdbVal junk;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.sources_, key, junk);
+    if (error)
+    {
+        return false;
+    }
+    return true;
+}
+
 bool rai::Ledger::WalletInfoPut(rai::Transaction& transaction, uint32_t id,
                                 const rai::WalletInfo& info)
 {
@@ -1808,6 +1913,137 @@ bool rai::Ledger::SelectedWalletIdGet(rai::Transaction& transaction,
     return false;
 }
 
+
+bool rai::Ledger::VersionPut(rai::Transaction& transaction,
+                                      uint32_t version)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, rai::MetaKey::VERSION);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        rai::Write(stream, version);
+    }
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.meta_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::VersionGet(rai::Transaction& transaction,
+                                      uint32_t& version) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, rai::MetaKey::VERSION);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+
+    rai::MdbVal value;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.meta_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = rai::Read(stream, version);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+rai::ErrorCode rai::Ledger::UpgradeWallet(rai::Transaction& transaction)
+{
+    uint32_t version = 0;
+    bool error = VersionGet(transaction, version);
+    if (error)
+    {
+        version = 1;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    switch (version)
+    {
+        case 1:
+        {
+            error_code = UpgradeWalletV1V2(transaction);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 2:
+        {
+            break;
+        }
+        default:
+        {
+            return rai::ErrorCode::LEDGER_UNKNOWN_VERSION;
+        }
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Ledger::UpgradeWalletV1V2(rai::Transaction& transaction)
+{
+    for (auto i = AccountInfoBegin(transaction),
+              n = AccountInfoEnd(transaction);
+         i != n; ++i)
+    {
+        rai::Account account;
+        rai::AccountInfo info;
+        bool error = AccountInfoGet(i, account, info);
+        if (error)
+        {
+            return rai::ErrorCode::LEDGER_ACCOUNT_INFO_GET;
+        }
+
+        if (info.head_height_ == rai::Block::INVALID_HEIGHT)
+        {
+            continue;
+        }
+
+        rai::BlockHash hash(info.head_);
+        while (!hash.IsZero())
+        {
+            std::shared_ptr<rai::Block> block(nullptr);
+            error = BlockGet(transaction, hash, block);
+            if (error)
+            {
+                return rai::ErrorCode::LEDGER_BLOCK_GET;
+            }
+
+            if (block->Opcode() == rai::BlockOpcode::RECEIVE)
+            {
+                error = SourcePut(transaction, block->Link());
+                if (error)
+                {
+                    return rai::ErrorCode::LEDGER_SOURCE_PUT;
+                }
+            }
+            hash = block->Previous();
+        }
+    }
+
+    bool error = VersionPut(transaction, 2);
+    if (error)
+    {
+        return rai::ErrorCode::LEDGER_VERSION_PUT;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
 bool rai::Ledger::BlockIndexPut_(rai::Transaction& transaction,
                                  const rai::Account& account, uint64_t height,
                                  const rai::BlockHash& hash)
@@ -1943,4 +2179,3 @@ rai::ErrorCode rai::Ledger::InitRepWeights_(rai::Transaction& transaction)
 
     return rai::ErrorCode::SUCCESS;
 }
-

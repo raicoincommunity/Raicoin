@@ -411,6 +411,9 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
             ptree.put("amount", info.amount_.StringDec());
             ptree.put("hash", block->Hash().StringHex());
             ptree.put("timestamp", std::to_string(info.timestamp_));
+            rai::Ptree source_block;
+            block->SerializeJson(source_block);
+            ptree.put_child("source_block", source_block);
             node_.PostJson(node_.config_.callback_url_, ptree);
         }
     }

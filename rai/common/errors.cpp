@@ -326,6 +326,18 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Account is restricted";
         }
+        case rai::ErrorCode::LEDGER_SOURCE_PUT:
+        {
+            return "Failed to put source to ledger";
+        }
+        case rai::ErrorCode::LEDGER_VERSION_PUT:
+        {
+            return "Failed to put version to ledger";
+        }
+        case rai::ErrorCode::LEDGER_UNKNOWN_VERSION:
+        {
+            return "Unknown ledger version";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

@@ -3134,7 +3134,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateSend(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+        ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
         return nullptr;
     }
     
@@ -3253,7 +3253,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateReceive(
 
         if (info.forks_ > rai::MaxAllowedForks(timestamp))
         {
-            ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+            ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
             return nullptr;
         }
 
@@ -3320,7 +3320,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateChange(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+        ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
         return  nullptr;
     }
 
@@ -3388,7 +3388,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateCredit(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        ShowError(rai::ErrorCode::ACCOUNT_LIMITED);
+        ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
         return nullptr;
     }
 

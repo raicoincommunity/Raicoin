@@ -611,8 +611,6 @@ rai::Wallets::Wallets(rai::ErrorCode& error_code,
             return;
         }
     }
-
-    InitReceived_(transaction);
 }
 
 rai::Wallets::~Wallets()
@@ -1559,7 +1557,7 @@ void rai::Wallets::ProcessAccountChange(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        callback(rai::ErrorCode::ACCOUNT_LIMITED, block);
+        callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
     }
 
@@ -1659,7 +1657,7 @@ void rai::Wallets::ProcessAccountCredit(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        callback(rai::ErrorCode::ACCOUNT_LIMITED, block);
+        callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
     }
 
@@ -1757,7 +1755,7 @@ void rai::Wallets::ProcessAccountDestroy(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        callback(rai::ErrorCode::ACCOUNT_LIMITED, block);
+        callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
     }
 
@@ -1848,7 +1846,7 @@ void rai::Wallets::ProcessAccountSend(
     }
     if (info.forks_ > rai::MaxAllowedForks(timestamp))
     {
-        callback(rai::ErrorCode::ACCOUNT_LIMITED, block);
+        callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
     }
     
@@ -2018,7 +2016,7 @@ void rai::Wallets::ProcessAccountReceive(
         
         if (account_info.forks_ > rai::MaxAllowedForks(timestamp))
         {
-            callback(rai::ErrorCode::ACCOUNT_LIMITED, block);
+            callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
             return;
         }
 
@@ -2120,8 +2118,10 @@ void rai::Wallets::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             {
                 ledger_.ReceivableInfoDel(transaction, block->Account(),
                                           block->Link());
-            
-                ReceivedAdd(block->Link());
+                if (!ledger_.SourceExists(transaction, block->Link()))
+                {
+                    ledger_.SourcePut(transaction, block->Link());
+                }
             }
             break;
         }
@@ -2188,7 +2188,10 @@ void rai::Wallets::ProcessBlock(const std::shared_ptr<rai::Block>& block,
                 {
                     ledger_.ReceivableInfoDel(transaction, block->Account(),
                                               block->Link());
-                    ReceivedAdd(block->Link());
+                    if (!ledger_.SourceExists(transaction, block->Link()))
+                    {
+                        ledger_.SourcePut(transaction, block->Link());
+                    }
                 }
             }
         }
@@ -2274,9 +2277,9 @@ void rai::Wallets::ProcessBlockRollback(
     }
 }
 
-void rai::Wallets::ProcessReceivableInfo(const rai::Account& account,
-                                         const rai::BlockHash& hash,
-                                         const rai::ReceivableInfo& info)
+void rai::Wallets::ProcessReceivableInfo(
+    const rai::Account& account, const rai::BlockHash& hash,
+    const rai::ReceivableInfo& info, const std::shared_ptr<rai::Block>& block)
 {
     if (!IsMyAccount(account))
     {
@@ -2288,8 +2291,11 @@ void rai::Wallets::ProcessReceivableInfo(const rai::Account& account,
         return;
     }
 
-    if (Received(hash))
+    if (hash != block->Hash())
     {
+        std::cout << "Wallets::ProcessReceivableInfo: hash inconsistent, "
+                  << hash.StringHex() << ", " << block->Hash().StringHex()
+                  << std::endl;
         return;
     }
 
@@ -2302,6 +2308,11 @@ void rai::Wallets::ProcessReceivableInfo(const rai::Account& account,
             return;
         }
 
+        if (ledger_.SourceExists(transaction, hash))
+        {
+            return;
+        }
+
         if (ledger_.ReceivableInfoExists(transaction, account, hash))
         {
             return;
@@ -2311,6 +2322,15 @@ void rai::Wallets::ProcessReceivableInfo(const rai::Account& account,
         if (error)
         {
             // log
+            transaction.Abort();
+            return;
+        }
+
+        error = ledger_.SourcePut(transaction, hash, *block);
+        if (error)
+        {
+            std::cout << "Wallets::ProcessReceivableInfo: put source error\n";
+            transaction.Abort();
             return;
         }
     }
@@ -2385,16 +2405,18 @@ void rai::Wallets::QueueReceivable(const rai::Account& account,
                                    const rai::BlockHash& hash,
                                    const rai::Amount& amount,
                                    const rai::Account& source,
-                                   uint64_t timestamp)
+                                   uint64_t timestamp,
+                                   const std::shared_ptr<rai::Block>& block)
 {
     rai::ReceivableInfo info(source, amount, timestamp);
     std::weak_ptr<rai::Wallets> wallets(Shared());
-    QueueAction(rai::WalletActionPri::URGENT, [wallets, account, hash, info]() {
-        if (auto wallets_s = wallets.lock())
-        {
-            wallets_s->ProcessReceivableInfo(account, hash, info);
-        }
-    });
+    QueueAction(
+        rai::WalletActionPri::URGENT, [wallets, account, hash, info, block]() {
+            if (auto wallets_s = wallets.lock())
+            {
+                wallets_s->ProcessReceivableInfo(account, hash, info, block);
+            }
+        });
 }
 
 rai::Account rai::Wallets::RandomRepresentative() const
@@ -2820,7 +2842,7 @@ void rai::Wallets::ReceiveReceivablesQueryAck(
         if (!timestamp_o)
         {
             // log
-            std::cout << "ReceiveReceivableInfoNotify::get timestamp error\n";
+            std::cout << "ReceiveReceivablesQueryAck::get timestamp error\n";
             return;
         }
         uint64_t timestamp;
@@ -2828,11 +2850,32 @@ void rai::Wallets::ReceiveReceivablesQueryAck(
         if (error)
         {
             // log
-            std::cout << "ReceiveReceivableInfoNotify: invalid timestamp\n";
+            std::cout << "ReceiveReceivablesQueryAck: invalid timestamp\n";
             return;
         }
 
-        QueueReceivable(account, hash, amount, source, timestamp);
+
+        auto block_o = i.second.get_child_optional("source_block");
+        if (!block_o)
+        {
+            //log
+            std::cout << "ReceiveReceivablesQueryAck: get source block error\n";
+            return;
+        }
+
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        std::shared_ptr<rai::Block> block(nullptr);
+        block = rai::DeserializeBlockJson(error_code, *block_o);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            std::cout
+                << "ReceiveReceivablesQueryAck: deserialize source block error="
+                << rai::ErrorString(error_code) << std::endl;
+            return;
+        }
+
+        QueueReceivable(account, hash, amount, source, timestamp, block);
     }
 }
 
@@ -2910,7 +2953,27 @@ void rai::Wallets::ReceiveReceivableInfoNotify(
         return;
     }
 
-    QueueReceivable(account, hash, amount, source, timestamp);
+    auto block_o = message->get_child_optional("source_block");
+    if (!block_o)
+    {
+        // log
+        std::cout << "ReceiveReceivableInfoNotify: get source block error\n";
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    std::shared_ptr<rai::Block> block(nullptr);
+    block = rai::DeserializeBlockJson(error_code, *block_o);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        // log
+        std::cout
+            << "ReceiveReceivableInfoNotify: deserialize source block error="
+            << rai::ErrorString(error_code) << std::endl;
+        return;
+    }
+
+    QueueReceivable(account, hash, amount, source, timestamp, block);
 }
 
 void rai::Wallets::ReceiveMessage(const std::shared_ptr<rai::Ptree>& message)
@@ -2971,24 +3034,6 @@ void rai::Wallets::ReceiveMessage(const std::shared_ptr<rai::Ptree>& message)
             ReceiveForkNotify(message);
         }
     }
-}
-
-bool rai::Wallets::Received(const rai::BlockHash& hash) const
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    return received_.find(hash) != received_.end();
-}
-
-void rai::Wallets::ReceivedAdd(const rai::BlockHash& hash)
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    received_.insert(hash);
-}
-
-void rai::Wallets::ReceivedDel(const rai::BlockHash& hash)
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    received_.erase(hash);
 }
 
 void rai::Wallets::Send(const rai::Ptree& ptree)
@@ -3541,46 +3586,6 @@ rai::ErrorCode rai::Wallets::ActionCommonCheck_() const
     return rai::ErrorCode::SUCCESS;
 }
 
-void rai::Wallets::InitReceived_(rai::Transaction& transaction)
-{
-    for (auto i = ledger_.AccountInfoBegin(transaction),
-              n = ledger_.AccountInfoEnd(transaction);
-         i != n; ++i)
-    {
-        rai::Account account;
-        rai::AccountInfo info;
-        bool error = ledger_.AccountInfoGet(i, account, info);
-        if (error)
-        {
-            transaction.Abort();
-            throw std::runtime_error("AccountInfoGet error");
-        }
-
-        if (info.head_height_ == rai::Block::INVALID_HEIGHT)
-        {
-            continue;
-        }
-
-        rai::BlockHash hash(info.head_);
-        while (!hash.IsZero())
-        {
-            std::shared_ptr<rai::Block> block(nullptr);
-            error = ledger_.BlockGet(transaction, hash, block);
-            if (error)
-            {
-                transaction.Abort();
-                throw std::runtime_error("BlockGet error");
-            }
-
-            if (block->Opcode() == rai::BlockOpcode::RECEIVE)
-            {
-                received_.insert(block->Link());
-            }
-            hash = block->Previous();
-        }
-    }
-}
-
 uint32_t rai::Wallets::NewWalletId_() const
 {
     uint32_t result = 1;
@@ -3826,7 +3831,8 @@ bool rai::Wallets::Rollback_(rai::Transaction& transaction,
 
     if (block->Opcode() == rai::BlockOpcode::RECEIVE)
     {
-        ReceivedDel(block->Link());
+        error = ledger_.SourceDel(transaction, block->Link());
+        IF_ERROR_RETURN(error, true);
     }
 
     return false;

@@ -699,8 +699,9 @@ rai::RpcHandlerMaker rai::WalletRpc::RpcHandlerMaker()
     };
 }
 
-rai::Ptree rai::WalletRpc::MakeResponse_(const rai::WalletRpcAction& result,
-                                         const rai::Amount& amount) const
+rai::Ptree rai::WalletRpc::MakeResponse_(
+    const rai::WalletRpcAction& result, const rai::Amount& amount,
+    const std::shared_ptr<rai::Block>& source) const
 {
     rai::Ptree response;
 
@@ -719,6 +720,12 @@ rai::Ptree rai::WalletRpc::MakeResponse_(const rai::WalletRpcAction& result,
         response.put("hash", result.block_->Hash().StringHex());
         response.put("amount", amount.StringDec());
         response.put("amount_in_rai", amount.StringBalance(rai::RAI) + " RAI");
+        if (source)
+        {
+            rai::Ptree ptree_source;
+            source->SerializeJson(ptree_source);
+            response.put_child("source_block", ptree_source);
+        }
     }
     
     if (!result.request_.empty())
@@ -754,6 +761,7 @@ void rai::WalletRpc::ProcessPendings_(std::unique_lock<std::mutex>& lock,
     }
 
     rai::Amount amount(0);
+    std::shared_ptr<rai::Block> source(nullptr);
     if (it->error_code_ == rai::ErrorCode::SUCCESS)
     {
         rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
@@ -787,15 +795,8 @@ void rai::WalletRpc::ProcessPendings_(std::unique_lock<std::mutex>& lock,
 
         if (it->block_->Height() == 0)
         {
-            rai::uint256_t price_s(
-                rai::CreditPrice(it->block_->Timestamp()).Number());
-            rai::uint256_t cost_s = price_s * it->block_->Credit();
-            rai::uint256_t amount_s = cost_s + it->block_->Balance().Number();
-            if (amount_s <= std::numeric_limits<rai::uint128_t>::max())
-            {
-                amount = rai::Amount(static_cast<rai::uint128_t>(amount_s));
-            }
-            else
+            error = it->block_->Amount(amount);
+            if (error)
             {
                 rai::Log::Error(
                     "WalletRpc::ProcessCallback_: invalid balance, block hash="
@@ -816,19 +817,24 @@ void rai::WalletRpc::ProcessPendings_(std::unique_lock<std::mutex>& lock,
             }
             else
             {
-                if (previous->Balance() > it->block_->Balance())
-                {
-                    amount = previous->Balance() - it->block_->Balance();
-                }
-                else
-                {
-                    amount = it->block_->Balance() - previous->Balance();
-                }
+                it->block_->Amount(*previous, amount);
+            }
+        }
+
+        if (it->block_->Opcode() == rai::BlockOpcode::RECEIVE)
+        {
+            error = ledger_.SourceGet(transaction, it->block_->Link(), source);
+            if (error || source == nullptr)
+            {
+                rai::Log::Error(
+                    "WalletRpc::ProcessCallback_: failed to get source "
+                    "block, hash="
+                    + it->block_->Link().StringHex());
             }
         }
     }
 
-    rai::Ptree response = MakeResponse_(*it, amount);
+    rai::Ptree response = MakeResponse_(*it, amount, source);
     actions_.modify(it, [](rai::WalletRpcAction& data){
         data.callback_error_ = false;
         data.last_callback_ = rai::CurrentTimestamp();

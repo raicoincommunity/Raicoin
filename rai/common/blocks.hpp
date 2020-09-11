@@ -42,6 +42,8 @@ public:
     bool operator!=(const rai::Block&) const;
     bool ForkWith(const rai::Block&) const;
     bool Limited() const;
+    bool Amount(rai::Amount&) const;
+    bool Amount(const rai::Block&, rai::Amount&) const;
     size_t Size() const;
 
     virtual ~Block()                                          = default;
@@ -284,5 +286,4 @@ std::unique_ptr<rai::Block> DeserializeBlockJson(rai::ErrorCode&,
 std::unique_ptr<rai::Block> DeserializeBlock(rai::ErrorCode&, rai::Stream&);
 std::unique_ptr<rai::Block> DeserializeBlockUnverify(rai::ErrorCode&,
                                                      rai::Stream&);
-
 }  // namespace rai
