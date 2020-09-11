@@ -312,7 +312,7 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::REWARD_TO_ACCOUNT:
         {
-            return "Invalid reward_to account in config file";
+            return "Invalid forward_reward_to account in config file";
         }
         case rai::ErrorCode::WALLET_ACCOUNT_IN_SYNC:
         {

@@ -42,7 +42,7 @@ rai::ErrorCode rai::AirdropConfig::DeserializeJson(bool& upgraded,
         IF_ERROR_RETURN(error, error_code);
 
         error_code = rai::ErrorCode::JSON_CONFIG_WALLET;
-        rai::Ptree wallet_ptree = ptree.get_child("wallet");
+        rai::Ptree& wallet_ptree = ptree.get_child("wallet");
         error_code = wallet_.DeserializeJson(upgraded, wallet_ptree);
         IF_NOT_SUCCESS_RETURN(error_code);
     }

@@ -35,16 +35,18 @@ public:
     rai::ErrorCode DeserializeJson(bool&, rai::Ptree&);
     void SerializeJson(rai::Ptree&) const;
     rai::ErrorCode UpgradeJson(bool&, uint32_t, rai::Ptree&) const;
+    rai::ErrorCode UpgradeV1V2(rai::Ptree&) const;
 
-    static uint32_t constexpr DEFAULT_DAILY_REWARD_TIMES = 12;
+
+    static uint32_t constexpr DEFAULT_DAILY_FORWARD_TIMES = 12;
 
     uint16_t port_;
     rai::LogConfig log_;
     uint32_t io_threads_;
     std::vector<std::string> preconfigured_peers_;
     rai::Url callback_url_;
-    rai::Account reward_to_;
-    uint32_t daily_reward_times_;
+    rai::Account forward_reward_to_;
+    uint32_t daily_forward_times_;
 };
 
 class RecentBlock
