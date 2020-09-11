@@ -99,8 +99,8 @@ public:
     rai::Ledger& ledger_;
 
 private:
-    rai::Ptree MakeResponse_(const rai::WalletRpcAction&,
-                             const rai::Amount&) const;
+    rai::Ptree MakeResponse_(const rai::WalletRpcAction&, const rai::Amount&,
+                             const std::shared_ptr<rai::Block>&) const;
     void ProcessPendings_(std::unique_lock<std::mutex>&, bool&);
     void ProcessAutoCredit_(std::unique_lock<std::mutex>&, bool&);
     void ProcessAutoReceive_(std::unique_lock<std::mutex>&, bool&);

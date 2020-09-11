@@ -11,7 +11,8 @@ rai::Store::Store(rai::ErrorCode& error_code,
       rewardables_(0),
       rollbacks_(0),
       forks_(0),
-      wallets_(0)
+      wallets_(0),
+      sources_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -81,6 +82,13 @@ rai::Store::Store(rai::ErrorCode& error_code,
     }
 
     ret = mdb_dbi_open(transaction, "wallets", MDB_CREATE, &wallets_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "sources", MDB_CREATE, &sources_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

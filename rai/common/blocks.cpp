@@ -192,6 +192,41 @@ bool rai::Block::Limited() const
            && (Counter() >= Credit() * rai::TRANSACTIONS_PER_CREDIT);
 }
 
+bool rai::Block::Amount(rai::Amount& amount) const
+{
+    if (Height() != 0)
+    {
+        return true;
+    }
+
+    rai::uint256_t price_s(rai::CreditPrice(Timestamp()).Number());
+    rai::uint256_t cost_s = price_s * Credit();
+    rai::uint256_t amount_s = cost_s + Balance().Number();
+    if (amount_s <= std::numeric_limits<rai::uint128_t>::max())
+    {
+        amount = rai::Amount(static_cast<rai::uint128_t>(amount_s));
+    }
+    else
+    {
+        return true;
+    }
+
+    return false;
+}
+
+bool rai::Block::Amount(const rai::Block& previous, rai::Amount& amount) const
+{
+    if (previous.Balance() > Balance())
+    {
+        amount = previous.Balance() - Balance();
+    }
+    else
+    {
+        amount = Balance() - previous.Balance();
+    }
+    return false;
+}
+
 size_t rai::Block::Size() const
 {
     std::vector<uint8_t> bytes;

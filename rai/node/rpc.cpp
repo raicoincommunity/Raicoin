@@ -542,9 +542,9 @@ void rai::NodeRpcHandler::BlockPublish()
     rai::AccountInfo info;
     bool error =
         node_.ledger_.AccountInfoGet(transaction, block->Account(), info);
-    if (!error && info.forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp()))
+    if (!error && info.Restricted())
     {
-        error_code_ = rai::ErrorCode::ACCOUNT_LIMITED;
+        error_code_ = rai::ErrorCode::ACCOUNT_RESTRICTED;
         return;
     }
 
@@ -668,6 +668,13 @@ void rai::NodeRpcHandler::BlockQueryByHash()
     bool error = GetHash_(hash);
     IF_ERROR_RETURN_VOID(error);
 
+    bool raw = false;
+    auto raw_o = request_.get_optional<std::string>("raw");
+    if (raw_o && *raw_o != "false")
+    {
+        raw = true;
+    }
+
     rai::Transaction transaction(error_code_, node_.ledger_, false);
     if (error_code_ != rai::ErrorCode::SUCCESS)
     {
@@ -680,24 +687,57 @@ void rai::NodeRpcHandler::BlockQueryByHash()
     if (!error && block != nullptr)
     {
         response_.put("status", "success");
-        rai::Ptree block_ptree;
-        block->SerializeJson(block_ptree);
-        response_.add_child("block", block_ptree);
         response_.put("successor", successor.StringHex());
-        return;
     }
-
-    error = node_.ledger_.RollbackBlockGet(transaction, hash, block);
-    if (!error && block != nullptr)
+    else
     {
-        response_.put("status", "rollback");
-        rai::Ptree block_ptree;
-        block->SerializeJson(block_ptree);
-        response_.add_child("block", block_ptree);
+        error = node_.ledger_.RollbackBlockGet(transaction, hash, block);
+        if (!error && block != nullptr)
+        {
+            response_.put("status", "rollback");
+        }
+    }
+    
+    if (block == nullptr)
+    {
+        response_.put("status", "miss");
         return;
     }
 
-    response_.put("status", "miss");
+    rai::Amount amount(0);
+    if (block->Height() == 0)
+    {
+        error = block->Amount(amount);
+    }
+    else
+    {
+        std::shared_ptr<rai::Block> previous(nullptr);
+        error =
+            node_.ledger_.BlockGet(transaction, block->Previous(), previous);
+        if (!error)
+        {
+            error = block->Amount(*previous, amount);
+        }
+    }
+    if (!error)
+    {
+        response_.put("amount", amount.StringDec());
+        response_.put("amount_in_rai", amount.StringBalance(rai::RAI) + " RAI");
+    }
+
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    response_.add_child("block", block_ptree);
+    if (raw)
+    {
+        std::vector<uint8_t> bytes;
+        {
+            rai::VectorStream stream(bytes);
+            block->Serialize(stream);
+        }
+        response_.put("block_raw", rai::BytesToHex(bytes.data(), bytes.size()));
+    }
+
 }
 
 void rai::NodeRpcHandler::BootstrapStatus()
@@ -916,7 +956,7 @@ void rai::NodeRpcHandler::Receivables()
     IF_ERROR_RETURN_VOID(error);
 
     uint64_t count = 0;
-    error          = GetCount_(count);
+    error = GetCount_(count);
     IF_ERROR_RETURN_VOID(error);
 
     std::string type_str("all");
@@ -965,6 +1005,16 @@ void rai::NodeRpcHandler::Receivables()
         entry.put("amount", i.first.amount_.StringDec());
         entry.put("hash", i.second.StringHex());
         entry.put("timestamp", std::to_string(i.first.timestamp_));
+
+        std::shared_ptr<rai::Block> block(nullptr);
+        error = node_.ledger_.BlockGet(transaction, i.second, block);
+        if (!error)
+        {
+            rai::Ptree ptree_block;
+            block->SerializeJson(ptree_block);
+            entry.put_child("source_block", ptree_block);
+        }
+
         receivables_ptree.push_back(std::make_pair("", entry));
     }
     response_.put_child("receivables", receivables_ptree);
