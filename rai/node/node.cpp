@@ -14,8 +14,7 @@ std::chrono::seconds constexpr rai::ActiveAccounts::AGE_TIME;
 rai::NodeConfig::NodeConfig()
     : port_(rai::Network::DEFAULT_PORT),
       io_threads_(std::max<uint32_t>(4, std::thread::hardware_concurrency())),
-      daily_reward_times_(rai::NodeConfig::DEFAULT_DAILY_REWARD_TIMES)
-
+      daily_forward_times_(rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES)
 {
     switch (rai::RAI_NETWORK)
     {
@@ -64,7 +63,7 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
         io_threads_ = (0 == io_threads_) ? 1 : io_threads_;
 
         error_code = rai::ErrorCode::JSON_CONFIG_LOG;
-        rai::Ptree log_ptree = ptree.get_child("log");
+        rai::Ptree& log_ptree = ptree.get_child("log");
         error_code = log_.DeserializeJson(upgraded, log_ptree);
         IF_NOT_SUCCESS_RETURN(error_code);
 
@@ -85,19 +84,19 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
         }
 
         error_code = rai::ErrorCode::JSON_CONFIG_REWARD_TO;
-        std::string reward_to = ptree.get<std::string>("reward_to");
-        error = reward_to_.DecodeAccount(reward_to);
+        std::string forward_to = ptree.get<std::string>("forward_reward_to");
+        error = forward_reward_to_.DecodeAccount(forward_to);
         IF_ERROR_RETURN(error, error_code);
-        if (reward_to_.IsZero())
+        if (forward_reward_to_.IsZero())
         {
             return rai::ErrorCode::REWARD_TO_ACCOUNT;
         }
-        
+
         error_code = rai::ErrorCode::JSON_CONFIG_DAILY_REWARD_TIMES;
-        auto reward_times = ptree.get_optional<uint32_t>("daily_reward_times");
-        daily_reward_times_ = reward_times
-                                  ? *reward_times
-                                  : rai::NodeConfig::DEFAULT_DAILY_REWARD_TIMES;
+        auto forward_times = ptree.get_optional<uint32_t>("daily_forward_times");
+        daily_forward_times_ =
+            forward_times ? *forward_times
+                          : rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES;
     }
     catch (const std::exception&)
     {
@@ -108,7 +107,7 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
 
 void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
 {
-    ptree.put("version", "1");
+    ptree.put("version", "2");
     ptree.put("port", port_);
     ptree.put("io_threads", io_threads_);
     rai::Ptree log_ptree;
@@ -123,16 +122,23 @@ void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
     }
     ptree.add_child("preconfigured_peers", preconfigured_peers);
     ptree.put("callback_url", callback_url_.String());
-    ptree.put("reward_to", reward_to_.StringAccount());
-    ptree.put("daily_reward_times", std::to_string(daily_reward_times_));
+    ptree.put("forward_reward_to", forward_reward_to_.StringAccount());
+    ptree.put("daily_forward_times", std::to_string(daily_forward_times_));
 }
 
 rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
                                             rai::Ptree& ptree) const
 {
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     switch (version)
     {
         case 1:
+        {
+            upgraded = true;
+            error_code = UpgradeV1V2(ptree);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 2:
         {
             break;
         }
@@ -140,6 +146,28 @@ rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
         {
             return rai::ErrorCode::CONFIG_NODE_VERSION;
         }
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::NodeConfig::UpgradeV1V2(rai::Ptree& ptree) const
+{
+    ptree.put("version", 2);
+
+    auto reward_to_o = ptree.get_optional<std::string>("reward_to");
+    if (reward_to_o)
+    {
+        ptree.put("forward_reward_to", *reward_to_o);
+        ptree.erase("reward_to");
+    }
+
+    auto daily_reward_times_o =
+        ptree.get_optional<std::string>("daily_reward_times");
+    if (daily_reward_times_o)
+    {
+        ptree.put("daily_forward_times", *daily_reward_times_o);
+        ptree.erase("daily_reward_times");
     }
 
     return rai::ErrorCode::SUCCESS;
@@ -453,7 +481,7 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       bootstrap_(*this),
       bootstrap_listener_(*this, service, config.port_),
       subscriptions_(*this),
-      rewarder_(*this, config_.reward_to_, config_.daily_reward_times_)
+      rewarder_(*this, config_.forward_reward_to_, config_.daily_forward_times_)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {

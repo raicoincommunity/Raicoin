@@ -84,12 +84,12 @@ rai::ErrorCode rai::DaemonConfig::DeserializeJson(bool& upgraded,
         IF_NOT_SUCCESS_RETURN(error_code);
 
         error_code = rai::ErrorCode::JSON_CONFIG_NODE;
-        rai::Ptree node_ptree = ptree.get_child("node");
+        rai::Ptree& node_ptree = ptree.get_child("node");
         error_code = node_.DeserializeJson(upgraded, node_ptree);
         IF_NOT_SUCCESS_RETURN(error_code);
 
         error_code = rai::ErrorCode::JSON_CONFIG_RPC;
-        rai::Ptree rpc_ptree = ptree.get_child("rpc");
+        rai::Ptree& rpc_ptree = ptree.get_child("rpc");
         error_code = rpc_.DeserializeJson(upgraded, rpc_ptree);
         IF_NOT_SUCCESS_RETURN(error_code);
     }
