@@ -9,11 +9,122 @@
 
 namespace
 {
-rai::ErrorCode Process(const boost::program_options::variables_map& vm)
+
+rai::ErrorCode ProcessKeyCreate(const boost::program_options::variables_map& vm,
+                                const boost::filesystem::path& data_path)
+{
+    bool dir = false;
+    std::string file;
+    boost::filesystem::path key_path;
+    if (vm.count("file"))
+    {
+        file = vm["file"].as<std::string>();
+        if ((file.find("/") != std::string::npos)
+            || (file.find("\\") != std::string::npos))
+        {
+            key_path = boost::filesystem::path(file);
+            if (file.find(".") == 0)
+            {
+                auto parent_path = key_path.parent_path();
+                key_path = boost::filesystem::canonical(parent_path)
+                           / key_path.filename();
+            }
+        }
+        else
+        {
+            key_path = data_path / file;
+        }
+    }
+    else
+    {
+        dir = true;
+        key_path = data_path;
+    }
+
+    rai::ErrorCode error_code =  rai::CreateKey(key_path, dir);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    std::cout
+        << "IMPORTANT: the key file will be used as wallet seed, please back "
+           "up it and remember the passowrd, you may need it to restore wallet"
+        << std::endl;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode ProcessVersion(const boost::program_options::variables_map& vm,
+                              const boost::filesystem::path& data_path)
+{
+    std::cout << rai::RAI_VERSION_STRING << " " << rai::NetworkString()
+              << " network" << std::endl;
+    return rai::ErrorCode::SUCCESS;
+}
+
+
+rai::ErrorCode ProcessConfigCreate(
+    const boost::program_options::variables_map& vm,
+    const boost::filesystem::path& data_path)
+{
+    boost::filesystem::path config_path = data_path / "wallet_rpc_config.json";
+    if (boost::filesystem::exists(config_path))
+    {
+        std::cout << "Error: the config file already exists:" << config_path
+                  << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    if (!vm.count("callback_url"))
+    {
+        std::cout << "Error: please specify the 'callback_url' parameter to "
+                     "receive wallet events"
+                  << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+    rai::Url url;
+    bool error = url.Parse(vm["callback_url"].as<std::string>());
+    if (error)
+    {
+        std::cout << "Error: invalid 'callback_url' parameter" << std::endl;
+        rai::ErrorCode::SUCCESS;
+    }
+
+    if (!vm.count("representative"))
+    {
+        std::cout << "Error: please specify the 'representative' parameter, it "
+                     "should be a node account which is shown when the "
+                     "rai_node starts"
+                  << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+    rai::Account rep;
+    error = rep.DecodeAccount(vm["representative"].as<std::string>());
+    if (error)
+    {
+        std::cout << "Error: invalid 'representative' parameter" << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    rai::WalletRpcConfig config;
+    config.callback_url_ = url;
+    config.wallet_.preconfigured_reps_.clear();
+    config.wallet_.preconfigured_reps_.push_back(rep);
+
+    std::fstream config_file;
+    rai::ErrorCode error_code =
+        rai::WriteObject(config, config_path, config_file);
+    config_file.close();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    std::cout << "Success, the config file was saved to:" << config_path
+              << std::endl;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode Process(const boost::program_options::variables_map& vm,
+                       const boost::filesystem::path& data_path)
 {
     try
     {
-        boost::filesystem::path dir(boost::filesystem::current_path());
+        boost::filesystem::path dir(data_path);
 
         rai::ErrorCode error_code;
         rai::RawKey seed;
@@ -51,10 +162,14 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm)
         {
             return rai::ErrorCode::JSON_CONFIG_CALLBACK_URL;
         }
-        if (config.wallet_.server_.protocol_ == "wss"
+        if ((config.wallet_.server_.protocol_ == "wss"
+             || config.callback_url_.protocol_ == "https")
             && !boost::filesystem::exists("cacert.pem"))
         {
-            std::cout << "Error: can't find cacert.pem" << std::endl;
+            std::cout << "Error: the cacert.pem is missing, you can download "
+                         "it from "
+                         "https://github.com/raicoincommunity/Raicoin/releases"
+                      << std::endl;
             return rai::ErrorCode::SUCCESS;
         }
 
@@ -111,7 +226,7 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm)
             }
         }
         wallets->Start();
-        std::cout << "Selected account:"
+        std::cout << "Current account:"
                   << wallets->SelectedAccount().StringAccount() << std::endl;
 
         auto wallet_rpc = std::make_shared<rai::WalletRpc>(wallets, config);
@@ -142,8 +257,16 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm)
 int main(int argc, char* const* argv)
 {
     boost::program_options::options_description desc("Command line options");
-    desc.add_options()("key", boost::program_options::value<std::string>(),
-                       "Define key file for wallet seed");
+    desc.add_options()
+    ("key", boost::program_options::value<std::string>(),
+                       "Define key file to create wallet")
+    ("file", boost::program_options::value<std::string>(), "Define <file> for other commands")
+    ("key_create", "Generate a random key pair and save it to <file>")
+    ("config_create", "Generate the wallet_rpc_config.json file")
+    ("callback_url", boost::program_options::value<std::string>(), "Specify a url to receive wallet events")
+    ("representative", boost::program_options::value<std::string>(), "Specify a node account as your wallet's representative")
+    ("help", "Print usage help")
+    ;
 
     boost::program_options::variables_map vm;
     try
@@ -158,11 +281,28 @@ int main(int argc, char* const* argv)
     }
     boost::program_options::notify(vm);
 
-    rai::ErrorCode error_code = Process(vm);
-    if (rai::ErrorCode::UNKNOWN_COMMAND == error_code)
+    boost::filesystem::path data_path(boost::filesystem::current_path());
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    if (vm.count("key_create"))
+    {
+        error_code = ProcessKeyCreate(vm, data_path);
+    }
+    else if (vm.count("version"))
+    {
+        error_code = ProcessVersion(vm, data_path);
+    }
+    else if (vm.count("config_create"))
+    {
+        error_code = ProcessConfigCreate(vm, data_path);
+    }
+    else if (vm.count("help"))
     {
         std::cout << desc << std::endl;
-        return 0;
+    }
+    else
+    {
+        error_code = Process(vm, data_path);
     }
 
     if (rai::ErrorCode::SUCCESS != error_code)

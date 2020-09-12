@@ -12,6 +12,9 @@ rai::WalletRpcConfig::WalletRpcConfig()
     rpc_.whitelist_ = {
         boost::asio::ip::address_v4::loopback(),
     };
+    rai::uint128_union api_key;
+    rai::random_pool.GenerateBlock(api_key.bytes.data(), api_key.bytes.size());
+    rai_api_key_ = api_key.StringHex();
 }
 
 rai::ErrorCode rai::WalletRpcConfig::DeserializeJson(bool& upgraded,
@@ -96,6 +99,17 @@ rai::ErrorCode rai::WalletRpcConfig::DeserializeJson(bool& upgraded,
         rai::StringTrim(receive_mininum, " \r\n\t");
         error = receive_mininum_.DecodeBalance(rai::RAI, receive_mininum);
         IF_ERROR_RETURN(error, error_code);
+
+        auto api_key_o = ptree.get_optional<std::string>("rai_api_key");
+        if (api_key_o)
+        {
+            rai_api_key_ = *api_key_o;
+        }
+        else
+        {
+            upgraded = true;
+            ptree.put("rai_api_key", rai_api_key_);
+        }        
     }
     catch (const std::exception&)
     {
@@ -131,6 +145,7 @@ void rai::WalletRpcConfig::SerializeJson(rai::Ptree& ptree) const
     ptree.put("auto_receive", auto_receive_);
     ptree.put("receive_minimum",
               receive_mininum_.StringBalance(rai::RAI) + "RAI");
+    ptree.put("rai_api_key", rai_api_key_);
 }
 
 rai::ErrorCode rai::WalletRpcConfig::UpgradeJson(bool& upgraded,
@@ -162,6 +177,9 @@ rai::WalletRpcHandler::WalletRpcHandler(
 
 void rai::WalletRpcHandler::ProcessImpl()
 {
+    CheckApiKey();
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
     std::string action = request_.get<std::string>("action");
 
     if (action == "account_info")
@@ -175,6 +193,10 @@ void rai::WalletRpcHandler::ProcessImpl()
     else if (action == "block_query")
     {
         BlockQuery();
+    }
+    else if (action == "current_account")
+    {
+        CurrentAccount();
     }
     else if (action == "status")
     {
@@ -190,6 +212,25 @@ void rai::WalletRpcHandler::ProcessImpl()
     else
     {
         error_code_ = rai::ErrorCode::RPC_UNKNOWN_ACTION;
+    }
+}
+
+void rai::WalletRpcHandler::CheckApiKey()
+{
+    std::string api_key;
+    auto api_key_o = request_.get_optional<std::string>("rai_api_key");
+    if (api_key_o)
+    {
+        api_key = *api_key_o;
+    }
+    else
+    {
+        api_key = header_api_key_;
+    }
+    
+    if (api_key != main_.config_.rai_api_key_)
+    {
+        error_code_ = rai::ErrorCode::API_KEY;
     }
 }
 
@@ -323,6 +364,11 @@ void rai::WalletRpcHandler::BlockQueryByHash()
     }
 
     response_.put("status", "miss");
+}
+
+void rai::WalletRpcHandler::CurrentAccount()
+{
+    response_.put("account", main_.wallets_->SelectedAccount().StringAccount());
 }
 
 void rai::WalletRpcHandler::BlockQueryByPrevious()
@@ -674,6 +720,7 @@ void rai::WalletRpc::Status(rai::Ptree& ptree) const
     std::lock_guard<std::mutex> lock(mutex_);
     ptree.put("actions", actions_.size());
     ptree.put("requests", requests_.size());
+    ptree.put("synced", wallets_->Synced(wallets_->SelectedAccount()));
 }
 
 rai::AccountActionCallback rai::WalletRpc::AccountActionCallback(

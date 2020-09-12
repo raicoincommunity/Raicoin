@@ -80,6 +80,7 @@ public:
     rai::Rpc& rpc_;
     std::string body_;
     std::string request_id_;
+    std::string header_api_key_;
     boost::asio::ip::address_v4 ip_;
     std::function<void(const rai::Ptree&)> send_response_;
     rai::ErrorCode error_code_;

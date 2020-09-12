@@ -32,6 +32,7 @@ public:
     bool auto_credit_;
     bool auto_receive_;
     rai::Amount receive_mininum_;
+    std::string rai_api_key_;
 };
 
 
@@ -45,12 +46,14 @@ public:
     virtual ~WalletRpcHandler() = default;
 
     void ProcessImpl() override;
+    void CheckApiKey();
 
     void AccountInfo();
     void AccountSend();
     void BlockQuery();
     void BlockQueryByHash();
     void BlockQueryByPrevious();
+    void CurrentAccount();
     void Status();
     void Stop();
 
