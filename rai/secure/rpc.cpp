@@ -170,6 +170,8 @@ void rai::RpcConnection::Read()
                         request_id,
                         connection->socket_.remote_endpoint().address().to_v4(),
                         response_handler);
+                    rpc_handler->header_api_key_ =
+                        connection->request_["rai_api_key"].to_string();
                     rpc_handler->Process();
                 }
                 else

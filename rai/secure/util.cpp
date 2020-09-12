@@ -166,8 +166,6 @@ rai::ErrorCode rai::CreateKey(const boost::filesystem::path& path, bool dir)
         return rai::ErrorCode::WRITE_FILE;
     }
 
-    std::cout << "New account:" << key_pair.public_key_.StringAccount()
-              << std::endl;
     std::cout << "The key pair was saved to:" << full_path.string()
               << std::endl;
     return rai::ErrorCode::SUCCESS;
