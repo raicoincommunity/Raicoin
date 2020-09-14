@@ -12,60 +12,82 @@ import sys
 import time
 import uuid
 import uvloop
+import secrets
 
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web
 
-from rpc import RPC, allowed_rpc_actions
+from rpc import Rpc
 from util import Util
+
+# whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
+ALLOWED_RPC_ACTIONS = [
+    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables'
+]
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 # Configuration arguments
 parser = argparse.ArgumentParser(description="Raicoin Wallet Server")
 parser.add_argument('--host', type=str, help='Host to listen on (e.g. 127.0.0.1)', default='127.0.0.1')
-parser.add_argument('-p', '--port', type=int, help='Port to listen on', default=5076)
+parser.add_argument('-p', '--port', type=int, help='Port to listen on', default=7178)
 parser.add_argument('--log-file', type=str, help='Log file location', default='rai_server.log')
+parser.add_argument('--limit', type=int, help='Max allowed requests per second from one IP', default=0)
+parser.add_argument('-t', '--token', help='Create a secure url token', action='store_true')
+
 options = parser.parse_args()
 
 try:
-    listen_host = str(ipaddress.ip_address(options.host))
-    listen_port = int(options.port)
-    log_file = options.log_file
-    server_desc = f'on {listen_host} port {listen_port}'
+    if options.token:
+        print(secrets.token_urlsafe())
+        sys.exit(0)
+    LISTEN_HOST = str(ipaddress.ip_address(options.host))
+    LISTEN_PORT = int(options.port)
+    LOG_FILE = options.log_file
+    server_desc = f'on {LISTEN_HOST} port {LISTEN_PORT}'
     print(f'Starting Raicoin Wallet Server (RAI) {server_desc}')
+    LIMIT = int(options.limit)
 except Exception as e:
     parser.print_help()
     print(e)
     sys.exit(0)
 
 # Environment configuration
-rpc_url = os.getenv('RPC_URL', 'http://127.0.0.1:7176')
-callback_whitelist = os.getenv('CALLBACK_WHITELIST', '127.0.0.1')
-if callback_whitelist != '127.0.0.1':
+NODE_URL = os.getenv('NODE_URL', 'http://127.0.0.1:7176')
+CALLBACK_WHITELIST = os.getenv('CALLBACK_WHITELIST', '127.0.0.1')
+if CALLBACK_WHITELIST != '127.0.0.1':
     try:
-        ips = callback_whitelist.split(',')
-        callback_whitelist = []
+        ips = CALLBACK_WHITELIST.split(',')
+        CALLBACK_WHITELIST = []
         for ip in ips:
             if not ip.strip():
                 continue
-            callback_whitelist.append(str(ipaddress.ip_address(ip.strip())))
-        if not callback_whitelist:
+            CALLBACK_WHITELIST.append(str(ipaddress.ip_address(ip.strip())))
+        if not CALLBACK_WHITELIST:
             print("Error found in .env: invalid CALLBACK_WHITELIST config")
     except:
         print("Error found in .env: invalid CALLBACK_WHITELIST config")
         sys.exit(0)
-debug_mode = True if int(os.getenv('DEBUG', 1)) != 0 else False
+DEBUG_MODE = True if int(os.getenv('DEBUG', 1)) != 0 else False
 
-loop = asyncio.get_event_loop()
-rpc = RPC(rpc_url)
-util = Util()
+CALLBACK_TOKEN = os.getenv("CALLBACK_TOKEN", '')
+if len(CALLBACK_TOKEN) != 43:
+    print("Error found in .env: CALLBACK_TOKEN is missing or invalid, you can use 'python3 rai_wallet_server.py -t' to generate a secure token")
+    sys.exit(0)
+
+CHECK_CF_CONNECTING_IP = True if int(os.getenv('USE_CLOUDFLARE', 0)) == 1 else False
+
+LOOP = asyncio.get_event_loop()
+RPC = Rpc(NODE_URL)
+UTIL = Util(CHECK_CF_CONNECTING_IP)
     
 def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
-    burst_max = 4096
-    pps = 20
-    ip = util.get_request_ip(r)
+    if LIMIT == 0:
+        return False
+    burst_max = LIMIT * 100
+    pps = LIMIT
+    ip = UTIL.get_request_ip(r)
     now = int(time.time())
     if ip not in r.app['limit']:
         r.app['limit'][ip] = {'count':burst_max, 'ts':now}
@@ -83,7 +105,7 @@ def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
     return False
 
 async def websocket_forward_to_node(request_json : dict, ip, uid):
-    response = await rpc.json_post(request_json)
+    response = await RPC.json_post(request_json)
     if not response:
         log.server_logger.error('rpc error:%s;%s', ip, uid)
         response = {'error':'rpc error'}
@@ -113,7 +135,7 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
         reply = {'error': 'Messaging too quickly'}
         return json.dumps(reply)
 
-    ip = util.get_request_ip(r)
+    ip = UTIL.get_request_ip(r)
     uid = ws.id
     log.server_logger.info('request; %s, %s, %s', message, ip, uid)
     if message not in r.app['active_messages']:
@@ -127,7 +149,7 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
         subs = r.app['subscriptions']
 
         request_json = json.loads(message)
-        if request_json['action'] not in allowed_rpc_actions:
+        if request_json['action'] not in ALLOWED_RPC_ACTIONS:
             return json.dumps({'error':'action not allowed'})
 
         # adjust counts so nobody can block the node with a huge request
@@ -186,7 +208,7 @@ async def websocket_handler(r : web.Request):
     # Connection Opened
     ws.id = str(uuid.uuid4())
     r.app['clients'][ws.id] = {'ws':ws, 'accounts':set()}
-    log.server_logger.info('new connection;%s;%s;User-Agent:%s', util.get_request_ip(r), ws.id, str(
+    log.server_logger.info('new connection;%s;%s;User-Agent:%s', UTIL.get_request_ip(r), ws.id, str(
         r.headers.get('User-Agent')))
 
     try:
@@ -197,7 +219,7 @@ async def websocket_handler(r : web.Request):
                 else:
                     reply = await websocket_handle_messages(r, msg.data, ws=ws)
                     if reply is not None:
-                        log.server_logger.debug('Sending response %s to %s', reply, util.get_request_ip(r))
+                        log.server_logger.debug('Sending response %s to %s', reply, UTIL.get_request_ip(r))
                         await ws.send_str(reply)
             elif msg.type == WSMsgType.CLOSE:
                 log.server_logger.info('WS Connection closed normally')
@@ -220,14 +242,14 @@ async def websocket_handler(r : web.Request):
 
 # Primary handler for callback
 def callback_check_ip(r : web.Request):
-    ip = util.get_connecting_ip(r)
-    if not ip or ip not in callback_whitelist:
+    ip = UTIL.get_request_ip(r)
+    if not ip or ip not in CALLBACK_WHITELIST:
         return True
     return False
 
 async def callback_handler(r : web.Request):
     if callback_check_ip(r):
-        log.server_logger.error('callback from unauthorized ip: %s', util.get_connecting_ip(r))
+        log.server_logger.error('callback from unauthorized ip: %s', UTIL.get_request_ip(r))
         return web.HTTPUnauthorized()
 
     try:
@@ -251,17 +273,17 @@ async def callback_handler(r : web.Request):
 
 async def init_app():
     # Setup logger
-    if debug_mode:
+    if DEBUG_MODE:
         print("debug mode")
         logging.basicConfig(level=logging.DEBUG)
     else:
         root = logging.getLogger('aiohttp.server')
         logging.basicConfig(level=logging.WARN)
-        handler = WatchedFileHandler(log_file)
+        handler = WatchedFileHandler(LOG_FILE)
         formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s", "%Y-%m-%d %H:%M:%S %z")
         handler.setFormatter(formatter)
         root.addHandler(handler)
-        root.addHandler(TimedRotatingFileHandler(log_file, when="d", interval=1, backupCount=100))        
+        root.addHandler(TimedRotatingFileHandler(LOG_FILE, when="d", interval=1, backupCount=100))        
 
     app = web.Application()
     # Global vars
@@ -271,35 +293,34 @@ async def init_app():
     app['subscriptions'] = {} # Store subscription UUIDs, this is used for targeting callback accounts
 
     app.add_routes([web.get('/', websocket_handler)]) # All WS requests
-    app.add_routes([web.post('/callback', callback_handler)]) # HTTP Callback from node
+    app.add_routes([web.post(f'/callback/{CALLBACK_TOKEN}', callback_handler)]) # http/https callback from node
 
     return app
 
-app = loop.run_until_complete(init_app())
-
+APP = LOOP.run_until_complete(init_app())
 
 def main():
     # Start web/ws server
     async def start():
-        runner = web.AppRunner(app)
+        runner = web.AppRunner(APP)
         await runner.setup()
-        site = web.TCPSite(runner, listen_host, listen_port)
+        site = web.TCPSite(runner, LISTEN_HOST, LISTEN_PORT)
         await site.start()
 
     async def end():
-        await app.shutdown()
+        await APP.shutdown()
 
-    loop.run_until_complete(start())
+    LOOP.run_until_complete(start())
 
     # Main program
     try:
-        loop.run_forever()
+        LOOP.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        loop.run_until_complete(end())
+        LOOP.run_until_complete(end())
 
-    loop.close()
+    LOOP.close()
 
 if __name__ == "__main__":
     main()

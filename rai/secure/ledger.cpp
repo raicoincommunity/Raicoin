@@ -1996,6 +1996,7 @@ rai::ErrorCode rai::Ledger::UpgradeWallet(rai::Transaction& transaction)
 
 rai::ErrorCode rai::Ledger::UpgradeWalletV1V2(rai::Transaction& transaction)
 {
+    uint64_t count = 0;
     for (auto i = AccountInfoBegin(transaction),
               n = AccountInfoEnd(transaction);
          i != n; ++i)
@@ -2030,6 +2031,7 @@ rai::ErrorCode rai::Ledger::UpgradeWalletV1V2(rai::Transaction& transaction)
                 {
                     return rai::ErrorCode::LEDGER_SOURCE_PUT;
                 }
+                ++count;
             }
             hash = block->Previous();
         }
@@ -2040,6 +2042,9 @@ rai::ErrorCode rai::Ledger::UpgradeWalletV1V2(rai::Transaction& transaction)
     {
         return rai::ErrorCode::LEDGER_VERSION_PUT;
     }
+
+    std::cout << "Upgrade wallet ledger from V1 to V2, put " << count
+              << " receivable sources to the ledger" << std::endl;
 
     return rai::ErrorCode::SUCCESS;
 }
