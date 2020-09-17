@@ -737,7 +737,6 @@ void rai::NodeRpcHandler::BlockQueryByHash()
         }
         response_.put("block_raw", rai::BytesToHex(bytes.data(), bytes.size()));
     }
-
 }
 
 void rai::NodeRpcHandler::BootstrapStatus()
