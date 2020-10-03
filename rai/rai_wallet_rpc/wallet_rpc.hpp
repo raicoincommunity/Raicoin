@@ -51,8 +51,9 @@ public:
     void AccountInfo();
     void AccountSend();
     void BlockQuery();
-    void BlockQueryByHash();
-    void BlockQueryByPrevious();
+    void BlockQueryByHash(std::shared_ptr<rai::Block>&);
+    void BlockQueryByHeight(std::shared_ptr<rai::Block>&);
+    void BlockQueryByPrevious(std::shared_ptr<rai::Block>&);
     void CurrentAccount();
     void Status();
     void Stop();

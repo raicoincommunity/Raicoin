@@ -342,6 +342,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "The rai_api_key field is missing or invalid";
         }
+        case rai::ErrorCode::BLOCK_AMOUNT_GET:
+        {
+            return "Failed to get block amount";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

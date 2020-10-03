@@ -318,17 +318,91 @@ void rai::WalletRpcHandler::AccountSend()
 
 void rai::WalletRpcHandler::BlockQuery()
 {
+    std::shared_ptr<rai::Block> block(nullptr);
+
     auto hash_o = request_.get_optional<std::string>("hash");
+    auto previous_o = request_.get_optional<std::string>("previous");
+    auto height_o = request_.get_optional<std::string>("height");
     if (hash_o)
     {
-        BlockQueryByHash();
+        BlockQueryByHash(block);
+    }
+    else if (previous_o)
+    {
+        BlockQueryByPrevious(block);
+    }
+    else if (height_o)
+    {
+        BlockQueryByHeight(block);
+    }
+    else
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_HASH;
+    }
+
+    if (block != nullptr)
+    {
+        response_.put("hash", block->Hash().StringHex());
+    }
+    
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    auto status = response_.get<std::string>("status");
+    if (status != "success")
+    {
         return;
     }
 
-    BlockQueryByPrevious();
+    rai::Transaction transaction(error_code_, main_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    bool error = false;
+    rai::Amount amount(0);
+    if (block->Height() == 0)
+    {
+        error = block->Amount(amount);
+    }
+    else
+    {
+        std::shared_ptr<rai::Block> previous(nullptr);
+        error =
+            main_.ledger_.BlockGet(transaction, block->Previous(), previous);
+        if (!error)
+        {
+            error = block->Amount(*previous, amount);
+        }
+    }
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::BLOCK_AMOUNT_GET;
+        return;
+    }
+    response_.put("amount", amount.StringDec());
+    response_.put("amount_in_rai", amount.StringBalance(rai::RAI) + " RAI");
+
+    rai::AccountInfo info;
+    error = main_.ledger_.AccountInfoGet(transaction, block->Account(), info);
+    if (error || !info.Valid())
+    {
+        error_code_ = rai::ErrorCode::LEDGER_ACCOUNT_INFO_GET;
+        return;
+    }
+    response_.put("confirmed",
+                  info.Confirmed(block->Height()) ? "true" : "false");
+
+    if (block->Opcode() == rai::BlockOpcode::RECEIVE)
+    {
+        std::shared_ptr<rai::Block> source(nullptr);
+        error = main_.ledger_.SourceGet(transaction, block->Link(), source);
+        if (!error && source != nullptr)
+        {
+            rai::Ptree block_ptree;
+            source->SerializeJson(block_ptree);
+            response_.add_child("source_block", block_ptree);
+        }
+    }
 }
 
-void rai::WalletRpcHandler::BlockQueryByHash()
+void rai::WalletRpcHandler::BlockQueryByHash(std::shared_ptr<rai::Block>& block)
 {
     rai::BlockHash hash;
     bool error = GetHash_(hash);
@@ -340,7 +414,6 @@ void rai::WalletRpcHandler::BlockQueryByHash()
         return;
     }
 
-    std::shared_ptr<rai::Block> block(nullptr);
     rai::BlockHash successor;
     error = main_.ledger_.BlockGet(transaction, hash, block, successor);
     if (!error && block != nullptr)
@@ -366,12 +439,69 @@ void rai::WalletRpcHandler::BlockQueryByHash()
     response_.put("status", "miss");
 }
 
-void rai::WalletRpcHandler::CurrentAccount()
+void rai::WalletRpcHandler::BlockQueryByHeight(
+    std::shared_ptr<rai::Block>& block)
 {
-    response_.put("account", main_.wallets_->SelectedAccount().StringAccount());
+    rai::Account account;
+    auto account_o = request_.get_optional<std::string>("account");
+    if (!account_o)
+    {
+        account = main_.wallets_->SelectedAccount();
+    }
+    else
+    {
+        if (account.DecodeAccount(*account_o))
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT;
+            return;
+        }
+    }
+
+    uint64_t height;
+    bool error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, main_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+
+    rai::AccountInfo info;
+    error = main_.ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    if (height < info.tail_height_)
+    {
+        response_.put("status", "pruned");
+        return;
+    }
+
+    if (height > info.head_height_)
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    rai::BlockHash successor;
+    error =
+        main_.ledger_.BlockGet(transaction, account, height, block, successor);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+        return;
+    }
+    response_.put("status", "success");
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    response_.add_child("block", block_ptree);
+    response_.put("successor", successor.StringHex());
 }
 
-void rai::WalletRpcHandler::BlockQueryByPrevious()
+void rai::WalletRpcHandler::BlockQueryByPrevious(
+    std::shared_ptr<rai::Block>& block)
 {
     rai::Account account;
     bool error = GetAccount_(account);
@@ -398,20 +528,21 @@ void rai::WalletRpcHandler::BlockQueryByPrevious()
         return;
     }
 
-    std::shared_ptr<rai::Block> block(nullptr);
     if (height == 0)
     {
-        error = main_.ledger_.BlockGet(transaction, account, height, block);
+        rai::BlockHash successor;
+        error = main_.ledger_.BlockGet(transaction, account, height, block,
+                                       successor);
         if (error)
         {
             error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
             return;
         }
         response_.put("status", "success");
-        response_.put("confirmed", info.Confirmed(height) ? "true" : "false");
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         response_.add_child("block", block_ptree);
+        response_.put("successor", successor.StringHex());
         return;
     }
 
@@ -437,8 +568,6 @@ void rai::WalletRpcHandler::BlockQueryByPrevious()
             return;
         }
         response_.put("status", "fork");
-        response_.put("confirmed",
-                      info.Confirmed(height - 1) ? "true" : "false");
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         response_.add_child("block", block_ptree);
@@ -450,7 +579,8 @@ void rai::WalletRpcHandler::BlockQueryByPrevious()
             response_.put("status", "miss");
             return;
         }
-        error = main_.ledger_.BlockGet(transaction, successor, block);
+        error =
+            main_.ledger_.BlockGet(transaction, successor, block, successor);
         if (error)
         {
             error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
@@ -462,11 +592,16 @@ void rai::WalletRpcHandler::BlockQueryByPrevious()
             return;
         }
         response_.put("status", "success");
-        response_.put("confirmed", info.Confirmed(height) ? "true" : "false");
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         response_.add_child("block", block_ptree);
+        response_.put("successor", successor.StringHex());
     }
+}
+
+void rai::WalletRpcHandler::CurrentAccount()
+{
+    response_.put("account", main_.wallets_->SelectedAccount().StringAccount());
 }
 
 rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
@@ -479,9 +614,18 @@ rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
         return rai::ErrorCode::RPC_MISS_FIELD_TO;
     }
 
-    if (destination.DecodeAccount(*destination_o))
+    rai::AccountParser parser(*destination_o);
+    if (parser.Error())
     {
         return rai::ErrorCode::RPC_INVALID_FIELD_TO;
+    }
+    destination = parser.Account();
+    std::string sub_account = parser.SubAccount();
+    if (!sub_account.empty())
+    {
+        bool error = rai::ExtensionAppend(rai::ExtensionType::SUB_ACCOUNT,
+                                          sub_account, extensions);
+        IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
     }
 
     auto amount_o = request.get_optional<std::string>("amount");
