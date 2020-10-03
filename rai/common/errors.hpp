@@ -116,6 +116,7 @@ enum class ErrorCode : int
     LEDGER_VERSION_PUT                   = 106,
     LEDGER_UNKNOWN_VERSION               = 107,
     API_KEY                              = 108,
+    BLOCK_AMOUNT_GET                     = 109,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,
