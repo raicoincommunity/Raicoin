@@ -395,6 +395,7 @@ public:
            const rai::QtWalletConfig&);
     QtMain(const rai::QtMain&) = delete;
 
+    uint64_t CurrentTimestamp() const;
     std::string FormatBalance(const rai::Amount&) const;
     void Start(const std::weak_ptr<rai::QtMain>&);
     void Pop();

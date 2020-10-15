@@ -1,9 +1,11 @@
 if (WIN32)
 	set (PLATFORM_GUI_TARGET_PROPERTIES WIN32)
 	set (PLATFORM_WALLET_SOURCE plat/windows/icon.cpp ../../Raicoin.rc)
-else (WIN32)
+elseif (APPLE)
+	set (PLATFORM_WALLET_SOURCE plat/default/icon.cpp)
+else ()
 	set (PLATFORM_GUI_TARGET_PROPERTIES "")
-endif (WIN32)
+endif ()
 
 #qt5_add_resources(RES resources.qrc)
 
@@ -17,10 +19,16 @@ add_executable (rai_wallet
 	config.cpp
 	entry.cpp)
 
+if (WIN32)
+	set (PLATFORM_WALLET_LIBS Qt5::WinExtras)
+else (WIN32)
+	set (PLATFORM_WALLET_LIBS)
+endif (WIN32)
+
 target_link_libraries (rai_wallet
 	Qt5::Gui
 	Qt5::Widgets
-	Qt5::WinExtras
+	${PLATFORM_WALLET_LIBS}
 	secure
 	rai_common
 	wallet
