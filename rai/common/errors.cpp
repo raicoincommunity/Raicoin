@@ -346,6 +346,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to get block amount";
         }
+        case rai::ErrorCode::WALLET_TIME_SYNC:
+        {
+            return "Wallet's time not synchronized";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

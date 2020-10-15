@@ -1260,7 +1260,7 @@ void rai::QtReceive::Receive(
                     {
                         error_info = "Minimum receivable amount is ";
                         error_info += qt_main.FormatBalance(
-                            rai::CreditPrice(rai::CurrentTimestamp()));
+                            rai::CreditPrice(qt_main.CurrentTimestamp()));
                         error_info += " for account's first block";
                     }
                     ShowButtonError(*button);
@@ -1903,7 +1903,7 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                 return;
             }
 
-            rai::Amount price = rai::CreditPrice(rai::CurrentTimestamp());
+            rai::Amount price = rai::CreditPrice(qt_main->CurrentTimestamp());
             rai::Amount cost(price.Number()
                              * (tx / rai::TRANSACTIONS_PER_CREDIT));
             qt_main->settings_.cost_->setText(
@@ -2033,6 +2033,15 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
 
         qt_main->PostEvent(
             [](rai::QtMain& qt_main) { qt_main.settings_.RefreshLock(); });
+    });
+
+    main_.wallets_->observers_.time_synced_.Add([qt_main_w]() {
+        auto qt_main = qt_main_w.lock();
+        if (qt_main == nullptr) return;
+
+        qt_main->PostEvent([](rai::QtMain& qt_main) {
+            qt_main.settings_.RefreshTransactionsLimit();
+        });
     });
 
     Refresh();
@@ -3125,7 +3134,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateSend(
     rai::BlockOpcode opcode = rai::BlockOpcode::SEND;
     uint16_t credit = head->Credit();
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = main_.CurrentTimestamp();
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -3219,7 +3228,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateReceive(
     {
         rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
         uint16_t credit         = 1;
-        uint64_t timestamp      = rai::CurrentTimestamp();
+        uint64_t timestamp      = main_.CurrentTimestamp();
         uint32_t counter        = 1;
         uint64_t height         = 0;
         rai::BlockHash previous(0);
@@ -3249,7 +3258,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateReceive(
         rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
         uint16_t credit         = head->Credit();
 
-        uint64_t timestamp = rai::CurrentTimestamp();
+        uint64_t timestamp = main_.CurrentTimestamp();
 
         if (info.forks_ > rai::MaxAllowedForks(timestamp))
         {
@@ -3311,7 +3320,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateChange(
     rai::BlockOpcode opcode = rai::BlockOpcode::CHANGE;
     uint16_t credit = head->Credit();
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = main_.CurrentTimestamp();
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -3379,7 +3388,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateCredit(
         return nullptr;
     }
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = main_.CurrentTimestamp();
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -3571,6 +3580,18 @@ rai::QtMain::QtMain(QApplication& application, rai::QtEventProcessor& processor,
     window_->setLayout(layout_);
     window_->resize(640, 640);
     window_->setStyleSheet("QLineEdit { padding:3px;}");
+}
+
+uint64_t rai::QtMain::CurrentTimestamp() const
+{
+    uint64_t now = 0;
+    bool error = wallets_->CurrentTimestamp(now); // server time
+    if (!error)
+    {
+        return now;
+    }
+
+    return rai::CurrentTimestamp(); // local time
 }
 
 std::string rai::QtMain::FormatBalance(const rai::Amount& balance) const
@@ -3832,7 +3853,7 @@ void rai::QtMain::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock)
                     continue;
                 }
 
-                uint64_t now = rai::CurrentTimestamp();
+                uint64_t now = CurrentTimestamp();
                 rai::Amount receive_mininum(rai::CreditPrice(now).Number()
                                             / 10);
                 if (it->first.amount_ < receive_mininum)

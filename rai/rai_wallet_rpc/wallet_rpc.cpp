@@ -890,6 +890,18 @@ rai::RpcHandlerMaker rai::WalletRpc::RpcHandlerMaker()
     };
 }
 
+uint64_t rai::WalletRpc::CurrentTimestamp() const
+{
+    uint64_t now = 0;
+    bool error = wallets_->CurrentTimestamp(now); // server time
+    if (!error)
+    {
+        return now;
+    }
+
+    return rai::CurrentTimestamp(); // local time
+}
+
 rai::Ptree rai::WalletRpc::MakeResponse_(
     const rai::WalletRpcAction& result, const rai::Amount& amount,
     const std::shared_ptr<rai::Block>& source) const
@@ -945,7 +957,7 @@ void rai::WalletRpc::ProcessPendings_(std::unique_lock<std::mutex>& lock,
 
     if (it->callback_error_)
     {
-        if (it->last_callback_ + 5 > rai::CurrentTimestamp())
+        if (it->last_callback_ + 5 > CurrentTimestamp())
         {
             return;
         }
@@ -1025,10 +1037,11 @@ void rai::WalletRpc::ProcessPendings_(std::unique_lock<std::mutex>& lock,
         }
     }
 
+    uint64_t timestamp = CurrentTimestamp();
     rai::Ptree response = MakeResponse_(*it, amount, source);
-    actions_.modify(it, [](rai::WalletRpcAction& data){
+    actions_.modify(it, [timestamp](rai::WalletRpcAction& data){
         data.callback_error_ = false;
-        data.last_callback_ = rai::CurrentTimestamp();
+        data.last_callback_ = timestamp;
     });
     waiting_callback_ = true;
 
@@ -1085,7 +1098,7 @@ void rai::WalletRpc::ProcessAutoCredit_(std::unique_lock<std::mutex>& lock,
             break;
         }
 
-        if (block->Balance() < rai::CreditPrice(rai::CurrentTimestamp()))
+        if (block->Balance() < rai::CreditPrice(CurrentTimestamp()))
         {
             break;
         }
@@ -1160,8 +1173,8 @@ void rai::WalletRpc::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock,
             break;
         }
 
-        uint64_t now = rai::CurrentTimestamp();
-        if (it->first.timestamp_ > now
+        uint64_t now = CurrentTimestamp();
+        if (it->first.timestamp_ > now + 30
             || it->first.amount_ < config_.receive_mininum_)
         {
             break;

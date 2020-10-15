@@ -114,6 +114,7 @@ public:
     rai::ObserverContainer<const rai::Account&> receivable_;
     rai::ObserverContainer<const rai::Account&, bool> synced_;
     rai::ObserverContainer<const rai::Account&> fork_;
+    rai::ObserverContainer<> time_synced_;
 };
 
 typedef std::function<void(rai::ErrorCode, const std::shared_ptr<rai::Block>&)> AccountActionCallback;
@@ -159,6 +160,7 @@ public:
     rai::ErrorCode CreateAccount();
     rai::ErrorCode CreateAccount(uint32_t&);
     rai::ErrorCode CreateWallet();
+    bool CurrentTimestamp(uint64_t&) const;
     bool EnterPassword(const std::string&);
     rai::ErrorCode ImportAccount(const rai::KeyPair&);
     rai::ErrorCode ImportWallet(const rai::RawKey&, uint32_t&);
@@ -211,6 +213,7 @@ public:
     void ReceiveBlockConfirmNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockRollbackNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockQueryAck(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveCurrentTimestampAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveForkNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveReceivablesQueryAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveReceivableInfoNotify(const std::shared_ptr<rai::Ptree>&);
@@ -240,9 +243,11 @@ public:
     void SyncForks(const std::shared_ptr<rai::Wallet>&);
     void SyncReceivables(const rai::Account&);
     void SyncReceivables(const std::shared_ptr<rai::Wallet>&);
+    void SyncTime();
     bool Synced(const rai::Account&) const;
     void SyncedAdd(const rai::Account&);
     void SyncedClear();
+    bool TimeSynced() const;
     void Unsubscribe(const std::shared_ptr<rai::Wallet>&);
     void UnsubscribeAll();
     std::vector<uint32_t> WalletIds() const;
@@ -251,6 +256,8 @@ public:
     rai::ErrorCode WalletSeed(uint32_t, rai::RawKey&) const;
     bool WalletLocked(uint32_t) const;
     bool WalletVulnerable(uint32_t) const;
+    void LastSubClear();
+    void LastSyncClear();
 
     template <typename T>
     void Background(T action)
@@ -280,6 +287,12 @@ private:
     std::atomic<uint32_t> send_count_;
     std::atomic<uint64_t> last_sync_;
     std::atomic<uint64_t> last_sub_;
+
+    mutable std::mutex mutex_timesync_;
+    bool time_synced_;
+    uint64_t server_time_;
+    std::chrono::steady_clock::time_point local_time_;
+
     std::condition_variable condition_;
     mutable std::mutex mutex_;
     bool stopped_;
@@ -299,5 +312,6 @@ private:
     std::function<void(const rai::Account&)> receivable_observer_;
     std::function<void(const rai::Account&, bool)> synced_observer_;
     std::function<void(const rai::Account&)> fork_observer_;
+    std::function<void()> time_synced_observer_;
 };
 };  // namespace rai

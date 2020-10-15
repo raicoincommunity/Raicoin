@@ -540,6 +540,8 @@ rai::Wallets::Wallets(rai::ErrorCode& error_code,
       send_count_(0),
       last_sync_(0),
       last_sub_(0),
+      time_synced_(false),
+      server_time_(0),
       stopped_(false),
       selected_wallet_id_(0),
       thread_([this]() { this->Run(); })
@@ -800,8 +802,12 @@ void rai::Wallets::AccountTransactionsLimit(const rai::Account& account,
         return;
     }
 
+    uint64_t now = 0;
+    error = CurrentTimestamp(now);
+    IF_ERROR_RETURN_VOID(error);
+
     total = head->Credit() * rai::TRANSACTIONS_PER_CREDIT;
-    if (rai::SameDay(head->Timestamp(), rai::CurrentTimestamp()))
+    if (rai::SameDay(head->Timestamp(), now))
     {
         used = head->Counter();
     }
@@ -1152,6 +1158,23 @@ rai::ErrorCode rai::Wallets::CreateWallet()
     Subscribe(wallet);
     Sync(wallet);
     return rai::ErrorCode::SUCCESS;
+}
+
+bool rai::Wallets::CurrentTimestamp(uint64_t& timestamp) const
+{
+    using std::chrono::duration_cast;
+    using std::chrono::seconds;
+
+    std::lock_guard<std::mutex> lock(mutex_timesync_);
+    if (!time_synced_)
+    {
+        return true;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    uint64_t diff = duration_cast<seconds>(now - local_time_).count();
+    timestamp = server_time_ + diff;
+    return false;
 }
 
 bool rai::Wallets::EnterPassword(const std::string& password)
@@ -1548,7 +1571,14 @@ void rai::Wallets::ProcessAccountChange(
     rai::BlockOpcode opcode = rai::BlockOpcode::CHANGE;
     uint16_t credit = head->Credit();
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    error = CurrentTimestamp(now);
+    if (error)
+    {
+        callback(rai::ErrorCode::WALLET_TIME_SYNC, block);
+        return;
+    }
+
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -1648,7 +1678,14 @@ void rai::Wallets::ProcessAccountCredit(
         return;
     }
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    error = CurrentTimestamp(now);
+    if (error)
+    {
+        callback(rai::ErrorCode::WALLET_TIME_SYNC, block);
+        return;
+    }
+
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -1746,7 +1783,14 @@ void rai::Wallets::ProcessAccountDestroy(
     rai::BlockOpcode opcode = rai::BlockOpcode::DESTROY;
     uint16_t credit = head->Credit();
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    error = CurrentTimestamp(now);
+    if (error)
+    {
+        callback(rai::ErrorCode::WALLET_TIME_SYNC, block);
+        return;
+    }
+
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -1837,7 +1881,14 @@ void rai::Wallets::ProcessAccountSend(
     rai::BlockOpcode opcode = rai::BlockOpcode::SEND;
     uint16_t credit = head->Credit();
 
-    uint64_t now = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    error = CurrentTimestamp(now);
+    if (error)
+    {
+        callback(rai::ErrorCode::WALLET_TIME_SYNC, block);
+        return;
+    }
+
     uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
     if (timestamp > now + 60)
     {
@@ -1941,7 +1992,13 @@ void rai::Wallets::ProcessAccountReceive(
     {
         rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
         uint16_t credit = 1;
-        uint64_t now = rai::CurrentTimestamp();
+        uint64_t now = 0;
+        error = CurrentTimestamp(now);
+        if (error)
+        {
+            callback(rai::ErrorCode::WALLET_TIME_SYNC, block);
+            return;
+        }
         uint64_t timestamp = now <= receivable_info.timestamp_
                                  ? receivable_info.timestamp_
                                  : now;
@@ -2002,7 +2059,13 @@ void rai::Wallets::ProcessAccountReceive(
         rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
         uint16_t credit = head->Credit();
 
-        uint64_t now = rai::CurrentTimestamp();
+        uint64_t now = 0;
+        error = CurrentTimestamp(now);
+        if (error)
+        {
+            callback(rai::ErrorCode::WALLET_TIME_SYNC, block);
+            return;
+        }
         uint64_t timestamp = now > head->Timestamp() ? now : head->Timestamp();
         if (timestamp < receivable_info.timestamp_)
         {
@@ -2286,7 +2349,11 @@ void rai::Wallets::ProcessReceivableInfo(
         return;
     }
 
-    if (info.timestamp_ > rai::CurrentTimestamp() + 30)
+    uint64_t now = 0;
+    bool error = CurrentTimestamp(now);
+    IF_ERROR_RETURN_VOID(error);
+
+    if (info.timestamp_ > now + 30)
     {
         return;
     }
@@ -2739,6 +2806,44 @@ void rai::Wallets::ReceiveBlockQueryAck(
     
 }
 
+void rai::Wallets::ReceiveCurrentTimestampAck(
+    const std::shared_ptr<rai::Ptree>& message)
+{
+    auto timestamp_o = message->get_optional<std::string>("timestamp");
+    if (!timestamp_o)
+    {
+        // log
+        std::cout
+            << "Wallets::ReceiveCurrentTimestampAck: failed to get timestamp"
+            << std::endl;
+        return;
+    }
+
+    uint64_t timestamp = 0;
+    bool error = rai::StringToUint(*timestamp_o, timestamp);
+    if (error)
+    {
+        // log
+        std::cout << "Wallets::ReceiveCurrentTimestampAck: invalid timestamp "
+                  << *timestamp_o << std::endl;
+        return;
+    }
+
+    bool notify = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_timesync_);
+        notify = !time_synced_;
+        time_synced_ = true;
+        server_time_ = timestamp;
+        local_time_ = std::chrono::steady_clock::now();
+    }
+
+    if (notify && time_synced_observer_)
+    {
+        time_synced_observer_();
+    }
+}
+
 void rai::Wallets::ReceiveForkNotify(const std::shared_ptr<rai::Ptree>& message)
 {
     auto account_o = message->get_optional<std::string>("account");
@@ -3007,6 +3112,10 @@ void rai::Wallets::ReceiveMessage(const std::shared_ptr<rai::Ptree>& message)
         {
             ReceiveAccountForksQueryAck(message);
         }
+        else if (ack == "current_timestamp")
+        {
+            ReceiveCurrentTimestampAck(message);
+        }
     }
 
     auto notify_o = message->get_optional<std::string>("notify");
@@ -3060,6 +3169,7 @@ void rai::Wallets::Start()
     Ongoing(std::bind(&rai::Wallets::ConnectToServer, this),
             std::chrono::seconds(5));
 
+    Ongoing([this]() { this->SyncTime(); }, std::chrono::seconds(300));
     Ongoing([this]() { this->SubscribeAll(); }, std::chrono::seconds(300));
     Ongoing([this]() { this->SyncAll(); }, std::chrono::seconds(300));
 }
@@ -3245,7 +3355,9 @@ void rai::Wallets::Subscribe(const std::shared_ptr<rai::Wallet>& wallet)
 
 void rai::Wallets::SubscribeAll()
 {
-    auto now = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    bool error = CurrentTimestamp(now);
+    IF_ERROR_RETURN_VOID(error);
     if (last_sub_ > now - 150)
     {
         return;
@@ -3283,7 +3395,9 @@ void rai::Wallets::Sync(const std::shared_ptr<rai::Wallet>& wallet)
 
 void rai::Wallets::SyncAll()
 {
-    auto now = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    bool error = CurrentTimestamp(now);
+    IF_ERROR_RETURN_VOID(error);
     if (last_sync_ > now - 150)
     {
         return;
@@ -3384,6 +3498,14 @@ void rai::Wallets::SyncReceivables(const rai::Account& account)
     ReceivablesQuery(account);
 }
 
+void rai::Wallets::SyncTime()
+{
+    rai::Ptree ptree;
+    ptree.put("action", "current_timestamp");
+
+    Send(ptree);
+}
+
 void rai::Wallets::SyncReceivables(const std::shared_ptr<rai::Wallet>& wallet)
 {
     if (wallet == nullptr)
@@ -3434,6 +3556,12 @@ void rai::Wallets::SyncedClear()
     }
 }
 
+bool rai::Wallets::TimeSynced() const
+{
+    std::lock_guard<std::mutex> lock(mutex_timesync_);
+    return time_synced_;
+}
+
 void rai::Wallets::Unsubscribe(const std::shared_ptr<rai::Wallet>& wallet)
 {
     if (wallet == nullptr)
@@ -3445,7 +3573,6 @@ void rai::Wallets::Unsubscribe(const std::shared_ptr<rai::Wallet>& wallet)
     for (const auto& i : accounts)
     {
         rai::Account account = i.second.first;
-        uint64_t timestamp = rai::CurrentTimestamp();
 
         rai::Ptree ptree;
         ptree.put("action", "account_unsubscribe");
@@ -3557,6 +3684,16 @@ bool rai::Wallets::WalletVulnerable(uint32_t wallet_id) const
     }
 
     return false;
+}
+
+void rai::Wallets::LastSubClear()
+{
+    last_sub_ = 0;
+}
+
+void rai::Wallets::LastSyncClear()
+{
+    last_sync_ = 0;
 }
 
 rai::ErrorCode rai::Wallets::ActionCommonCheck_() const
@@ -3723,14 +3860,30 @@ void rai::Wallets::RegisterObservers_()
         });
     };
 
+    time_synced_observer_ = [wallets]() {
+        auto wallets_s = wallets.lock();
+        if (wallets_s == nullptr) return;
+
+        wallets_s->Background([wallets]() {
+            if (auto wallets_s = wallets.lock())
+            {
+                wallets_s->observers_.time_synced_.Notify();
+            }
+        });
+    };
+
     observers_.connection_status_.Add([this](rai::WebsocketStatus status) {
         if (status == rai::WebsocketStatus::CONNECTED)
         {
             std::cout << "websocket connected\n";
-            SubscribeSelected();
-            SyncSelected();
-            SubscribeAll();
-            SyncAll();
+            SyncTime();
+            if (TimeSynced())
+            {
+                SubscribeSelected();
+                SyncSelected();
+                SubscribeAll();
+                SyncAll();
+            }
         }
         else if (status == rai::WebsocketStatus::CONNECTING)
         {
@@ -3740,6 +3893,8 @@ void rai::Wallets::RegisterObservers_()
         {
             std::cout << "websocket disconnected\n";
             SyncedClear();
+            LastSubClear();
+            LastSyncClear();
         }
     });
 
@@ -3756,6 +3911,13 @@ void rai::Wallets::RegisterObservers_()
     observers_.selected_account_.Add([this](const rai::Account&) {
         SubscribeSelected();
         SyncSelected();
+    });
+
+    observers_.time_synced_.Add([this]() {
+        SubscribeSelected();
+        SyncSelected();
+        SubscribeAll();
+        SyncAll();
     });
 }
 
@@ -3847,7 +4009,17 @@ void rai::Wallets::Subscribe_(const std::shared_ptr<rai::Wallet>& wallet,
         return;
     }
 
-    uint64_t timestamp   = rai::CurrentTimestamp();
+    uint64_t now = 0;
+    bool error = CurrentTimestamp(now);
+    if (error)
+    {
+        // log
+        std::cout << "Wallets::Subscribe_: Failed to get current timestamp"
+                  << std::endl;
+        return;
+    }
+
+    uint64_t timestamp   = now;
 
     rai::Ptree ptree;
     ptree.put("action", "account_subscribe");

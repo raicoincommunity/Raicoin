@@ -96,6 +96,7 @@ public:
     void Status(rai::Ptree&) const;
     rai::AccountActionCallback AccountActionCallback(uint64_t);
     rai::RpcHandlerMaker RpcHandlerMaker();
+    uint64_t CurrentTimestamp() const;
 
 
     std::shared_ptr<rai::Wallets> wallets_;
