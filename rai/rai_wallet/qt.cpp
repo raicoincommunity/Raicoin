@@ -1026,7 +1026,7 @@ rai::QtSend::QtSend(rai::QtMain& qt_main)
       destination_(new QLineEdit),
       amount_label_(new QLabel("Amount:")),
       amount_(new QLineEdit),
-      note_label_(new QLabel("Note:")),
+      note_label_(new QLabel("Note/Memo:")),
       note_(new QLineEdit),
       send_(new QPushButton("Send")),
       back_(new QPushButton("Back")),
