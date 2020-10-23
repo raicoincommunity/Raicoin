@@ -164,6 +164,7 @@ void rai::Log::Init(const boost::filesystem::path& path,
     {
         return;
     }
+    rai::Log::config_ = config;
     boost::log::add_common_attributes();
     if (config.LogToCerr())
     {
