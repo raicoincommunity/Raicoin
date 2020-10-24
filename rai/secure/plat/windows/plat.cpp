@@ -31,3 +31,9 @@ void rai::SetStdinEcho(bool enable)
 
     SetConsoleMode(handle, mode);
 }
+
+std::string rai::PemPath()
+{
+  std::string result = "cacert.pem";
+  return result;
+}

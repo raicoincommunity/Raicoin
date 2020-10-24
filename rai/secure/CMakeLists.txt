@@ -4,8 +4,10 @@ elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 	set (PLATFORM_SECURE_SOURCE plat/posix/plat.cpp)
 elseif (${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
 	set (PLATFORM_SECURE_SOURCE plat/posix/plat.cpp)
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	set (PLATFORM_SECURE_SOURCE plat/posix/plat.cpp plat/darwin/plat.cpp)
 else ()
-	error ("Unknown platform: ${CMAKE_SYSTEM_NAME}")
+	message ("Unknown platform: ${CMAKE_SYSTEM_NAME}")
 endif ()
 
 add_library (secure

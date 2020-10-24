@@ -673,7 +673,8 @@ QVariant rai::QtHistoryModel::data(const QModelIndex& index, int role) const
 {
     if (index.column() == 3 && role == Qt::TextAlignmentRole)
     {
-        return Qt::AlignVCenter | Qt::AlignRight;
+        return static_cast<Qt::Alignment::Int>(Qt::AlignVCenter
+                                               | Qt::AlignRight);
     }
 
     if (!index.isValid() || role != Qt::DisplayRole
@@ -2120,7 +2121,7 @@ void rai::QtAccounts::OnMenuRequested(const QPoint& pos)
     menu->addAction(action.get());
     QObject::connect(
         menu.get(), &QMenu::triggered,
-        [pos, menu, action, qt_main_w](QAction* action) {
+        [pos, menu, action, qt_main_w](QAction*) {
             auto qt_main = qt_main_w.lock();
             if (qt_main == nullptr) return;
             QModelIndex index(qt_main->accounts_.view_->indexAt(pos));

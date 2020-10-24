@@ -26,3 +26,9 @@ void rai::SetStdinEcho(bool enable)
     }
     (void)tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 }
+
+std::string rai::PemPath()
+{
+  std::string result = "cacert.pem";
+  return result;
+}
