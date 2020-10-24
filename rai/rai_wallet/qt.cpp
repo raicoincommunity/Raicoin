@@ -1112,7 +1112,6 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             if (balance < amount)
             {
                 ShowLineError(*qt_main->send_.amount_);
-                error      = true;
                 error_info = "Not enough balance";
                 break;
             }
@@ -1154,12 +1153,11 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                 });
             if (error_code != rai::ErrorCode::SUCCESS)
             {
-                error      = true;
                 error_info = rai::ErrorString(error_code);
             }
         } while (0);
 
-        if (error)
+        if (!error_info.empty())
         {
             ShowButtonError(*qt_main->send_.send_);
             qt_main->send_.send_->setText(error_info.c_str());
@@ -1874,13 +1872,12 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
                     });
                 if (error_code != rai::ErrorCode::SUCCESS)
                 {
-                    error      = true;
                     error_info = rai::ErrorString(error_code);
                     break;
                 }
             } while (0);
 
-            if (error)
+            if (!error_info.empty())
             {
                 ShowButtonError(*qt_main->settings_.change_representative_);
                 qt_main->settings_.change_representative_->setText(
@@ -1928,14 +1925,12 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             error = rai::StringToUint(increase_str, tx);
             if (error || tx == 0)
             {
-                error = true;
                 ShowLineError(*qt_main->settings_.increase_);
                 error_info = "Invalid transactions";
                 break;
             }
             if (tx >= rai::MAX_ACCOUNT_DAILY_TRANSACTIONS)
             {
-                error = true;
                 ShowLineError(*qt_main->settings_.increase_);
                 error_info =
                     "Transactions must be less than "
@@ -1944,7 +1939,6 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             }
             if (tx % rai::TRANSACTIONS_PER_CREDIT != 0)
             {
-                error = true;
                 ShowLineError(*qt_main->settings_.increase_);
                 error_info = "Transactions must be multiples of 20";
                 break;
@@ -1978,12 +1972,11 @@ void rai::QtSettings::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
 
             if (error_code != rai::ErrorCode::SUCCESS)
             {
-                error      = true;
                 error_info = rai::ErrorString(error_code);
             }
         } while (0);
 
-        if (error)
+        if (!error_info.empty())
         {
             ShowButtonError(*qt_main->settings_.increase_button_);
             qt_main->settings_.increase_button_->setText(error_info.c_str());
