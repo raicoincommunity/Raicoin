@@ -1,5 +1,8 @@
 #include <rai/secure/websocket.hpp>
-#include <rai/wallet/wallet.hpp>
+
+#include <boost/property_tree/json_parser.hpp>
+#include <rai/common/util.hpp>
+#include <rai/secure/plat.hpp>
 
 rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
                                       const std::string& host, uint16_t port,
@@ -21,7 +24,8 @@ rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
     {
         try
         {
-            ctx_.load_verify_file("cacert.pem");
+            std::string pem_path = rai::PemPath();
+            ctx_.load_verify_file(pem_path);
         }
         catch(...)
         {
