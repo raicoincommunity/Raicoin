@@ -350,6 +350,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Wallet's time not synchronized";
         }
+        case rai::ErrorCode::ELECTION_CONFLICT:
+        {
+            return "Conflict vote found";
+        }
+        case rai::ErrorCode::UNEXPECTED:
+        {
+            return "Encounter unexpected error";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

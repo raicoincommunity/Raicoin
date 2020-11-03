@@ -120,11 +120,6 @@ void rai::Election::DelBlock(const rai::BlockHash& hash)
 
     if (it->second.refs_ <= 1)
     {
-        if (blocks_.size() == 1)
-        {
-            assert(0);
-            return;
-        }
         blocks_.erase(it);
         return;
     }
@@ -609,6 +604,10 @@ void rai::Elections::ProcessConflict(
     {
         return;
     }
+    rai::Stats::Add(rai::ErrorCode::ELECTION_CONFLICT,
+                    "rep=", representative.StringAccount(),
+                    ", account=", block_first->Account().StringAccount(),
+                    ", height=", block_first->Height());
 
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = elections_.find(block_first->Account());
@@ -982,7 +981,8 @@ void rai::Elections::BroadcastConfirms_(const rai::Election& election)
         bool error = GetBlock_(election, vote.hash_, block);
         if (error)
         {
-            assert(0);
+            rai::Stats::Add(rai::ErrorCode::UNEXPECTED,
+                            "Elections::BroadcastConfirms_:get block");
             continue;
         }
 
@@ -997,7 +997,8 @@ void rai::Elections::BroadcastConfirms_(const rai::Election& election)
         error = GetConflict_(election, rep, conflict);
         if (error)
         {
-            assert(0);
+            rai::Stats::Add(rai::ErrorCode::UNEXPECTED,
+                            "Elections::BroadcastConfirms_:get conflict");
             continue;
         }
 
@@ -1005,7 +1006,8 @@ void rai::Elections::BroadcastConfirms_(const rai::Election& election)
         error = GetBlock_(election, conflict.hash_, block_conflict);
         if (error)
         {
-            assert(0);
+            rai::Stats::Add(rai::ErrorCode::UNEXPECTED,
+                            "Elections::BroadcastConfirms_:get conflict block");
             continue;
         }
 
