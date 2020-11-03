@@ -118,6 +118,8 @@ enum class ErrorCode : int
     API_KEY                              = 108,
     BLOCK_AMOUNT_GET                     = 109,
     WALLET_TIME_SYNC                     = 110,
+    ELECTION_CONFLICT                    = 111,
+    UNEXPECTED                           = 112,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

@@ -1065,6 +1065,7 @@ public:
 
     void Conflict(const rai::ConflictMessage& message) override
     {
+        // TODO: stat
         rai::Amount weight = node_.RepWeight(message.representative_);
         if (weight < rai::QUALIFIED_REP_WEIGHT)
         {
@@ -1073,9 +1074,9 @@ public:
 
         node_.elections_.ProcessConflict(
             message.representative_, message.timestamp_first_,
-            message.timestamp_first_, message.signature_first_,
+            message.timestamp_second_, message.signature_first_,
             message.signature_second_, message.block_first_,
-            message.block_first_, weight);
+            message.block_second_, weight);
     }
 
 private:
