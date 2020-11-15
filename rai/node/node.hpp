@@ -47,6 +47,7 @@ public:
     rai::Url callback_url_;
     rai::Account forward_reward_to_;
     uint32_t daily_forward_times_;
+    bool enable_rich_list_;
 };
 
 class RecentBlock

@@ -261,6 +261,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         RewarderStatus();
     }
+    else if (action == "richlist")
+    {
+        RichList();
+    }
     else if (action == "stats")
     {
         Stats();
@@ -1109,6 +1113,35 @@ void rai::NodeRpcHandler::Rewardables()
 void rai::NodeRpcHandler::RewarderStatus()
 {
     node_.rewarder_.Status(response_);
+}
+
+void rai::NodeRpcHandler::RichList()
+{
+    uint64_t count = 1000;
+    bool error = GetCount_(count);
+    if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_COUNT)
+    {
+        return;
+    }
+    error_code_ = rai::ErrorCode::SUCCESS;
+
+    auto list = node_.ledger_.GetRichList(count);
+
+    response_.put("count", list.size());
+    rai::Ptree list_ptree;
+    for (const auto& i : list)
+    {
+        rai::Ptree entry;
+        entry.put("account", i.account_.StringAccount());
+        entry.put("amount", i.balance_.StringDec());
+        entry.put("amount_in_rai", i.balance_.StringBalance(rai::RAI) + " RAI");
+        list_ptree.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("list", list_ptree);
+
+    rai::Amount supply = node_.Supply();
+    response_.put("supply", supply.StringDec());
+    response_.put("supply_in_rai", supply.StringBalance(rai::RAI) + " RAI");
 }
 
 void rai::NodeRpcHandler::Stats()
