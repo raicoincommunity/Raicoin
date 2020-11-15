@@ -74,6 +74,7 @@ public:
     void Rewardable();
     void Rewardables();
     void RewarderStatus();
+    void RichList();
     void Stats();
     void StatsVerbose();
     void StatsClear();

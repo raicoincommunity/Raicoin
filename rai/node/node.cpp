@@ -14,7 +14,8 @@ std::chrono::seconds constexpr rai::ActiveAccounts::AGE_TIME;
 rai::NodeConfig::NodeConfig()
     : port_(rai::Network::DEFAULT_PORT),
       io_threads_(std::max<uint32_t>(4, std::thread::hardware_concurrency())),
-      daily_forward_times_(rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES)
+      daily_forward_times_(rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES),
+      enable_rich_list_(false)
 {
     switch (rai::RAI_NETWORK)
     {
@@ -97,6 +98,13 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
         daily_forward_times_ =
             forward_times ? *forward_times
                           : rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES;
+
+        error_code = rai::ErrorCode::JSON_CONFIG_ENABLE_RICH_LIST;
+        auto enable_rich_list_o = ptree.get_optional<bool>("enable_rich_list");
+        if (enable_rich_list_o)
+        {
+            enable_rich_list_ = *enable_rich_list_o;
+        }
     }
     catch (const std::exception&)
     {
@@ -124,6 +132,7 @@ void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
     ptree.put("callback_url", callback_url_.String());
     ptree.put("forward_reward_to", forward_reward_to_.StringAccount());
     ptree.put("daily_forward_times", std::to_string(daily_forward_times_));
+    ptree.put("enable_rich_list", enable_rich_list_);
 }
 
 rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
@@ -470,7 +479,7 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       alarm_(alarm),
       key_(key),
       store_(error_code, data_path / "data.ldb"),
-      ledger_(error_code, store_),
+      ledger_(error_code, store_, true, config.enable_rich_list_),
       network_(*this, config.port_),
       peers_(*this),
       stopped_(ATOMIC_FLAG_INIT),

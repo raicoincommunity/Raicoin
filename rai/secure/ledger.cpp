@@ -261,15 +261,16 @@ bool rai::WalletAccountInfo::Deserialize(rai::Stream& stream)
     return false;
 }
 
-rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node)
-    : store_(store), total_rep_weight_(0)
+rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node,
+                    bool enable_rich_list)
+    : store_(store), enable_rich_list_(enable_rich_list), total_rep_weight_(0)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     rai::Transaction transaction(error_code, *this, true);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     if (is_node)
     {
-        InitRepWeights_(transaction);
+        InitMemoryTables_(transaction);
     }
     else
     {
@@ -439,6 +440,8 @@ bool rai::Ledger::BlockPut(rai::Transaction& transaction,
                                block.Hash());
         IF_ERROR_RETURN(error, error);
     }
+
+    UpdateRichList(block);
 
     return false;
 }
@@ -1964,6 +1967,44 @@ bool rai::Ledger::VersionGet(rai::Transaction& transaction,
     return false;
 }
 
+void rai::Ledger::UpdateRichList(const rai::Block& block)
+{
+    if (!enable_rich_list_ || block.Type() != rai::BlockType::TX_BLOCK)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(rich_list_mutex_);
+    UpdateRichList_(block.Account(), block.Balance());
+}
+
+std::vector<rai::RichListEntry> rai::Ledger::GetRichList(uint64_t max)
+{
+    size_t size = max;
+    std::vector<rai::RichListEntry> result;
+    std::lock_guard<std::mutex> lock(rich_list_mutex_);
+
+    if (rich_list_.size() < size)
+    {
+        size = rich_list_.size();
+    }
+    result.reserve(size);
+
+    size_t count = 0;
+    for (auto i = rich_list_.begin(), n = rich_list_.end(); i != n; ++i)
+    {
+        if (count >= max)
+        {
+            break;
+        }
+
+        result.push_back(*i);
+        ++count;
+    }
+
+    return result;
+}
+
 rai::ErrorCode rai::Ledger::UpgradeWallet(rai::Transaction& transaction)
 {
     uint32_t version = 0;
@@ -2154,9 +2195,11 @@ void rai::Ledger::RepWeightsCommit_(
     }
 }
 
-rai::ErrorCode rai::Ledger::InitRepWeights_(rai::Transaction& transaction)
+rai::ErrorCode rai::Ledger::InitMemoryTables_(rai::Transaction& transaction)
 {
-    std::lock_guard<std::mutex> lock(rep_weights_mutex_);
+    std::lock_guard<std::mutex> lock_rep_weights(rep_weights_mutex_);
+    std::lock_guard<std::mutex> lock_rich_list(rich_list_mutex_);
+
     for (auto i = AccountInfoBegin(transaction),
               n = AccountInfoEnd(transaction);
          i != n; ++i)
@@ -2180,7 +2223,36 @@ rai::ErrorCode rai::Ledger::InitRepWeights_(rai::Transaction& transaction)
             rep_weights_[block->Representative()] += block->Balance();
             total_rep_weight_ += block->Balance();
         }
+
+        if (enable_rich_list_ && block->Type() == rai::BlockType::TX_BLOCK)
+        {
+            UpdateRichList_(block->Account(), block->Balance());
+        }
     }
 
     return rai::ErrorCode::SUCCESS;
+}
+
+void rai::Ledger::UpdateRichList_(const rai::Account& account,
+                                  const rai::Amount& balance)
+{
+    auto it = rich_list_.get<1>().find(account);
+    if (it == rich_list_.get<1>().end())
+    {
+        if (balance < rai::Ledger::RICH_LIST_MINIMUM)
+        {
+            return;
+        }
+        rich_list_.insert({account, balance});
+    }
+    else
+    {
+        if (balance < rai::Ledger::RICH_LIST_MINIMUM)
+        {
+            rich_list_.get<1>().erase(it);
+            return;
+        }
+        rich_list_.get<1>().modify(
+            it, [&](rai::RichListEntry& data) { data.balance_ = balance; });
+    }
 }

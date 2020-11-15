@@ -692,6 +692,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse receive_minimum from config file";
         }
+        case rai::ErrorCode::JSON_CONFIG_ENABLE_RICH_LIST:
+        {
+            return "Failed to parse enable_rich_list from config file";
+        }
         case rai::ErrorCode::RPC_GENERIC:
         {
             return "[RPC] Internal server error";

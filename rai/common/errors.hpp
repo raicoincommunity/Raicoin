@@ -181,6 +181,7 @@ enum class ErrorCode : int
     JSON_CONFIG_AUTO_CREDIT              = 285,
     JSON_CONFIG_AUTO_RECEIVE             = 286,
     JSON_CONFIG_RECEIVE_MINIMUM          = 287,
+    JSON_CONFIG_ENABLE_RICH_LIST         = 288,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                 = 300,
