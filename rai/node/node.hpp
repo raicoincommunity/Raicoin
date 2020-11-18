@@ -36,7 +36,7 @@ public:
     void SerializeJson(rai::Ptree&) const;
     rai::ErrorCode UpgradeJson(bool&, uint32_t, rai::Ptree&) const;
     rai::ErrorCode UpgradeV1V2(rai::Ptree&) const;
-
+    rai::ErrorCode UpgradeV2V3(rai::Ptree&) const;
 
     static uint32_t constexpr DEFAULT_DAILY_FORWARD_TIMES = 12;
 
@@ -48,6 +48,7 @@ public:
     rai::Account forward_reward_to_;
     uint32_t daily_forward_times_;
     bool enable_rich_list_;
+    bool enable_delegator_list_;
 };
 
 class RecentBlock

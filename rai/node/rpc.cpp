@@ -187,6 +187,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         ConfirmManagerStatus();
     }
+    else if (action == "delegator_list")
+    {
+        DelegatorList();
+    }
     else if (action == "election_count")
     {
         ElectionCount();
@@ -752,6 +756,50 @@ void rai::NodeRpcHandler::BootstrapStatus()
 void rai::NodeRpcHandler::ConfirmManagerStatus()
 {
     response_ = node_.confirm_manager_.Status();
+}
+
+void rai::NodeRpcHandler::DelegatorList()
+{
+    uint64_t count = 1000;
+    bool error = GetCount_(count);
+    if (error && error_code_ != rai::ErrorCode::RPC_MISS_FIELD_COUNT)
+    {
+        return;
+    }
+
+    rai::Account rep(node_.account_);
+    auto rep_o = request_.get_optional<std::string>("representative");
+    if (rep_o)
+    {
+        if (rep.DecodeAccount(*rep_o))
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_REP;
+            return;
+        }
+    }
+    error_code_ = rai::ErrorCode::SUCCESS;
+
+    auto list = node_.ledger_.GetDelegatorList(rep, count);
+
+    response_.put("representative", rep.StringAccount());
+    response_.put("count", list.size());
+
+    rai::Amount total_weight(0);
+    rai::Ptree list_ptree;
+    for (const auto& i : list)
+    {
+        rai::Ptree entry;
+        total_weight += i.second;
+        entry.put("account", i.first.StringAccount());
+        entry.put("weight", i.second.StringDec());
+        entry.put("weight_in_rai", i.second.StringBalance(rai::RAI) + " RAI");
+        list_ptree.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("list", list_ptree);
+
+    response_.put("total_weight", total_weight.StringDec());
+    response_.put("total_weight_in_rai",
+                  total_weight.StringBalance(rai::RAI) + " RAI");
 }
 
 void rai::NodeRpcHandler::ElectionCount()

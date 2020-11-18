@@ -57,6 +57,7 @@ public:
     void BlockQueryByHash();
     void BootstrapStatus();
     void ConfirmManagerStatus();
+    void DelegatorList();
     void ElectionCount();
     void ElectionInfo();
     void Elections();

@@ -696,6 +696,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse enable_rich_list from config file";
         }
+        case rai::ErrorCode::JSON_CONFIG_ENABLE_DELEGATOR_LIST:
+        {
+            return "Failed to parse enable_delegator_list from config file";
+        }
         case rai::ErrorCode::RPC_GENERIC:
         {
             return "[RPC] Internal server error";
@@ -815,6 +819,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_INVALID_FIELD_AMOUNT:
         {
             return "[RPC] Invalid amount field";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_REP:
+        {
+            return "[RPC] Invalid representative field";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

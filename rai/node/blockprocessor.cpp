@@ -1156,10 +1156,11 @@ public:
             ledger_.AccountInfoPut(transaction_, block.Account(), info_l);
         IF_ERROR_RETURN(error,
                         rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT);
+        ledger_.UpdateRichList(block);
         return rai::ErrorCode::SUCCESS;
     }
 
-    void UpdateRepWeight(const rai::Block& previous, const rai::Block& block)
+    void UpdateRepInfo(const rai::Block& previous, const rai::Block& block)
     {
         if (!block.HasRepresentative())
         {
@@ -1169,6 +1170,7 @@ public:
                              previous.Balance());
         ledger_.RepWeightAdd(transaction_, block.Representative(),
                              block.Balance());
+        ledger_.UpdateDelegatorList(block);
     }
 
     rai::ErrorCode Send(const rai::Block& block) override
@@ -1220,7 +1222,7 @@ public:
         error_code = UpdateAccountInfo(block, account_info);
         IF_NOT_SUCCESS_RETURN(error_code);
 
-        UpdateRepWeight(*head_block, block);
+        UpdateRepInfo(*head_block, block);
 
         error_code = PutRewardableInfo(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
@@ -1288,11 +1290,13 @@ public:
                 rai::AccountInfo(block.Type(), block.Hash()));
             IF_ERROR_RETURN(
                 error, rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT);
+            ledger_.UpdateRichList(block);
 
             if (block.HasRepresentative())
             {
                 ledger_.RepWeightAdd(transaction_, block.Representative(),
                                      block.Balance());
+                ledger_.UpdateDelegatorList(block);
             }
 
             error = ledger_.ReceivableInfoDel(transaction_, block.Account(),
@@ -1352,7 +1356,7 @@ public:
             error_code = UpdateAccountInfo(block, account_info);
             IF_NOT_SUCCESS_RETURN(error_code);
 
-            UpdateRepWeight(*head_block, block);
+            UpdateRepInfo(*head_block, block);
 
             error_code = PutRewardableInfo(*head_block, block);
             IF_NOT_SUCCESS_RETURN(error_code);
@@ -1416,7 +1420,7 @@ public:
         error_code = UpdateAccountInfo(block, account_info);
         IF_NOT_SUCCESS_RETURN(error_code);
 
-        UpdateRepWeight(*head_block, block);
+        UpdateRepInfo(*head_block, block);
 
         error_code = PutRewardableInfo(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
@@ -1481,7 +1485,7 @@ public:
         error_code = UpdateAccountInfo(block, account_info);
         IF_NOT_SUCCESS_RETURN(error_code);
 
-        UpdateRepWeight(*head_block, block);
+        UpdateRepInfo(*head_block, block);
         
         error_code = PutRewardableInfo(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
@@ -1663,7 +1667,7 @@ public:
         error_code = UpdateAccountInfo(block, account_info);
         IF_NOT_SUCCESS_RETURN(error_code);
 
-        UpdateRepWeight(*head_block, block);
+        UpdateRepInfo(*head_block, block);
 
         error_code = PutRewardableInfo(*head_block, block);
         IF_NOT_SUCCESS_RETURN(error_code);
