@@ -178,10 +178,30 @@ typedef boost::multi_index_container<
             rai::RichListEntry, rai::Account, &rai::RichListEntry::account_>>>>
     RichList;
 
+class DelegatorListEntry
+{
+public:
+    rai::Account account_;
+    rai::Account rep_;
+    rai::Amount weight_;
+};
+
+typedef boost::multi_index_container<
+    rai::DelegatorListEntry,
+    boost::multi_index::indexed_by<
+        boost::multi_index::hashed_unique<
+            boost::multi_index::member<rai::DelegatorListEntry, rai::Account,
+                                       &rai::DelegatorListEntry::account_>>,
+        boost::multi_index::ordered_non_unique<
+            boost::multi_index::member<rai::DelegatorListEntry, rai::Account,
+                                       &rai::DelegatorListEntry::rep_>>>>
+    DelegatorList;
+
 class Ledger
 {
 public:
-    Ledger(rai::ErrorCode&, rai::Store&, bool = true, bool = false);
+    Ledger(rai::ErrorCode&, rai::Store&, bool = true, bool = false,
+           bool = false);
 
     bool AccountInfoPut(rai::Transaction&, const rai::Account&,
                         const rai::AccountInfo&);
@@ -300,6 +320,9 @@ public:
     bool VersionGet(rai::Transaction&, uint32_t&) const;
     void UpdateRichList(const rai::Block&);
     std::vector<rai::RichListEntry> GetRichList(uint64_t);
+    void UpdateDelegatorList(const rai::Block&);
+    std::vector<std::pair<rai::Account, rai::Amount>> GetDelegatorList(
+        const rai::Account&, uint64_t);
 
     rai::ErrorCode UpgradeWallet(rai::Transaction&);
     rai::ErrorCode UpgradeWalletV1V2(rai::Transaction&);
@@ -315,6 +338,8 @@ private:
     void RepWeightsCommit_(const std::vector<rai::RepWeightOpration>&);
     rai::ErrorCode InitMemoryTables_(rai::Transaction&);
     void UpdateRichList_(const rai::Account&, const rai::Amount&);
+    void UpdateDelegatorList_(const rai::Account&, const rai::Account&,
+                              const rai::Amount&);
 
     static uint32_t constexpr BLOCKS_PER_INDEX = 8;
     const rai::Amount RICH_LIST_MINIMUM = rai::Amount(10 * rai::RAI);
@@ -324,8 +349,13 @@ private:
     rai::Amount total_rep_weight_;
     std::unordered_map<rai::Account, rai::Amount> rep_weights_;
 
-    uint32_t enable_rich_list_;
+    bool enable_rich_list_;
     mutable std::mutex rich_list_mutex_;
     rai::RichList rich_list_;
+
+    bool enable_delegator_list_;
+    mutable std::mutex delegator_list_mutex_;
+    rai::DelegatorList delegator_list_;
+
 };
 }  // namespace rai

@@ -182,6 +182,7 @@ enum class ErrorCode : int
     JSON_CONFIG_AUTO_RECEIVE             = 286,
     JSON_CONFIG_RECEIVE_MINIMUM          = 287,
     JSON_CONFIG_ENABLE_RICH_LIST         = 288,
+    JSON_CONFIG_ENABLE_DELEGATOR_LIST    = 289,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                 = 300,
@@ -214,6 +215,7 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_TO        = 327,
     RPC_MISS_FIELD_AMOUNT       = 328,
     RPC_INVALID_FIELD_AMOUNT    = 329,
+    RPC_INVALID_FIELD_REP       = 330,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

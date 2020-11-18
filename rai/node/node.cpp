@@ -15,7 +15,8 @@ rai::NodeConfig::NodeConfig()
     : port_(rai::Network::DEFAULT_PORT),
       io_threads_(std::max<uint32_t>(4, std::thread::hardware_concurrency())),
       daily_forward_times_(rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES),
-      enable_rich_list_(false)
+      enable_rich_list_(false),
+      enable_delegator_list_(false)
 {
     switch (rai::RAI_NETWORK)
     {
@@ -105,6 +106,14 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
         {
             enable_rich_list_ = *enable_rich_list_o;
         }
+
+        error_code = rai::ErrorCode::JSON_CONFIG_ENABLE_DELEGATOR_LIST;
+        auto enable_delegator_list_o =
+            ptree.get_optional<bool>("enable_delegator_list");
+        if (enable_delegator_list_o)
+        {
+            enable_delegator_list_ = *enable_delegator_list_o;
+        }
     }
     catch (const std::exception&)
     {
@@ -115,7 +124,7 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
 
 void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
 {
-    ptree.put("version", "2");
+    ptree.put("version", "3");
     ptree.put("port", port_);
     ptree.put("io_threads", io_threads_);
     rai::Ptree log_ptree;
@@ -133,6 +142,7 @@ void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
     ptree.put("forward_reward_to", forward_reward_to_.StringAccount());
     ptree.put("daily_forward_times", std::to_string(daily_forward_times_));
     ptree.put("enable_rich_list", enable_rich_list_);
+    ptree.put("enable_delegator_list", enable_delegator_list_);
 }
 
 rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
@@ -148,6 +158,12 @@ rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
             IF_NOT_SUCCESS_RETURN(error_code);
         }
         case 2:
+        {
+            upgraded = true;
+            error_code = UpgradeV2V3(ptree);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 3:
         {
             break;
         }
@@ -178,6 +194,16 @@ rai::ErrorCode rai::NodeConfig::UpgradeV1V2(rai::Ptree& ptree) const
         ptree.put("daily_forward_times", *daily_reward_times_o);
         ptree.erase("daily_reward_times");
     }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::NodeConfig::UpgradeV2V3(rai::Ptree& ptree) const
+{
+    ptree.put("version", 3);
+
+    ptree.put("enable_rich_list", enable_rich_list_);
+    ptree.put("enable_delegator_list", enable_delegator_list_);
 
     return rai::ErrorCode::SUCCESS;
 }
@@ -479,7 +505,8 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       alarm_(alarm),
       key_(key),
       store_(error_code, data_path / "data.ldb"),
-      ledger_(error_code, store_, true, config.enable_rich_list_),
+      ledger_(error_code, store_, true, config.enable_rich_list_,
+              config.enable_delegator_list_),
       network_(*this, config.port_),
       peers_(*this),
       stopped_(ATOMIC_FLAG_INIT),

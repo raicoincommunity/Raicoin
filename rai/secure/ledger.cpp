@@ -262,8 +262,11 @@ bool rai::WalletAccountInfo::Deserialize(rai::Stream& stream)
 }
 
 rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node,
-                    bool enable_rich_list)
-    : store_(store), enable_rich_list_(enable_rich_list), total_rep_weight_(0)
+                    bool enable_rich_list, bool enable_delegator_list)
+    : store_(store),
+      total_rep_weight_(0),
+      enable_rich_list_(enable_rich_list),
+      enable_delegator_list_(enable_delegator_list)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     rai::Transaction transaction(error_code, *this, true);
@@ -276,7 +279,7 @@ rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node,
     {
         error_code = UpgradeWallet(transaction);
     }
-    
+
     if (error_code != rai::ErrorCode::SUCCESS)
     {
         transaction.Abort();
@@ -440,8 +443,6 @@ bool rai::Ledger::BlockPut(rai::Transaction& transaction,
                                block.Hash());
         IF_ERROR_RETURN(error, error);
     }
-
-    UpdateRichList(block);
 
     return false;
 }
@@ -2005,6 +2006,46 @@ std::vector<rai::RichListEntry> rai::Ledger::GetRichList(uint64_t max)
     return result;
 }
 
+void rai::Ledger::UpdateDelegatorList(const rai::Block& block)
+{
+    if (!enable_delegator_list_ || !block.HasRepresentative())
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(delegator_list_mutex_);
+    UpdateDelegatorList_(block.Account(), block.Representative(),
+                         block.Balance());
+}
+
+std::vector<std::pair<rai::Account, rai::Amount>> rai::Ledger::GetDelegatorList(
+    const rai::Account& rep, uint64_t max)
+{
+    std::multimap<rai::Amount, rai::Account, std::greater<rai::Amount>>
+        delegators;
+    std::vector<std::pair<rai::Account, rai::Amount>> result;
+    std::lock_guard<std::mutex> lock(delegator_list_mutex_);
+
+    auto i = delegator_list_.get<1>().lower_bound(rep);
+    auto n = delegator_list_.get<1>().upper_bound(rep);
+    for (; i != n; ++i)
+    {
+        delegators.insert(std::make_pair(i->weight_, i->account_));
+        if (delegators.size() > max)
+        {
+            delegators.erase(std::prev(delegators.end()));
+        }
+    }
+
+    result.reserve(delegators.size());
+
+    for (const auto& i : delegators)
+    {
+        result.emplace_back(i.second, i.first);
+    }
+    return result;
+}
+
 rai::ErrorCode rai::Ledger::UpgradeWallet(rai::Transaction& transaction)
 {
     uint32_t version = 0;
@@ -2199,6 +2240,7 @@ rai::ErrorCode rai::Ledger::InitMemoryTables_(rai::Transaction& transaction)
 {
     std::lock_guard<std::mutex> lock_rep_weights(rep_weights_mutex_);
     std::lock_guard<std::mutex> lock_rich_list(rich_list_mutex_);
+    std::lock_guard<std::mutex> lock_delegator_list(delegator_list_mutex_);
 
     for (auto i = AccountInfoBegin(transaction),
               n = AccountInfoEnd(transaction);
@@ -2222,6 +2264,12 @@ rai::ErrorCode rai::Ledger::InitMemoryTables_(rai::Transaction& transaction)
         {
             rep_weights_[block->Representative()] += block->Balance();
             total_rep_weight_ += block->Balance();
+        }
+
+        if (enable_delegator_list_ && block->HasRepresentative())
+        {
+            UpdateDelegatorList_(account, block->Representative(),
+                                 block->Balance());
         }
 
         if (enable_rich_list_ && block->Type() == rai::BlockType::TX_BLOCK)
@@ -2254,5 +2302,23 @@ void rai::Ledger::UpdateRichList_(const rai::Account& account,
         }
         rich_list_.get<1>().modify(
             it, [&](rai::RichListEntry& data) { data.balance_ = balance; });
+    }
+}
+
+void rai::Ledger::UpdateDelegatorList_(const rai::Account& account,
+                                       const rai::Account& rep,
+                                       const rai::Amount& weight)
+{
+    auto it = delegator_list_.find(account);
+    if (it == delegator_list_.end())
+    {
+        delegator_list_.insert({account, rep, weight});
+    }
+    else
+    {
+        delegator_list_.modify(it, [&](rai::DelegatorListEntry& data) {
+            data.rep_    = rep;
+            data.weight_ = weight;
+        });
     }
 }
