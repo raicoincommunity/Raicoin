@@ -10,7 +10,7 @@
 #include <rai/node/node.hpp>
 
 rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
-                                const boost::filesystem::path& key_path)
+                                rai::Fan& key)
 {
     try
     {
@@ -23,10 +23,6 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
         IF_NOT_SUCCESS_RETURN(error_code);
         rai::Log::Init(data_path, config.node_.log_);
 
-        rai::Fan key(rai::uint256_union(0), rai::Fan::FAN_OUT);
-        error_code = rai::DecryptKey(key, key_path);
-        IF_NOT_SUCCESS_RETURN(error_code);
-        
         boost::asio::io_service service;
         rai::Alarm alarm(service);
         auto node = std::make_shared<rai::Node>(error_code, service, data_path,

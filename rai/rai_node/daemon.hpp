@@ -5,14 +5,14 @@
 #include <rai/common/util.hpp>
 #include <rai/node/node.hpp>
 #include <rai/node/rpc.hpp>
+#include <rai/secure/common.hpp>
 
 namespace rai
 {
 class Daemon
 {
 public:
-    rai::ErrorCode Run(const boost::filesystem::path&,
-                       const boost::filesystem::path&);
+    rai::ErrorCode Run(const boost::filesystem::path&, rai::Fan&);
 };
 
 class DaemonConfig

@@ -204,3 +204,16 @@ rai::ErrorCode rai::DecryptKey(rai::KeyPair& key_pair, const std::string& path,
 
     return rai::ErrorCode::SUCCESS;
 }
+
+rai::ErrorCode rai::InputRawKey(rai::Fan& key)
+{
+    rai::Password password;
+    password.Input("Input raw secret key:");
+
+    rai::RawKey raw_key;
+    bool error = raw_key.data_.DecodeHex(password.Get());
+    IF_ERROR_RETURN(error, rai::ErrorCode::INVALID_PRIVATE_KEY)
+
+    key.Set(raw_key);
+    return rai::ErrorCode::SUCCESS;
+}
