@@ -28,6 +28,7 @@ void OpenOrCreate(std::fstream&, const std::string&);
 rai::ErrorCode CreateKey(const boost::filesystem::path&, bool);
 rai::ErrorCode DecryptKey(rai::Fan&, const boost::filesystem::path&);
 rai::ErrorCode DecryptKey(rai::KeyPair&, const std::string&, const std::string&);
+rai::ErrorCode InputRawKey(rai::Fan&);
 
 // Reads a json object from the stream and if was changed, write the object back
 // to the stream

@@ -43,12 +43,24 @@ rai::ErrorCode GetKeyPath(const boost::program_options::variables_map& vm,
 rai::ErrorCode ProcessDaemon(const boost::program_options::variables_map& vm,
                              const boost::filesystem::path& data_path)
 {
-    boost::filesystem::path key_path;
-    rai::ErrorCode error_code = GetKeyPath(vm, data_path, key_path);
-    IF_NOT_SUCCESS_RETURN(error_code);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Fan key(rai::uint256_union(0), rai::Fan::FAN_OUT);
+    if (vm.count("raw_key"))
+    {
+        error_code = InputRawKey(key);
+        IF_NOT_SUCCESS_RETURN(error_code);
+    }
+    else
+    {
+        boost::filesystem::path key_path;
+        error_code = GetKeyPath(vm, data_path, key_path);
+        IF_NOT_SUCCESS_RETURN(error_code);
+        error_code = rai::DecryptKey(key, key_path);
+        IF_NOT_SUCCESS_RETURN(error_code);
+    }
 
     rai::Daemon daemon;
-    return daemon.Run(data_path, key_path);
+    return daemon.Run(data_path, key);
 }
 
 rai::ErrorCode ProcessKeyCreate(const boost::program_options::variables_map& vm,
@@ -221,6 +233,7 @@ void rai::CliAddOptions(boost::program_options::options_description& desc){
         ("version", "Prints out version")
         ("config_create", "Generate the config.json file")
         ("forward_reward_to", boost::program_options::value<std::string>(), "Specify a wallet account to receive node reward")
+        ("raw_key", "Specify daemon to start with raw private key")
         ;
 
     // clang-format on

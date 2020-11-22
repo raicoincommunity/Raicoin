@@ -184,6 +184,7 @@ public:
     rai::Account account_;
     rai::Account rep_;
     rai::Amount weight_;
+    rai::BlockType type_;
 };
 
 typedef boost::multi_index_container<
@@ -321,8 +322,8 @@ public:
     void UpdateRichList(const rai::Block&);
     std::vector<rai::RichListEntry> GetRichList(uint64_t);
     void UpdateDelegatorList(const rai::Block&);
-    std::vector<std::pair<rai::Account, rai::Amount>> GetDelegatorList(
-        const rai::Account&, uint64_t);
+    std::vector<rai::DelegatorListEntry> GetDelegatorList(const rai::Account&,
+                                                          uint64_t);
 
     rai::ErrorCode UpgradeWallet(rai::Transaction&);
     rai::ErrorCode UpgradeWalletV1V2(rai::Transaction&);
@@ -339,7 +340,7 @@ private:
     rai::ErrorCode InitMemoryTables_(rai::Transaction&);
     void UpdateRichList_(const rai::Account&, const rai::Amount&);
     void UpdateDelegatorList_(const rai::Account&, const rai::Account&,
-                              const rai::Amount&);
+                              const rai::Amount&, rai::BlockType);
 
     static uint32_t constexpr BLOCKS_PER_INDEX = 8;
     const rai::Amount RICH_LIST_MINIMUM = rai::Amount(10 * rai::RAI);

@@ -2015,22 +2015,23 @@ void rai::Ledger::UpdateDelegatorList(const rai::Block& block)
 
     std::lock_guard<std::mutex> lock(delegator_list_mutex_);
     UpdateDelegatorList_(block.Account(), block.Representative(),
-                         block.Balance());
+                         block.Balance(), block.Type());
 }
 
-std::vector<std::pair<rai::Account, rai::Amount>> rai::Ledger::GetDelegatorList(
+std::vector<rai::DelegatorListEntry> rai::Ledger::GetDelegatorList(
     const rai::Account& rep, uint64_t max)
 {
-    std::multimap<rai::Amount, rai::Account, std::greater<rai::Amount>>
+    std::multimap<rai::Amount, rai::DelegatorListEntry,
+                  std::greater<rai::Amount>>
         delegators;
-    std::vector<std::pair<rai::Account, rai::Amount>> result;
+    std::vector<rai::DelegatorListEntry> result;
     std::lock_guard<std::mutex> lock(delegator_list_mutex_);
 
     auto i = delegator_list_.get<1>().lower_bound(rep);
     auto n = delegator_list_.get<1>().upper_bound(rep);
     for (; i != n; ++i)
     {
-        delegators.insert(std::make_pair(i->weight_, i->account_));
+        delegators.insert(std::make_pair(i->weight_, *i));
         if (delegators.size() > max)
         {
             delegators.erase(std::prev(delegators.end()));
@@ -2041,7 +2042,7 @@ std::vector<std::pair<rai::Account, rai::Amount>> rai::Ledger::GetDelegatorList(
 
     for (const auto& i : delegators)
     {
-        result.emplace_back(i.second, i.first);
+        result.push_back(i.second);
     }
     return result;
 }
@@ -2269,7 +2270,7 @@ rai::ErrorCode rai::Ledger::InitMemoryTables_(rai::Transaction& transaction)
         if (enable_delegator_list_ && block->HasRepresentative())
         {
             UpdateDelegatorList_(account, block->Representative(),
-                                 block->Balance());
+                                 block->Balance(), block->Type());
         }
 
         if (enable_rich_list_ && block->Type() == rai::BlockType::TX_BLOCK)
@@ -2307,18 +2308,20 @@ void rai::Ledger::UpdateRichList_(const rai::Account& account,
 
 void rai::Ledger::UpdateDelegatorList_(const rai::Account& account,
                                        const rai::Account& rep,
-                                       const rai::Amount& weight)
+                                       const rai::Amount& weight,
+                                       rai::BlockType type)
 {
     auto it = delegator_list_.find(account);
     if (it == delegator_list_.end())
     {
-        delegator_list_.insert({account, rep, weight});
+        delegator_list_.insert({account, rep, weight, type});
     }
     else
     {
         delegator_list_.modify(it, [&](rai::DelegatorListEntry& data) {
             data.rep_    = rep;
             data.weight_ = weight;
+            data.type_ = type;
         });
     }
 }

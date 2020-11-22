@@ -120,6 +120,7 @@ enum class ErrorCode : int
     WALLET_TIME_SYNC                     = 110,
     ELECTION_CONFLICT                    = 111,
     UNEXPECTED                           = 112,
+    INVALID_PRIVATE_KEY                  = 113,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

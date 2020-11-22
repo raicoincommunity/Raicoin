@@ -358,6 +358,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Encounter unexpected error";
         }
+        case rai::ErrorCode::INVALID_PRIVATE_KEY:
+        {
+            return "Invalid private key";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";
