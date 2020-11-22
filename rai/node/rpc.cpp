@@ -789,10 +789,11 @@ void rai::NodeRpcHandler::DelegatorList()
     for (const auto& i : list)
     {
         rai::Ptree entry;
-        total_weight += i.second;
-        entry.put("account", i.first.StringAccount());
-        entry.put("weight", i.second.StringDec());
-        entry.put("weight_in_rai", i.second.StringBalance(rai::RAI) + " RAI");
+        total_weight += i.weight_;
+        entry.put("account", i.account_.StringAccount());
+        entry.put("type", rai::BlockTypeToString(i.type_));
+        entry.put("weight", i.weight_.StringDec());
+        entry.put("weight_in_rai", i.weight_.StringBalance(rai::RAI) + " RAI");
         list_ptree.push_back(std::make_pair("", entry));
     }
     response_.put_child("list", list_ptree);
