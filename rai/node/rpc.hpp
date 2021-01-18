@@ -7,6 +7,7 @@
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
 #include <rai/secure/rpc.hpp>
+#include <rai/secure/ledger.hpp>
 
 namespace rai
 {
@@ -85,6 +86,10 @@ public:
     void SyncerStatus();
 
     rai::Node& node_;
+
+private:
+    void AppendBlockAmount_(rai::Transaction&, const rai::Block&,
+                            const std::string& = "");
 };
 
 }  // namespace rai

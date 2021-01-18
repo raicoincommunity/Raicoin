@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#V1.1.0
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -23,7 +24,7 @@ from util import Util
 
 # whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
 ALLOWED_RPC_ACTIONS = [
-    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables'
+    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables', 'current_timestamp'
 ]
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -175,7 +176,8 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
                 return json.dumps(response)
             else:
                 return json.dumps({'success':''})
-
+        elif request_json['action'] == "current_timestamp":
+            return json.dumps({'timestamp': str(int(time.time())), 'ack': 'current_timestamp'})
         # rpc: defaut forward the request
         else:
             try:

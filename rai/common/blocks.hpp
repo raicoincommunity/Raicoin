@@ -83,8 +83,8 @@ private:
 enum class ExtensionType : uint16_t
 {
     INVALID     = 0,
-    SUB_ACCOUNT = 1,
-    NOTE        = 2,
+    SUB_ACCOUNT = 1, // UTF-8 encode string
+    NOTE        = 2, // UTF-8 encode string
     UNIQUE_ID   = 3,
 
     RESERVED_MAX = 1023,

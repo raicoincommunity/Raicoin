@@ -362,6 +362,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid private key";
         }
+        case rai::ErrorCode::NODE_STATUS:
+        {
+            return "The node is offline or unsynchronized";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";
