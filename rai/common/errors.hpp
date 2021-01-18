@@ -121,6 +121,7 @@ enum class ErrorCode : int
     ELECTION_CONFLICT                    = 111,
     UNEXPECTED                           = 112,
     INVALID_PRIVATE_KEY                  = 113,
+    NODE_STATUS                          = 114,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

@@ -408,6 +408,7 @@ void rai::NodeRpcHandler::AccountInfo()
     rai::Ptree head_ptree;
     head_block->SerializeJson(head_ptree);
     response_.add_child("head_block", head_ptree);
+    AppendBlockAmount_(transaction, *head_block, "head_block_");
 
     std::shared_ptr<rai::Block> tail_block(nullptr);
     error = node_.ledger_.BlockGet(transaction, info.tail_, tail_block);
@@ -419,6 +420,29 @@ void rai::NodeRpcHandler::AccountInfo()
     rai::Ptree tail_ptree;
     tail_block->SerializeJson(tail_ptree);
     response_.add_child("tail_block", tail_ptree);
+    AppendBlockAmount_(transaction, *tail_block, "tail_block_");
+
+    if (info.confirmed_height_ != rai::Block::INVALID_HEIGHT)
+    {
+        std::shared_ptr<rai::Block> confirmed_block(nullptr);
+        if (info.confirmed_height_ == info.head_height_)
+        {
+            confirmed_block = head_block;
+        }
+        else
+        {
+            error = node_.ledger_.BlockGet(transaction, account, info.confirmed_height_, confirmed_block);
+            if (error || confirmed_block == nullptr)
+            {
+                error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+                return;
+            }
+        }
+        rai::Ptree confirmed_ptree;
+        confirmed_block->SerializeJson(confirmed_ptree);
+        response_.add_child("confirmed_block", confirmed_ptree);
+        AppendBlockAmount_(transaction, *confirmed_block, "confirmed_block_");
+    }
 }
 
 void rai::NodeRpcHandler::AccountSubscribe()
@@ -433,7 +457,7 @@ void rai::NodeRpcHandler::AccountSubscribe()
 
     rai::Signature signature;
     bool has_signature = true;
-    error              = GetSignature_(signature);
+    error = GetSignature_(signature);
     if (error)
     {
         if (error_code_ != rai::ErrorCode::RPC_MISS_FIELD_SIGNATURE)
@@ -455,6 +479,7 @@ void rai::NodeRpcHandler::AccountSubscribe()
     }
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
     response_.put("success", "");
+    response_.put("account", account.StringAccount());
     response_.put("verified", has_signature ? "true" : "false");
 }
 
@@ -613,6 +638,7 @@ void rai::NodeRpcHandler::BlockQueryByPrevious()
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         response_.add_child("block", block_ptree);
+        AppendBlockAmount_(transaction, *block);
         return;
     }
 
@@ -643,6 +669,7 @@ void rai::NodeRpcHandler::BlockQueryByPrevious()
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         response_.add_child("block", block_ptree);
+        AppendBlockAmount_(transaction, *block);
     }
     else
     {
@@ -667,6 +694,7 @@ void rai::NodeRpcHandler::BlockQueryByPrevious()
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         response_.add_child("block", block_ptree);
+        AppendBlockAmount_(transaction, *block);
     }
 }
 
@@ -712,26 +740,7 @@ void rai::NodeRpcHandler::BlockQueryByHash()
         return;
     }
 
-    rai::Amount amount(0);
-    if (block->Height() == 0)
-    {
-        error = block->Amount(amount);
-    }
-    else
-    {
-        std::shared_ptr<rai::Block> previous(nullptr);
-        error =
-            node_.ledger_.BlockGet(transaction, block->Previous(), previous);
-        if (!error)
-        {
-            error = block->Amount(*previous, amount);
-        }
-    }
-    if (!error)
-    {
-        response_.put("amount", amount.StringDec());
-        response_.put("amount_in_rai", amount.StringBalance(rai::RAI) + " RAI");
-    }
+    AppendBlockAmount_(transaction, *block);
 
     rai::Ptree block_ptree;
     block->SerializeJson(block_ptree);
@@ -1320,4 +1329,32 @@ void rai::NodeRpcHandler::SyncerStatus()
     response_.put("miss", stat.miss_);
     response_.put("size", node_.syncer_.Size());
     response_.put("queries", node_.syncer_.Queries());
+}
+
+void rai::NodeRpcHandler::AppendBlockAmount_(rai::Transaction& transaction,
+                                             const rai::Block& block,
+                                             const std::string& prefix)
+{
+    bool error = false;
+    rai::Amount amount(0);
+    if (block.Height() == 0)
+    {
+        error = block.Amount(amount);
+    }
+    else
+    {
+        std::shared_ptr<rai::Block> previous(nullptr);
+        error =
+            node_.ledger_.BlockGet(transaction, block.Previous(), previous);
+        if (!error)
+        {
+            error = block.Amount(*previous, amount);
+        }
+    }
+    if (!error)
+    {
+        response_.put(prefix + "amount", amount.StringDec());
+        response_.put(prefix + "amount_in_rai",
+                      amount.StringBalance(rai::RAI) + " RAI");
+    }
 }

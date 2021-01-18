@@ -318,6 +318,11 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Account& account,
         return rai::ErrorCode::SUBSCRIBE_NO_CALLBACK;
     }
 
+    if (node_.Status() != rai::NodeStatus::RUN)
+    {
+        return rai::ErrorCode::NODE_STATUS;
+    }
+
     Add(account);
     StartElection(account);
     ConfirmReceivables(account);
