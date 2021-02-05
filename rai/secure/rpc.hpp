@@ -22,7 +22,7 @@ public:
 class Rpc;
 class RpcHandler;
 typedef std::function<std::unique_ptr<RpcHandler>(
-    rai::Rpc&, const std::string&, const std::string&,
+    rai::Rpc&, const std::string&,
     const boost::asio::ip::address_v4&,
     const std::function<void(const rai::Ptree&)>&)>
     RpcHandlerMaker;
@@ -63,7 +63,7 @@ public:
 class RpcHandler
 {
 public:
-    RpcHandler(rai::Rpc&, const std::string&, const std::string&,
+    RpcHandler(rai::Rpc&, const std::string&,
                const boost::asio::ip::address_v4&,
                const std::function<void(const rai::Ptree&)>&);
     virtual ~RpcHandler() = default;
@@ -79,7 +79,6 @@ public:
 
     rai::Rpc& rpc_;
     std::string body_;
-    std::string request_id_;
     std::string header_api_key_;
     boost::asio::ip::address_v4 ip_;
     std::function<void(const rai::Ptree&)> send_response_;

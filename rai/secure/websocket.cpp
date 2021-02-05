@@ -209,6 +209,7 @@ void rai::WebsocketClient::OnWebsocketHandshake(
         return;
     }
     ChangeStatus_(rai::WebsocketStatus::CONNECTED);
+    std::cout << "Websocket handshake success" << std::endl;
 
     if (!sending_)
     {

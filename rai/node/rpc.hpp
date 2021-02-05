@@ -35,8 +35,8 @@ class Node;
 class NodeRpcHandler : public RpcHandler
 {
 public:
-    NodeRpcHandler(rai::Node&, rai::Rpc&, const std::string&,
-                   const std::string&, const boost::asio::ip::address_v4&,
+    NodeRpcHandler(rai::Node&, rai::Rpc&, const std::string&, 
+                   const boost::asio::ip::address_v4&,
                    const std::function<void(const rai::Ptree&)>&);
     virtual ~NodeRpcHandler() = default;
 

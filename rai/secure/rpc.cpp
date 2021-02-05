@@ -126,7 +126,7 @@ void rai::RpcConnection::Read()
             connection->rpc_.service_.post([connection]() {
                 auto start = std::chrono::steady_clock::now();
                 auto version = connection->request_.version();
-                std::string request_id = boost::str(
+                std::string unique_id = boost::str(
                     boost::format("%1%")
                     % boost::io::group(
                           std::hex, std::showbase,
@@ -134,7 +134,7 @@ void rai::RpcConnection::Read()
 
                 auto response_handler =
                     [connection, version, start,
-                     request_id](const boost::property_tree::ptree& ptree) {
+                     unique_id](const boost::property_tree::ptree& ptree) {
                         std::stringstream ostream;
                         boost::property_tree::write_json(ostream, ptree);
                         ostream.flush();
@@ -155,7 +155,7 @@ void rai::RpcConnection::Read()
                         rai::Log::Rpc(boost::str(
                             boost::format("RPC request %1% completed in: "
                                           "%2% microseconds")
-                            % request_id
+                            % unique_id
                             % std::chrono::duration_cast<
                                   std::chrono::microseconds>(
                                   std::chrono::steady_clock::now() - start)
@@ -167,7 +167,6 @@ void rai::RpcConnection::Read()
                 {
                     auto rpc_handler = connection->rpc_.make_handler_(
                         connection->rpc_, connection->request_.body(),
-                        request_id,
                         connection->socket_.remote_endpoint().address().to_v4(),
                         response_handler);
                     rpc_handler->header_api_key_ =
@@ -204,12 +203,11 @@ void rai::RpcConnection::Write(const std::string& body, unsigned version)
 }
 
 rai::RpcHandler::RpcHandler(
-    rai::Rpc& rpc, const std::string& body, const std::string& request_id,
+    rai::Rpc& rpc, const std::string& body,
     const boost::asio::ip::address_v4& ip,
     const std::function<void(const rai::Ptree&)>& send_response)
     : rpc_(rpc),
       body_(body),
-      request_id_(request_id),
       ip_(ip),
       send_response_(send_response),
       error_code_(rai::ErrorCode::SUCCESS)
@@ -283,6 +281,12 @@ void rai::RpcHandler::Process()
         if (request_id)
         {
             response_.put("request_id", *request_id);
+        }
+
+        auto client_id = request_.get_optional<std::string>("client_id");
+        if (client_id)
+        {
+            response_.put("client_id", *client_id);
         }
     }
     catch (const std::exception& e)

@@ -53,7 +53,8 @@ public:
 
 private:
     void StartElection_(rai::Transaction&, const rai::Account&);
-    void BlockConfirm_(rai::Transaction&, const std::shared_ptr<rai::Block>&);
+    void BlockConfirm_(rai::Transaction&, const std::shared_ptr<rai::Block>&,
+                       uint64_t);
     bool NeedConfirm_(rai::Transaction&, const rai::Account&);
 
     rai::Node& node_;

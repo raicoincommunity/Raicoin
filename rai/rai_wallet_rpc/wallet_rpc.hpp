@@ -40,7 +40,7 @@ class WalletRpc;
 class WalletRpcHandler : public RpcHandler
 {
 public:
-    WalletRpcHandler(rai::WalletRpc&, rai::Rpc&, const std::string&,
+    WalletRpcHandler(rai::WalletRpc&, rai::Rpc&,
                    const std::string&, const boost::asio::ip::address_v4&,
                    const std::function<void(const rai::Ptree&)>&);
     virtual ~WalletRpcHandler() = default;

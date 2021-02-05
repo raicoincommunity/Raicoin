@@ -122,6 +122,7 @@ enum class ErrorCode : int
     UNEXPECTED                           = 112,
     INVALID_PRIVATE_KEY                  = 113,
     NODE_STATUS                          = 114,
+    BLOCK_HEIGHT_DUPLICATED              = 115,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

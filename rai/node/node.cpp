@@ -7,6 +7,7 @@
 #include <boost/log/trivial.hpp>
 #include <rai/node/network.hpp>
 #include <rai/node/message.hpp>
+#include <rai/secure/http.hpp>
 
 std::chrono::seconds constexpr rai::RecentBlocks::AGE_TIME;
 std::chrono::seconds constexpr rai::ActiveAccounts::AGE_TIME;
@@ -529,7 +530,19 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
         key_.Get(private_key);
         account_ = rai::GeneratePublicKey(private_key.data_);
     }
-    
+
+    if (config_.callback_url_)
+    {
+        if (config_.callback_url_.protocol_ == "ws"
+            || config_.callback_url_.protocol_ == "wss")
+        {
+            websocket_ = std::make_shared<rai::WebsocketClient>(
+                service_, config_.callback_url_.host_,
+                config_.callback_url_.port_, config_.callback_url_.path_,
+                config_.callback_url_.protocol_ == "wss");
+        }
+    }
+
     InitLedger(error_code);
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -566,6 +579,14 @@ rai::Node::~Node()
 std::shared_ptr<rai::Node> rai::Node::Shared()
 {
     return shared_from_this();
+}
+
+void rai::Node::ConnectToServer()
+{
+    if (websocket_)
+    {
+        websocket_->Run();
+    }
 }
 
 void rai::Node::RegisterNetworkHandler()
@@ -614,6 +635,15 @@ void rai::Node::Start()
             std::chrono::seconds(600));
     Ongoing(std::bind(&rai::ActiveAccounts::Age, &active_accounts_),
             std::chrono::seconds(10));
+    if (websocket_)
+    {
+        websocket_->message_processor_ =
+            [this](const std::shared_ptr<rai::Ptree>& message) {
+                ReceiveWsMessage(message);
+            };
+        Ongoing(std::bind(&rai::Node::ConnectToServer, this),
+                std::chrono::seconds(5));
+    }
     std::cout << "Node start: " << account_.StringAccount() << std::endl;
 
 #if 0
@@ -649,6 +679,10 @@ void rai::Node::Stop()
     if (stopped_.test_and_set())
     {
         return;
+    }
+    if (websocket_)
+    {
+        websocket_->Close();
     }
     bootstrap_.Stop();
     bootstrap_listener_.Stop();
@@ -1188,6 +1222,35 @@ void rai::Node::SendByRoute(const rai::Route& route, rai::Message& message)
          });
 }
 
+void rai::Node::SendCallback(const rai::Ptree& notify)
+{
+    if (!config_.callback_url_) return;
+    if (config_.callback_url_.protocol_ == "http"
+        || config_.callback_url_.protocol_ == "https")
+    {
+        rai::HttpCallback handler = [](rai::ErrorCode error_code,
+                                           const std::string&) {
+            rai::Stats::Add(error_code, "Node::SendCallback");
+        };
+
+        auto http = std::make_shared<rai::HttpClient>(service_);
+        rai::ErrorCode error_code =
+            http->Post(config_.callback_url_, notify, handler);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            handler(error_code, "");
+        }
+    }
+    else if (config_.callback_url_.protocol_ == "ws"
+             || config_.callback_url_.protocol_ == "wss")
+    {
+        if (!websocket_) return;
+        websocket_->Send(notify);
+    }
+    else
+    {
+    }
+}
 
 void rai::Node::Broadcast(rai::Message& message)
 {
@@ -1993,12 +2056,11 @@ void rai::Node::SetStatus(rai::NodeStatus status)
 rai::RpcHandlerMaker rai::Node::RpcHandlerMaker()
 {
     return [this](rai::Rpc& rpc, const std::string& body,
-                  const std::string& request_id,
                   const boost::asio::ip::address_v4& ip,
                   const std::function<void(const rai::Ptree&)>& send_response)
                -> std::unique_ptr<rai::RpcHandler> {
         return std::make_unique<rai::NodeRpcHandler>(
-            *this, rpc, body, request_id, ip, send_response);
+            *this, rpc, body, ip, send_response);
     };
 }
 
@@ -2028,3 +2090,17 @@ rai::Amount rai::Node::Supply()
         * (now - rai::EpochTimestamp() - rai::AIRDROP_DURATION - 3600) / 80000;
     return total - rai::Amount(destroyed);
 }
+
+void rai::Node::ReceiveWsMessage(const std::shared_ptr<rai::Ptree>& message)
+{
+    std::stringstream ostream;
+    boost::property_tree::write_json(ostream, *message);
+    ostream.flush();
+    rai::NodeRpcHandler handler(*this, *rpc_, ostream.str(),
+                                boost::asio::ip::address_v4::any(),
+                                [this](const rai::Ptree& response) {
+                                    SendCallback(response);
+                                });
+    handler.Process();
+}
+

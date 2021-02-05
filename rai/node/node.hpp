@@ -14,6 +14,7 @@
 #include <rai/node/peer.hpp>
 #include <rai/secure/common.hpp>
 #include <rai/secure/rpc.hpp>
+#include <rai/secure/websocket.hpp>
 #include <rai/node/blockprocessor.hpp>
 #include <rai/node/blockquery.hpp>
 #include <rai/node/gapcache.hpp>
@@ -209,6 +210,7 @@ public:
          rai::Fan&);
     ~Node();
     std::shared_ptr<rai::Node> Shared();
+    void ConnectToServer();
     void RegisterNetworkHandler();
     void Start();
     void Stop();
@@ -218,6 +220,7 @@ public:
                                  const std::string&)>);
     void SendToPeer(const rai::Peer&, rai::Message&);
     void SendByRoute(const rai::Route&, rai::Message&);
+    void SendCallback(const rai::Ptree&);
     void Broadcast(rai::Message&);
     void BroadcastAsync(const std::shared_ptr<rai::Message>&);
     void BroadcastFork(const std::shared_ptr<rai::Block>&,
@@ -277,6 +280,7 @@ public:
     void SetStatus(rai::NodeStatus);
     rai::RpcHandlerMaker RpcHandlerMaker();
     rai::Amount Supply();
+    void ReceiveWsMessage(const std::shared_ptr<rai::Ptree>&);
 
     template <typename T>
     void Background(T action)
@@ -294,6 +298,7 @@ public:
     boost::asio::io_service& service_;
     rai::Alarm& alarm_;
     rai::Fan& key_;
+    std::shared_ptr<rai::Rpc> rpc_;
     rai::Genesis genesis_;
     rai::Account account_;
     rai::Observers observers_;
@@ -319,6 +324,7 @@ public:
     rai::Dumpers dumpers_;
     rai::Rewarder rewarder_;
     rai::ActiveAccounts active_accounts_;
+    std::shared_ptr<rai::WebsocketClient> websocket_;
 };
 
 } // namespace rai

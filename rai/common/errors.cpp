@@ -366,6 +366,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "The node is offline or unsynchronized";
         }
+        case rai::ErrorCode::BLOCK_HEIGHT_DUPLICATED:
+        {
+            return "Block with duplicated height";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";
