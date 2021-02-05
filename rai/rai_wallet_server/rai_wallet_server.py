@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#V1.1.0
+#V1.5.0
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -14,6 +14,7 @@ import time
 import uuid
 import uvloop
 import secrets
+import random
 
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
@@ -105,12 +106,20 @@ def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
     r.app['limit'][ip]['count'] -= 1
     return False
 
-async def websocket_forward_to_node(request_json : dict, ip, uid):
-    response = await RPC.json_post(request_json)
-    if not response:
-        log.server_logger.error('rpc error:%s;%s', ip, uid)
-        response = {'error':'rpc error'}
-    return response
+async def websocket_forward_to_node(r: web.Request, request_json : dict, ip, client_id):
+    if client_id not in r.app['clients']:
+        return
+    client = r.app['clients'][client_id]
+    if not client['node_id'] or client['node_id'] not in r.app['nodes']:
+        log.server_logger.error('invalid node id in client:%s;%s', ip, client_id)
+        return json.dumps({'error':'node is offline'})
+
+    node = r.app['nodes'][client['node_id']]
+    request_json['client_id'] = client_id
+    try:
+        await node['ws'].send_str(json.dumps(request_json))
+    except Exception as e:
+        log.server_logger.error('rpc error;%s;%s;%s', str(e), ip, client_id)
 
 def subscribe(r : web.Request, account : str, uid : str):
     subs = r.app['subscriptions']
@@ -129,8 +138,8 @@ def unsubscribe(r : web.Request, account : str, uid : str):
         log.server_logger.info('unsubscribe:%s', account)
         del subs[account]
 
-# Primary handler for all websocket connections
-async def websocket_handle_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
+# Primary handler for all client websocket connections
+async def handle_client_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by client"""
     if websocket_rate_limit(r, ws):
         reply = {'error': 'Messaging too quickly'}
@@ -143,7 +152,7 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
         r.app['active_messages'].add(message)
     else:
         log.server_logger.error('request already active; %s; %s; %s', message, ip, uid)
-        return None
+        return
 
     try:
         clients = r.app['clients']
@@ -165,15 +174,14 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
             account = request_json['account']
 
             if uid not in clients:
-                return json.dumps({'error':'uid not found'});
+                return json.dumps({'error':'uid not found'})
             if 'accounts' not in clients[uid] or account not in clients[uid]['accounts']:
-                return json.dumps({'error':'account not subscribed'});
-            clients[uid]['accounts'].remove(account);
+                return json.dumps({'error':'account not subscribed'})
+            clients[uid]['accounts'].remove(account)
             
             unsubscribe(r, account, uid)
             if account not in subs:
-                response = await websocket_forward_to_node(request_json, ip, uid)
-                return json.dumps(response)
+                return await websocket_forward_to_node(r, request_json, ip, uid)
             else:
                 return json.dumps({'success':''})
         elif request_json['action'] == "current_timestamp":
@@ -181,13 +189,7 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
         # rpc: defaut forward the request
         else:
             try:
-                response = await websocket_forward_to_node(request_json, ip, uid)
-                if request_json['action'] == 'account_subscribe' and 'success' in response:
-                    account = request_json['account']
-                    subscribe(r, account, uid)
-                    clients[uid]['accounts'].add(account); 
-
-                return json.dumps(response)
+                return await websocket_forward_to_node(r, request_json, ip, uid)
             except Exception as e:
                 log.server_logger.error('rpc error;%s;%s;%s', str(e), ip, uid)
                 return json.dumps({
@@ -203,44 +205,86 @@ async def websocket_handle_messages(r : web.Request, message : str, ws : web.Web
     finally:
         r.app['active_messages'].remove(message)
 
-async def websocket_handler(r : web.Request):
+def random_node(r: web.Request):
+    if not r.app['nodes']:
+        return None
+    ip = UTIL.get_request_ip(r)
+    for client in r.app['clients'].values():
+        if client['ip'] != ip:
+            continue
+        node_id = client['node_id']
+        if not node_id or node_id not in r.app['nodes']:
+            continue
+        return node_id
+    return random.choice(list(r.app['nodes'].keys()))
+
+async def client_handler(r : web.Request):
     """Handler for websocket connections and messages"""
+    if not r.app['nodes']:
+        return web.HTTPBadGateway()
+
     ws = web.WebSocketResponse(heartbeat=30)
-    await ws.prepare(r)
-    # Connection Opened
+    try:
+        await ws.prepare(r)
+        # Connection Opened
+    except:
+        log.server_logger.error('Failed to prepare websocket: %s', UTIL.get_request_ip(r))
+        return ws
     ws.id = str(uuid.uuid4())
-    r.app['clients'][ws.id] = {'ws':ws, 'accounts':set()}
-    log.server_logger.info('new connection;%s;%s;User-Agent:%s', UTIL.get_request_ip(r), ws.id, str(
+    ip = UTIL.get_request_ip(r)
+    r.app['clients'][ws.id] = {'ws':ws, 'accounts':set(), 'node_id':random_node(r),'ip':ip}
+    log.server_logger.info('new client connection;%s;%s;User-Agent:%s', ip, ws.id, str(
         r.headers.get('User-Agent')))
 
     try:
+        if not r.app['clients'][ws.id]['node_id']:
+            await ws.close()
+            return ws
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 if msg.data == 'close':
                     await ws.close()
                 else:
-                    reply = await websocket_handle_messages(r, msg.data, ws=ws)
-                    if reply is not None:
+                    reply = await handle_client_messages(r, msg.data, ws=ws)
+                    if reply:
                         log.server_logger.debug('Sending response %s to %s', reply, UTIL.get_request_ip(r))
                         await ws.send_str(reply)
             elif msg.type == WSMsgType.CLOSE:
-                log.server_logger.info('WS Connection closed normally')
+                log.server_logger.info('Client Connection closed normally')
                 break
             elif msg.type == WSMsgType.ERROR:
-                log.server_logger.info('WS Connection closed with error %s', ws.exception())
+                log.server_logger.info('Client Connection closed with error %s', ws.exception())
                 break
-
-        log.server_logger.info('WS connection closed normally')
+        log.server_logger.info('Client connection closed normally')
     except Exception:
-        log.server_logger.exception('WS Closed with exception')
+        log.server_logger.exception('Client Closed with exception')
     finally:
-        if ws.id in r.app['clients']:
-            if 'accounts' in r.app['clients'][ws.id]:
-                for account in r.app['clients'][ws.id]['accounts']:
-                    unsubscribe(r, account, ws.id)
-            del r.app['clients'][ws.id]
-        await ws.close()
+        await destory_client(r, ws.id)
     return ws
+
+async def destory_client(r : web.Request, client_id):
+    if client_id not in r.app['clients']:
+        return
+    client = r.app['clients'][client_id]
+    if 'accounts' in client:
+        for account in client['accounts']:
+            unsubscribe(r, account, client_id)
+    try:
+        await client['ws'].close()
+    except:
+        pass
+    del r.app['clients'][client_id]
+
+async def destroy_node(r: web.Request, node_id):
+    if node_id in r.app['nodes']:
+        try:
+            await r.app['nodes'][node_id]['ws'].close()
+        except:
+            pass
+        del r.app['nodes'][node_id]
+    for k,v in r.app['clients'].items():
+        if v['node_id'] == node_id:
+            await destory_client(r, k)
 
 # Primary handler for callback
 def callback_check_ip(r : web.Request):
@@ -249,29 +293,85 @@ def callback_check_ip(r : web.Request):
         return True
     return False
 
-async def callback_handler(r : web.Request):
+# Primary handler for all node websocket connections
+async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
+    """Process data sent by node"""
+    ip = UTIL.get_request_ip(r)
+    node_id = ws.id
+    log.server_logger.info('request; %s, %s, %s', message, ip, node_id)
+
+    clients = r.app['clients']
+    subs = r.app['subscriptions']
+    try:
+
+        request_json = json.loads(message)
+        if 'notify' in request_json:
+            notify = request_json['notify']
+            account = request_json['account']
+            log.server_logger.debug('node message received: notify=%s, account=%s', notify, account)
+
+            if account not in subs:
+                return
+
+            log.server_logger.info("Pushing to clients %s", str(subs[account]))
+            for sub in subs[account]:
+                if r.app['clients'][sub]['node_id'] == node_id:
+                    await r.app['clients'][sub]['ws'].send_str(message)
+        elif 'ack' in request_json:
+            action = request_json['ack']
+            client_id = request_json['client_id']
+            del request_json['client_id']
+            if client_id not in clients:
+                log.server_logger.info('client missing:message=%s;', message)
+                return
+            if action == 'account_subscribe':
+                if 'success' in request_json:
+                    account = request_json['account']
+                    subscribe(r, account, client_id)
+                    clients[client_id]['accounts'].add(account)
+            await clients[client_id]['ws'].send_str(json.dumps(request_json))
+        else:
+            log.server_logger.error('unexpected node message;%s;%s;%s', message, ip, node_id)
+    except Exception as e:
+        log.server_logger.exception('uncaught error;%s;%s;%s', str(e), ip, node_id)
+
+async def node_handler(r : web.Request):
     if callback_check_ip(r):
         log.server_logger.error('callback from unauthorized ip: %s', UTIL.get_request_ip(r))
         return web.HTTPUnauthorized()
+    
+    ws = web.WebSocketResponse(heartbeat=30)
+    try:
+        await ws.prepare(r)
+        # Connection Opened
+    except:
+        log.server_logger.error('Failed to prepare websocket: %s', UTIL.get_request_ip(r))
+        return ws
+     
+    ws.id = str(uuid.uuid4())
+    r.app['nodes'][ws.id] = {'ws':ws}
+    log.server_logger.info('new node connection;%s;%s;User-Agent:%s', UTIL.get_request_ip(r), ws.id, str(r.headers.get('User-Agent')))
 
     try:
-        request_json = await r.json()
-        notify = request_json['notify']
-        account = request_json['account']
-        log.server_logger.debug('callback received: notify=%s, account=%s', notify, account)
+        async for msg in ws:
+            if msg.type == WSMsgType.TEXT:
+                if msg.data == 'close':
+                    await ws.close()
+                else:
+                    await handle_node_messages(r, msg.data, ws=ws)
+            elif msg.type == WSMsgType.CLOSE:
+                log.server_logger.info('Node connection closed normally')
+                break
+            elif msg.type == WSMsgType.ERROR:
+                log.server_logger.info('Node connection closed with error %s', ws.exception())
+                break
 
-        if account not in r.app['subscriptions']:
-            return
-
-        log.server_logger.info("Pushing to clients %s", str(r.app['subscriptions'][account]))
-        for sub in r.app['subscriptions'][account]:
-            await r.app['clients'][sub]['ws'].send_str(json.dumps(request_json))
-        
-        return web.HTTPOk()
+        log.server_logger.info('Node connection closed normally')
     except Exception:
-        log.server_logger.exception('received exception in callback')
-        return web.HTTPInternalServerError(reason="Something went wrong %s" % str(sys.exc_info()))
-
+        log.server_logger.exception('Node closed with exception')
+    finally:
+        await destroy_node(r, ws.id)
+    return ws
 
 async def init_app():
     # Setup logger
@@ -285,17 +385,18 @@ async def init_app():
         formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s", "%Y-%m-%d %H:%M:%S %z")
         handler.setFormatter(formatter)
         root.addHandler(handler)
-        root.addHandler(TimedRotatingFileHandler(LOG_FILE, when="d", interval=1, backupCount=100))        
+        root.addHandler(TimedRotatingFileHandler(LOG_FILE, when="d", interval=1, backupCount=30))        
 
     app = web.Application()
     # Global vars
     app['clients'] = {} # Keep track of connected clients
+    app['nodes'] = {} # Keep track of connected nodes
     app['limit'] = {} # Limit messages based on IP
     app['active_messages'] = set() # Avoid duplicate messages from being processes simultaneously
     app['subscriptions'] = {} # Store subscription UUIDs, this is used for targeting callback accounts
 
-    app.add_routes([web.get('/', websocket_handler)]) # All WS requests
-    app.add_routes([web.post(f'/callback/{CALLBACK_TOKEN}', callback_handler)]) # http/https callback from node
+    app.add_routes([web.get('/', client_handler)]) # All client WS requests
+    app.add_routes([web.get(f'/callback/{CALLBACK_TOKEN}', node_handler)]) # ws/wss callback from nodes
 
     return app
 

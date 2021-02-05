@@ -69,7 +69,7 @@ void rai::Subscriptions::BlockAppend(const std::shared_ptr<rai::Block>& block)
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         ptree.put_child("block", block_ptree);
-        node_.PostJson(node_.config_.callback_url_, ptree);
+        node_.SendCallback(ptree);
 
         node_.StartElection(block);
     }
@@ -104,7 +104,7 @@ void rai::Subscriptions::BlockConfirm(const std::shared_ptr<rai::Block>& block,
              && block->Height() == 0)
             || last_confirm_height + 1 == block->Height())
         {
-            BlockConfirm_(transaction, block);
+            BlockConfirm_(transaction, block, block->Height());
             break;
         }
 
@@ -152,7 +152,7 @@ void rai::Subscriptions::BlockConfirm(const std::shared_ptr<rai::Block>& block,
                 break;
             }
 
-            BlockConfirm_(transaction, block_l);
+            BlockConfirm_(transaction, block_l, block->Height());
 
             if (successor.IsZero())
             {
@@ -178,7 +178,7 @@ void rai::Subscriptions::BlockRollback(const std::shared_ptr<rai::Block>& block)
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         ptree.put_child("block", block_ptree);
-        node_.PostJson(node_.config_.callback_url_, ptree);
+        node_.SendCallback(ptree);
     }
 }
 
@@ -192,7 +192,7 @@ void rai::Subscriptions::BlockDrop(const std::shared_ptr<rai::Block>& block)
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         ptree.put_child("block", block_ptree);
-        node_.PostJson(node_.config_.callback_url_, ptree);
+        node_.SendCallback(ptree);
     }
 }
 
@@ -214,7 +214,7 @@ void rai::Subscriptions::BlockFork(bool add,
     rai::Ptree ptree_second;
     second->SerializeJson(ptree_second);
     ptree.put_child("block_second", ptree_second);
-    node_.PostJson(node_.config_.callback_url_, ptree);
+    node_.SendCallback(ptree);
 }
 
 void rai::Subscriptions::ConfirmReceivables(const rai::Account& account)
@@ -389,9 +389,10 @@ void rai::Subscriptions::StartElection_(rai::Transaction& transaction,
 }
 
 void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
-                                       const std::shared_ptr<rai::Block>& block)
+                                       const std::shared_ptr<rai::Block>& block,
+                                       uint64_t head_height)
 {
-    if (Exists(block->Account()))
+    if (block->Height() == head_height && Exists(block->Account()))
     {
         rai::Ptree ptree;
         ptree.put("notify", "block_confirm");
@@ -399,7 +400,7 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
         rai::Ptree block_ptree;
         block->SerializeJson(block_ptree);
         ptree.put_child("block", block_ptree);
-        node_.PostJson(node_.config_.callback_url_, ptree);
+        node_.SendCallback(ptree);
     }
 
     if (block->Opcode() == rai::BlockOpcode::SEND && Exists(block->Link()))
@@ -419,7 +420,7 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
             rai::Ptree source_block;
             block->SerializeJson(source_block);
             ptree.put_child("source_block", source_block);
-            node_.PostJson(node_.config_.callback_url_, ptree);
+            node_.SendCallback(ptree);
         }
     }
 }

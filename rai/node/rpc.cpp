@@ -115,9 +115,9 @@ rai::RpcConfig rai::NodeRpcConfig::RpcConfig() const
 
 rai::NodeRpcHandler::NodeRpcHandler(
     rai::Node& node, rai::Rpc& rpc, const std::string& body,
-    const std::string& request_id, const boost::asio::ip::address_v4& ip,
+    const boost::asio::ip::address_v4& ip,
     const std::function<void(const rai::Ptree&)>& send_response)
-    : RpcHandler(rpc, body, request_id, ip, send_response), node_(node)
+    : RpcHandler(rpc, body, ip, send_response), node_(node)
 {
 }
 
@@ -578,6 +578,12 @@ void rai::NodeRpcHandler::BlockPublish()
     if (!error && info.Restricted())
     {
         error_code_ = rai::ErrorCode::ACCOUNT_RESTRICTED;
+        return;
+    }
+
+    if (info.Valid() && block->Height() <= info.head_height_)
+    {
+        error_code_ = rai::ErrorCode::BLOCK_HEIGHT_DUPLICATED;
         return;
     }
 

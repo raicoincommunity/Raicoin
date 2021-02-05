@@ -21,6 +21,21 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
             rai::FetchObject(config, config_path, config_file);
         config_file.close();
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (config.node_.callback_url_)
+        {
+            if ((config.node_.callback_url_.protocol_ == "wss"
+                || config.node_.callback_url_.protocol_ == "https")
+                && !boost::filesystem::exists("cacert.pem"))
+            {
+                std::cout << "Error: the cacert.pem is missing, you can download "
+                            "it from "
+                            "https://github.com/raicoincommunity/Raicoin/releases"
+                        << std::endl;
+                return rai::ErrorCode::SUCCESS;
+            }
+        }
+
         rai::Log::Init(data_path, config.node_.log_);
 
         boost::asio::io_service service;
@@ -30,7 +45,7 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
         IF_NOT_SUCCESS_RETURN(error_code);
         node->Start();
 
-        std::unique_ptr<rai::Rpc> rpc;
+        std::shared_ptr<rai::Rpc> rpc;
         if (config.rpc_.enable_)
         {
             rpc = rai::MakeRpc(service, config.rpc_.RpcConfig(),
@@ -40,6 +55,7 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
                 rpc->Start();
             }
         }
+        node->rpc_ = rpc;
 
         rai::ServiceRunner runner(service, config.node_.io_threads_);
         runner.Join();
