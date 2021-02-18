@@ -450,6 +450,7 @@ void rai::NodeRpcHandler::AccountSubscribe()
     rai::Account account;
     bool error = GetAccount_(account);
     IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
 
     uint64_t timestamp;
     error = GetTimestamp_(timestamp);
@@ -479,7 +480,6 @@ void rai::NodeRpcHandler::AccountSubscribe()
     }
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
     response_.put("success", "");
-    response_.put("account", account.StringAccount());
     response_.put("verified", has_signature ? "true" : "false");
 }
 
