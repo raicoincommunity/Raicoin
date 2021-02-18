@@ -305,20 +305,16 @@ void rai::RpcHandler::Response()
 {
     if (error_code_ != rai::ErrorCode::SUCCESS || response_.empty())
     {
-        rai::Ptree ptree;
         std::string error = "Empty response";
         if (error_code_ != rai::ErrorCode::SUCCESS)
         {
             error = rai::ErrorString(error_code_);
         }
-        ptree.put("error", error);
-        ptree.put("error_code", static_cast<uint32_t>(error_code_));
-        send_response_(ptree);
+        response_.put("error", error);
+        response_.put("error_code", static_cast<uint32_t>(error_code_));
     }
-    else
-    {
-        send_response_(response_);
-    }
+
+    send_response_(response_);
 
     if (error_code_ != rai::ErrorCode::SUCCESS)
     {

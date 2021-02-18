@@ -106,35 +106,56 @@ def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
     r.app['limit'][ip]['count'] -= 1
     return False
 
-async def websocket_forward_to_node(r: web.Request, request_json : dict, ip, client_id):
-    if client_id not in r.app['clients']:
-        return
-    client = r.app['clients'][client_id]
-    if not client['node_id'] or client['node_id'] not in r.app['nodes']:
-        log.server_logger.error('invalid node id in client:%s;%s', ip, client_id)
-        return json.dumps({'error':'node is offline'})
+async def websocket_forward_to_node(r: web.Request, request_json : dict, uid):
+    request_json['client_id'] = uid
 
-    node = r.app['nodes'][client['node_id']]
-    request_json['client_id'] = client_id
+    account = ''
+    if 'account' in request_json:
+        account = request_json['account']
+    elif 'block' in request_json and 'account' in request_json['block']:
+        account = request_json['block']['account']
+    
+    if not account:
+        node_id = random_node(r)
+        if not node_id or node_id not in r.app['nodes']:
+            return json.dumps({'error':'node is offline'})
+        try:
+            await r.app['nodes'][node_id]['ws'].send_str(json.dumps(request_json))
+        except Exception as e:
+            log.server_logger.error('rpc error;%s;%s', str(e), r.app['nodes'][node_id]['ip'])
+        return
+    
+    node_id = ''
+    if account in r.app['subscriptions']:
+        node_id = r.app['subscriptions'][account]['node']
+    else:
+        node_id = random_node(r)            
+    if not node_id or node_id not in r.app['nodes']:
+        return json.dumps({'error':'node is offline'})
+    subscribe(r, account, uid, node_id)
+
+    node = r.app['nodes'][node_id]
     try:
         await node['ws'].send_str(json.dumps(request_json))
     except Exception as e:
-        log.server_logger.error('rpc error;%s;%s;%s', str(e), ip, client_id)
+        log.server_logger.error('rpc error;%s;%s', str(e), ip)
 
-def subscribe(r : web.Request, account : str, uid : str):
+def subscribe(r : web.Request, account : str, uid : str, nid : str):
     subs = r.app['subscriptions']
     if account not in subs:
-        subs[account] = set()
+        subs[account] = { 'clients': set(), 'node': nid}
         log.server_logger.info('subscribe:%s', account)
-    subs[account].add(uid)
+    if uid in subs[account]['clients']:
+        return
+    subs[account]['clients'].add(uid)
 
 def unsubscribe(r : web.Request, account : str, uid : str):
     subs = r.app['subscriptions']
     if account not in subs:
         return
-    if uid in subs[account]:
-        subs[account].remove(uid)
-    if len(subs[account]) == 0:
+    if uid in subs[account]['clients']:
+        subs[account]['clients'].remove(uid)
+    if len(subs[account]['clients']) == 0:
         log.server_logger.info('unsubscribe:%s', account)
         del subs[account]
 
@@ -180,16 +201,13 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
             clients[uid]['accounts'].remove(account)
             
             unsubscribe(r, account, uid)
-            if account not in subs:
-                return await websocket_forward_to_node(r, request_json, ip, uid)
-            else:
-                return json.dumps({'success':''})
+            return json.dumps({'success':'', 'ack':'account_unsubscribe'})
         elif request_json['action'] == "current_timestamp":
             return json.dumps({'timestamp': str(int(time.time())), 'ack': 'current_timestamp'})
         # rpc: defaut forward the request
         else:
             try:
-                return await websocket_forward_to_node(r, request_json, ip, uid)
+                return await websocket_forward_to_node(r, request_json, uid)
             except Exception as e:
                 log.server_logger.error('rpc error;%s;%s;%s', str(e), ip, uid)
                 return json.dumps({
@@ -207,15 +225,7 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
 
 def random_node(r: web.Request):
     if not r.app['nodes']:
-        return None
-    ip = UTIL.get_request_ip(r)
-    for client in r.app['clients'].values():
-        if client['ip'] != ip:
-            continue
-        node_id = client['node_id']
-        if not node_id or node_id not in r.app['nodes']:
-            continue
-        return node_id
+        return
     return random.choice(list(r.app['nodes'].keys()))
 
 async def client_handler(r : web.Request):
@@ -232,14 +242,11 @@ async def client_handler(r : web.Request):
         return ws
     ws.id = str(uuid.uuid4())
     ip = UTIL.get_request_ip(r)
-    r.app['clients'][ws.id] = {'ws':ws, 'accounts':set(), 'node_id':random_node(r),'ip':ip}
+    r.app['clients'][ws.id] = {'ws':ws, 'accounts':set()}
     log.server_logger.info('new client connection;%s;%s;User-Agent:%s', ip, ws.id, str(
         r.headers.get('User-Agent')))
 
     try:
-        if not r.app['clients'][ws.id]['node_id']:
-            await ws.close()
-            return ws
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 if msg.data == 'close':
@@ -247,7 +254,7 @@ async def client_handler(r : web.Request):
                 else:
                     reply = await handle_client_messages(r, msg.data, ws=ws)
                     if reply:
-                        log.server_logger.debug('Sending response %s to %s', reply, UTIL.get_request_ip(r))
+                        log.server_logger.debug('Sending response %s to %s', reply, ip)
                         await ws.send_str(reply)
             elif msg.type == WSMsgType.CLOSE:
                 log.server_logger.info('Client Connection closed normally')
@@ -275,6 +282,15 @@ async def destory_client(r : web.Request, client_id):
         pass
     del r.app['clients'][client_id]
 
+async def notify_account_unsubscribe(r : web.Request, uid, account):
+    if uid not in r.app['clients']:
+        return
+    notify = { 'notify':'account_unsubscribe', 'account':account}
+    try:
+        await r.app['clients'][uid]['ws'].send_str(json.dumps(notify))
+    except:
+        pass
+
 async def destroy_node(r: web.Request, node_id):
     if node_id in r.app['nodes']:
         try:
@@ -282,9 +298,14 @@ async def destroy_node(r: web.Request, node_id):
         except:
             pass
         del r.app['nodes'][node_id]
-    for k,v in r.app['clients'].items():
-        if v['node_id'] == node_id:
-            await destory_client(r, k)
+    accounts = []
+    for k,v in r.app['subscriptions'].items():
+        if v['node'] == node_id:
+            accounts.append(k)
+    for account in accounts:
+        for uid in r.app['subscriptions'][account]['clients']:
+            await notify_account_unsubscribe(r, uid, account)
+        del r.app['subscriptions'][account]
 
 # Primary handler for callback
 def callback_check_ip(r : web.Request):
@@ -303,7 +324,6 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
     clients = r.app['clients']
     subs = r.app['subscriptions']
     try:
-
         request_json = json.loads(message)
         if 'notify' in request_json:
             notify = request_json['notify']
@@ -314,9 +334,11 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
                 return
 
             log.server_logger.info("Pushing to clients %s", str(subs[account]))
-            for sub in subs[account]:
-                if r.app['clients'][sub]['node_id'] == node_id:
+            for sub in subs[account]['clients']:
+                try:
                     await r.app['clients'][sub]['ws'].send_str(message)
+                except:
+                    pass
         elif 'ack' in request_json:
             action = request_json['ack']
             client_id = request_json['client_id']
@@ -327,9 +349,11 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
             if action == 'account_subscribe':
                 if 'success' in request_json:
                     account = request_json['account']
-                    subscribe(r, account, client_id)
                     clients[client_id]['accounts'].add(account)
-            await clients[client_id]['ws'].send_str(json.dumps(request_json))
+            try:
+                await clients[client_id]['ws'].send_str(json.dumps(request_json))
+            except:
+                pass
         else:
             log.server_logger.error('unexpected node message;%s;%s;%s', message, ip, node_id)
     except Exception as e:
@@ -349,8 +373,9 @@ async def node_handler(r : web.Request):
         return ws
      
     ws.id = str(uuid.uuid4())
-    r.app['nodes'][ws.id] = {'ws':ws}
-    log.server_logger.info('new node connection;%s;%s;User-Agent:%s', UTIL.get_request_ip(r), ws.id, str(r.headers.get('User-Agent')))
+    ip = UTIL.get_request_ip(r)
+    r.app['nodes'][ws.id] = {'ws':ws, 'ip':ip}
+    log.server_logger.info('new node connection;%s;%s;User-Agent:%s', ip, ws.id, str(r.headers.get('User-Agent')))
 
     try:
         async for msg in ws:
