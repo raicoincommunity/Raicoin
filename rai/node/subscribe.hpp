@@ -41,6 +41,7 @@ public:
     void Erase(const rai::Account&);
     bool Exists(const rai::Account&) const;
     size_t Size() const;
+    std::vector<rai::Account> List() const;
     void StartElection(const rai::Account&);
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t);
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t,

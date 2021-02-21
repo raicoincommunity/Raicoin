@@ -285,6 +285,18 @@ size_t rai::Subscriptions::Size() const
     return subscriptions_.size();
 }
 
+
+std::vector<rai::Account> rai::Subscriptions::List() const
+{
+    std::vector<rai::Account> result;
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto i = subscriptions_.begin(), n = subscriptions_.end(); i != n; ++i)
+    {
+        result.push_back(i->account_);
+    }
+    return result;
+}
+
 void rai::Subscriptions::StartElection(const rai::Account& account)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
