@@ -292,6 +292,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         SubscriberCount();
     }
+    else if (action == "subscribers")
+    {
+        Subscribers();
+    }
     else if (action == "supply")
     {
         Supply();
@@ -1314,6 +1318,19 @@ void rai::NodeRpcHandler::Stop()
 {
     node_.Stop();
     response_.put("success", "");
+}
+
+void rai::NodeRpcHandler::Subscribers()
+{
+    rai::Ptree ptree;
+    std::vector<rai::Account> accounts = node_.subscriptions_.List();
+    for (auto i = accounts.begin(), n = accounts.end(); i != n; ++i)
+    {
+        rai::Ptree entry;
+        entry.put("", i->StringAccount());
+        ptree.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("subscribers", ptree);
 }
 
 void rai::NodeRpcHandler::SubscriberCount()

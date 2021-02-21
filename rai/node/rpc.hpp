@@ -81,6 +81,7 @@ public:
     void StatsVerbose();
     void StatsClear();
     void Stop();
+    void Subscribers();
     void SubscriberCount();
     void Supply();
     void SyncerStatus();
