@@ -19,9 +19,7 @@ import random
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web
-
-from rpc import Rpc
-from util import Util
+from functools import partial
 
 # whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
 ALLOWED_RPC_ACTIONS = [
@@ -29,6 +27,7 @@ ALLOWED_RPC_ACTIONS = [
 ]
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+LOOP = asyncio.get_event_loop()
 
 # Configuration arguments
 parser = argparse.ArgumentParser(description="Raicoin Wallet Server")
@@ -56,7 +55,6 @@ except Exception as e:
     sys.exit(0)
 
 # Environment configuration
-NODE_URL = os.getenv('NODE_URL', 'http://127.0.0.1:7176')
 CALLBACK_WHITELIST = os.getenv('CALLBACK_WHITELIST', '127.0.0.1')
 if CALLBACK_WHITELIST != '127.0.0.1':
     try:
@@ -80,8 +78,32 @@ if len(CALLBACK_TOKEN) != 43:
 
 CHECK_CF_CONNECTING_IP = True if int(os.getenv('USE_CLOUDFLARE', 0)) == 1 else False
 
-LOOP = asyncio.get_event_loop()
-RPC = Rpc(NODE_URL)
+class Util:
+
+    def __init__(self, check_cf : bool):
+        self.check_cf = check_cf
+
+    def get_request_ip(self, r : web.Request) -> str:
+        #X-FORWARDED-FOR not safe, don't use
+
+        if self.check_cf:
+            host = r.headers.get('CF-Connecting-IP', None) #Added by Cloudflare
+            if host != None:
+                return host
+
+        host = r.headers.get('X-Real-IP', None) #Added by Nginx
+        if host != None:
+            return host
+            
+        return self.get_connecting_ip(r)
+
+    def get_connecting_ip(self, r : web.Request):
+        peername = r.transport.get_extra_info('peername')
+        if peername is not None:
+            host, _ = peername
+            return host
+        return None
+
 UTIL = Util(CHECK_CF_CONNECTING_IP)
     
 def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
@@ -177,7 +199,6 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
 
     try:
         clients = r.app['clients']
-        subs = r.app['subscriptions']
 
         request_json = json.loads(message)
         if request_json['action'] not in ALLOWED_RPC_ACTIONS:
@@ -285,7 +306,7 @@ async def destory_client(r : web.Request, client_id):
 async def notify_account_unsubscribe(r : web.Request, uid, account):
     if uid not in r.app['clients']:
         return
-    notify = { 'notify':'account_unsubscribe', 'account':account}
+    notify = {'notify':'account_unsubscribe', 'account':account}
     try:
         await r.app['clients'][uid]['ws'].send_str(json.dumps(notify))
     except:
@@ -332,6 +353,8 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
 
             if account not in subs:
                 return
+            if 'node' not in subs[account] or subs[account]['node'] != node_id:
+                return
 
             log.server_logger.info("Pushing to clients %s", str(subs[account]))
             for sub in subs[account]['clients']:
@@ -347,9 +370,14 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
                 log.server_logger.info('client missing:message=%s;', message)
                 return
             if action == 'account_subscribe':
-                if 'success' in request_json:
+                if 'account' in request_json:
                     account = request_json['account']
-                    clients[client_id]['accounts'].add(account)
+                    if 'success' in request_json:
+                        clients[client_id]['accounts'].add(account)
+                    else:
+                        unsubscribe(r, account, client_id)
+                else:
+                    log.server_logger.error('unexpected account_subscribe ack:message=%s;', message)
             try:
                 await clients[client_id]['ws'].send_str(json.dumps(request_json))
             except:
@@ -398,6 +426,43 @@ async def node_handler(r : web.Request):
         await destroy_node(r, ws.id)
     return ws
 
+def debug_check_ip(r : web.Request):
+    ip = UTIL.get_request_ip(r)
+    if not ip or ip != '127.0.0.1':
+        return True
+    return False
+
+class JsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        if isinstance(obj, web.WebSocketResponse):
+            return 'WebSocketResponse object'
+        return json.JSONEncoder.default(self, obj)
+
+DEBUG_DUMPS = partial(json.dumps, cls=JsonEncoder, indent=4)
+
+async def debug_handler(r : web.Request):
+    if debug_check_ip(r):
+        log.server_logger.error('debug request from unauthorized ip: %s', UTIL.get_request_ip(r))
+        return web.HTTPUnauthorized()
+
+    try:
+        request_json = await r.json()
+        query = request_json['query']
+        if query == 'subscriptions':
+            return web.json_response(r.app['subscriptions'], dumps=DEBUG_DUMPS)
+        elif query == 'nodes':
+            return web.json_response(r.app['nodes'], dumps=DEBUG_DUMPS)
+        elif query == 'clients':
+            return web.json_response(r.app['clients'], dumps=DEBUG_DUMPS)
+        else:
+            pass
+        return web.HTTPOk()
+    except Exception:
+        log.server_logger.exception('exception in debug request')
+        return web.HTTPInternalServerError(reason="Something went wrong %s" % str(sys.exc_info()))
+
 async def init_app():
     # Setup logger
     if DEBUG_MODE:
@@ -422,6 +487,7 @@ async def init_app():
 
     app.add_routes([web.get('/', client_handler)]) # All client WS requests
     app.add_routes([web.get(f'/callback/{CALLBACK_TOKEN}', node_handler)]) # ws/wss callback from nodes
+    app.add_routes([web.post('/debug', debug_handler)]) # local debug interface
 
     return app
 
