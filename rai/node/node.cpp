@@ -774,12 +774,17 @@ public:
     {
         if (message.GetFlag(rai::MessageFlags::ACK))
         {
+            if (!node_.peers_.Query(message.account_))
+            {
+                return;
+            }
+
             bool error = node_.peers_.ValidateKeepliveAck(message.account_,
                                                           message.hash_);
             if (error)
             {
                 // TODO: stat
-                std::cout << "Invalid keeplive ack from" << sender_ << std::endl;
+                std::cout << "Invalid keeplive ack from " << sender_ << std::endl;
             }
             return;
         }
@@ -807,6 +812,13 @@ public:
         {
             // TODO: stat
             std::cout << "Invalid keeplive timestamp from " << sender_ << std::endl;
+            std::cout << "--Local timestamp:" << rai::CurrentTimestamp() << std::endl;
+            std::cout << "--Remote timestamp:" << message.timestamp_ >> std::endl;
+            auto peer = node_.peers_.Query(message.account_);
+            if (peer)
+            {
+                std::cout << "--Last timestamp:" << peer->timestamp_ << std::endl;
+            }
             return;
         }
 
@@ -915,8 +927,6 @@ public:
         rai::Endpoint receiver(message.PeerEndpoint());
         if (!node_.peers_.Reachable(receiver))
         {
-            // TODO: stat
-            std::cout << "Relay message to " << receiver << " unreachable" << std::endl;
             return;
         }
 
