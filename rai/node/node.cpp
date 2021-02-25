@@ -813,7 +813,7 @@ public:
             // TODO: stat
             std::cout << "Invalid keeplive timestamp from " << sender_ << std::endl;
             std::cout << "--Local timestamp:" << rai::CurrentTimestamp() << std::endl;
-            std::cout << "--Remote timestamp:" << message.timestamp_ >> std::endl;
+            std::cout << "--Remote timestamp:" << message.timestamp_ << std::endl;
             auto peer = node_.peers_.Query(message.account_);
             if (peer)
             {
