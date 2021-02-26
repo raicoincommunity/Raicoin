@@ -189,7 +189,7 @@ public:
     static uint32_t constexpr MAX_COOKIE_ATTEMPTS = 4;
     static uint64_t constexpr MAX_TIMESTAMP_DIFF = 300;
     static std::chrono::seconds constexpr KEEPLIVE_PERIOD =
-        std::chrono::seconds(5);
+        std::chrono::seconds(1);
     static std::chrono::seconds constexpr PEER_CUTOFF_TIME =
         std::chrono::seconds(300);
     static std::chrono::seconds constexpr PEER_ATTEMPT_TIME =
