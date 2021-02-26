@@ -811,6 +811,7 @@ public:
         if (node_.peers_.CheckTimestamp(message.account_, message.timestamp_))
         {
             // TODO: stat
+            /* Some vps send dunplicated UDP packets
             std::cout << "Invalid keeplive timestamp from " << sender_ << std::endl;
             std::cout << "--Local timestamp:" << rai::CurrentTimestamp() << std::endl;
             std::cout << "--Remote timestamp:" << message.timestamp_ << std::endl;
@@ -819,6 +820,7 @@ public:
             {
                 std::cout << "--Last timestamp:" << peer->timestamp_ << std::endl;
             }
+            */
             return;
         }
 
