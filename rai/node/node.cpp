@@ -1544,6 +1544,23 @@ void rai::Node::Publish(const std::shared_ptr<rai::Block>& block)
     BroadcastAsync(message);
 }
 
+void rai::Node::Push(const std::shared_ptr<rai::Block>& block)
+{
+    std::weak_ptr<rai::Node> node_w(Shared());
+    Background([node_w, block]() {
+        auto node(node_w.lock());
+        if (!node) return;
+        std::vector<rai::Route> routes;
+        std::unordered_set<rai::Account> filter;
+        node->peers_.Routes(filter, false, routes);
+        rai::PublishMessage message(block);
+        for (const auto& route : routes)
+        {
+            node->SendByRoute(route,  message);
+        }
+    });
+}
+
 void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
                                    const std::shared_ptr<rai::Block>& block)
 {

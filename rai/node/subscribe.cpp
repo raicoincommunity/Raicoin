@@ -72,6 +72,7 @@ void rai::Subscriptions::BlockAppend(const std::shared_ptr<rai::Block>& block)
         node_.SendCallback(ptree);
 
         node_.StartElection(block);
+        node_.Push(block);
     }
 
     if (block->Opcode() == rai::BlockOpcode::SEND && Exists(block->Link()))

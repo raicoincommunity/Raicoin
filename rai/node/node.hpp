@@ -251,6 +251,7 @@ public:
                     const rai::BlockHash&, const rai::Endpoint&,
                     const boost::optional<rai::Endpoint>&);
     void Publish(const std::shared_ptr<rai::Block>&);
+    void Push(const std::shared_ptr<rai::Block>&);
     void OnBlockProcessed(const rai::BlockProcessResult&,
                           const std::shared_ptr<rai::Block>&);
     void Ongoing(const std::function<void()>&, const std::chrono::seconds&);

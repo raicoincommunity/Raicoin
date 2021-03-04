@@ -69,7 +69,7 @@ if CALLBACK_WHITELIST != '127.0.0.1':
     except:
         print("Error found in .env: invalid CALLBACK_WHITELIST config")
         sys.exit(0)
-DEBUG_MODE = True if int(os.getenv('DEBUG', 1)) != 0 else False
+DEBUG_MODE = True if int(os.getenv('DEBUG', 0)) != 0 else False
 
 CALLBACK_TOKEN = os.getenv("CALLBACK_TOKEN", '')
 if len(CALLBACK_TOKEN) != 43:
