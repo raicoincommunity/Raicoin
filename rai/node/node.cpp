@@ -793,7 +793,8 @@ public:
         rai::Endpoint peer_endpoint =
             from_proxy ? message.PeerEndpoint() : sender_;
 
-        if (!node_.peers_.Query(message.account_))
+        auto peer = node_.peers_.Query(message.account_);
+        if (!peer)
         {
             if (from_proxy)
             {
@@ -806,6 +807,15 @@ public:
                 node_.peers_.SynCookie(cookie);
             }
             return;
+        }
+
+        if (peer->Endpoint() != peer_endpoint)
+        {
+            // TODO: stat
+            std::cout << "Duplicated node account found: " << message.account_.StringAccount() << std::endl;
+            std::cout << "--Endpoint 1:" << peer->Endpoint() << std::endl;
+            std::cout << "--Endpoint 2:" << peer_endpoint << std::endl;
+           return;
         }
 
         if (node_.peers_.CheckTimestamp(message.account_, message.timestamp_))
@@ -1464,8 +1474,9 @@ void rai::Node::HandshakeResponse(const rai::Endpoint& peer_endpoint,
          });
 }
 
-rai::BlockHash rai::Node::Keeplive(const rai::Peer& peer,
-                                   const std::vector<rai::Peer>& peer_vec)
+void rai::Node::Keeplive(
+    const rai::Peer& peer, const std::vector<rai::Peer>& peer_vec,
+    const std::function<void(const rai::BlockHash&)>& callback)
 {
     uint8_t reachable_peers = 0;
     std::vector<std::pair<rai::Account, rai::Endpoint>> peers;
@@ -1492,9 +1503,9 @@ rai::BlockHash rai::Node::Keeplive(const rai::Peer& peer,
     rai::BlockHash hash(keeplive.Hash());
     rai::uint512_union signature(Sign(hash));
     keeplive.SetSignature(signature);
+
+    callback(hash);
     SendToPeer(peer, keeplive);
-    
-    return hash;
 }
 
 void rai::Node::KeepliveAck(const rai::Endpoint& peer_endpoint,
