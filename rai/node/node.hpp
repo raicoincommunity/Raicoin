@@ -243,7 +243,8 @@ public:
                           const boost::optional<rai::Endpoint>&);
     void HandshakeResponse(const rai::Endpoint&, const rai::uint256_union&,
                            const boost::optional<rai::Endpoint>&);
-    rai::BlockHash Keeplive(const rai::Peer&, const std::vector<rai::Peer>&);
+    void Keeplive(const rai::Peer&, const std::vector<rai::Peer>&,
+                  const std::function<void(const rai::BlockHash&)>&);
     void KeepliveAck(const rai::Endpoint&, const rai::BlockHash&,
                      const rai::Account&,
                      const boost::optional<rai::Endpoint>&);

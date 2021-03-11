@@ -947,11 +947,12 @@ void rai::Peers::Keeplive_(rai::PeerContainer& peers, size_t max_peers)
         }
 
         std::vector<rai::Peer> peer_vec = RandomPeers_(max_peers);
-        rai::BlockHash hash = node_.Keeplive(*it, peer_vec);
-        peers.modify(it, [&](rai::Peer& peer) {
-            peer.last_attempt_ = std::chrono::steady_clock::now();
-            peer.last_hash_ = hash;
-            peer.lost_acks_++;
+        node_.Keeplive(*it, peer_vec, [&](const rai::BlockHash& hash){
+            peers.modify(it, [&](rai::Peer& peer) {
+                peer.last_attempt_ = std::chrono::steady_clock::now();
+                peer.last_hash_ = hash;
+                peer.lost_acks_++;
+            });
         });
     }
 }
