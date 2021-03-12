@@ -772,9 +772,14 @@ public:
 
     void Keeplive(const rai::KeepliveMessage& message) override
     {
+        bool from_proxy = message.GetFlag(rai::MessageFlags::PROXY);
+        rai::Endpoint peer_endpoint =
+            from_proxy ? message.PeerEndpoint() : sender_;
+        auto peer = node_.peers_.Query(message.account_);
+
         if (message.GetFlag(rai::MessageFlags::ACK))
         {
-            if (!node_.peers_.Query(message.account_))
+            if (!peer)
             {
                 return;
             }
@@ -783,17 +788,13 @@ public:
                                                           message.hash_);
             if (error)
             {
-                // TODO: stat
-                std::cout << "Invalid keeplive ack from " << sender_ << std::endl;
+                rai::Stats::Add(rai::ErrorCode::KEEPLIVE_ACK, "from ",
+                                peer_endpoint, ", lost acks ",
+                                static_cast<uint32_t>(peer->lost_acks_));
             }
             return;
         }
 
-        bool from_proxy = message.GetFlag(rai::MessageFlags::PROXY);
-        rai::Endpoint peer_endpoint =
-            from_proxy ? message.PeerEndpoint() : sender_;
-
-        auto peer = node_.peers_.Query(message.account_);
         if (!peer)
         {
             if (from_proxy)
@@ -820,7 +821,6 @@ public:
 
         if (node_.peers_.CheckTimestamp(message.account_, message.timestamp_))
         {
-            // TODO: stat
             /* Some vps send dunplicated UDP packets
             std::cout << "Invalid keeplive timestamp from " << sender_ << std::endl;
             std::cout << "--Local timestamp:" << rai::CurrentTimestamp() << std::endl;

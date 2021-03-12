@@ -370,6 +370,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Block with duplicated height";
         }
+        case rai::ErrorCode::KEEPLIVE_ACK:
+        {
+            return "Invalid keeplive ack";
+        }
         case rai::ErrorCode::SUBSCRIBE_TIMESTAMP:
         {
             return "Invalid subscription timestamp";

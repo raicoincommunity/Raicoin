@@ -123,6 +123,7 @@ enum class ErrorCode : int
     INVALID_PRIVATE_KEY                  = 113,
     NODE_STATUS                          = 114,
     BLOCK_HEIGHT_DUPLICATED              = 115,
+    KEEPLIVE_ACK                         = 116,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,
