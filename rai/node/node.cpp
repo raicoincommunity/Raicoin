@@ -795,7 +795,7 @@ public:
             return;
         }
 
-        if (!peer)
+        if (!peer || peer->Endpoint() != peer_endpoint)
         {
             if (from_proxy)
             {
@@ -807,16 +807,26 @@ public:
                 rai::Cookie cookie(peer_endpoint, message.account_);
                 node_.peers_.SynCookie(cookie);
             }
+        }
+
+        if (!peer)
+        {
             return;
         }
 
-        if (peer->Endpoint() != peer_endpoint)
+        if (peer->Endpoint() != peer_endpoint && !peer->GetProxy() && !from_proxy)
         {
-            // TODO: stat
-            std::cout << "Duplicated node account found: " << message.account_.StringAccount() << std::endl;
-            std::cout << "--Endpoint 1:" << peer->Endpoint() << std::endl;
-            std::cout << "--Endpoint 2:" << peer_endpoint << std::endl;
-           return;
+            rai::Stats::Add(rai::ErrorCode::NODE_ACCOUNT_DUPLICATED, "account=",
+                            message.account_.StringAccount(), ", Endpoint 1=",
+                            peer->Endpoint(), ", Endpoint 2=", peer_endpoint);
+            if (node_.account_ == peer->account_)
+            {
+                std::cout << "Duplicated node account found: "
+                        << message.account_.StringAccount() << std::endl;
+                std::cout << "--Endpoint 1:" << peer->Endpoint() << std::endl;
+                std::cout << "--Endpoint 2:" << peer_endpoint << std::endl;
+            }
+            return;
         }
 
         if (node_.peers_.CheckTimestamp(message.account_, message.timestamp_))
@@ -1252,16 +1262,16 @@ void rai::Node::SendCallback(const rai::Ptree& notify)
     {
         rai::HttpCallback handler = [](rai::ErrorCode error_code,
                                            const std::string&) {
-            rai::Stats::Add(error_code, "Node::SendCallback");
+            if (error_code != rai::ErrorCode::SUCCESS)
+            {
+                rai::Stats::Add(error_code, "Node::SendCallback");
+            }
         };
 
         auto http = std::make_shared<rai::HttpClient>(service_);
         rai::ErrorCode error_code =
             http->Post(config_.callback_url_, notify, handler);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            handler(error_code, "");
-        }
+        handler(error_code, "");
     }
     else if (config_.callback_url_.protocol_ == "ws"
              || config_.callback_url_.protocol_ == "wss")

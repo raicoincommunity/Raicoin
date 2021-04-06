@@ -124,6 +124,7 @@ enum class ErrorCode : int
     NODE_STATUS                          = 114,
     BLOCK_HEIGHT_DUPLICATED              = 115,
     KEEPLIVE_ACK                         = 116,
+    NODE_ACCOUNT_DUPLICATED              = 117,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,

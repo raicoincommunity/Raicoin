@@ -381,20 +381,9 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
     }
 
     // stat
-    if (error_code == rai::ErrorCode::SUCCESS)
-    {
-    }
-    else
+    if (error_code != rai::ErrorCode::SUCCESS)
     {
         rai::Stats::Add(error_code);
-        if (error_code != rai::ErrorCode::BLOCK_PROCESS_EXISTS
-            && error_code != rai::ErrorCode::BLOCK_PROCESS_GAP_PREVIOUS
-            && error_code != rai::ErrorCode::BLOCK_PROCESS_GAP_RECEIVE_SOURCE
-            && error_code != rai::ErrorCode::BLOCK_PROCESS_GAP_REWARD_SOURCE
-            && error_code != rai::ErrorCode::BLOCK_PROCESS_UNREWARDABLE)
-        {
-            std::cout << rai::ErrorString(error_code) << std::endl;
-        }
     }
 
     rai::BlockProcessResult result{rai::BlockOperation::APPEND, error_code, 0};

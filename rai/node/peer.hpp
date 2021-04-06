@@ -28,6 +28,8 @@ public:
     std::chrono::steady_clock::time_point cutoff_time_;
     uint32_t attempts_;
     bool use_proxy_;
+    bool syn_direct_;
+    bool syn_proxy_;
 };
 
 class CookieByCutoffTime
@@ -56,6 +58,8 @@ public:
     Peer(const rai::Cookie&, const rai::Account&, uint8_t, uint8_t,
          const rai::Amount&);
     bool operator==(const rai::Peer&) const;
+    bool operator<(const rai::Peer&) const;
+    bool operator>(const rai::Peer&) const;
     boost::optional<rai::Proxy> GetProxy() const;
     bool SetProxy(const rai::Proxy&);
     rai::Endpoint Endpoint() const;
@@ -65,6 +69,8 @@ public:
     rai::IP KeyProxySecondary() const;
     rai::Ptree Ptree() const;
     rai::Route Route() const;
+    std::string Json() const;
+    void SwitchProxy();
 
     static rai::IP InvalidIp();
 
@@ -155,7 +161,7 @@ class Peers
 {
 public:
     Peers(rai::Node&);
-    bool Insert(const rai::Peer&);
+    void Insert(const rai::Peer&);
     void SetPeerWeight(const rai::Account&, const rai::Amount&);
     std::vector<std::pair<rai::Account, rai::Amount>> PeerWeights() const;
     boost::optional<rai::Peer> Query(const rai::Account&) const;
@@ -201,10 +207,9 @@ private:
     bool Insert_(const rai::Peer&);
     void Remove_(const rai::Account&);
     bool Modify_(const rai::Peer&);
-    bool Check_(const rai::Peer&) const;
-    bool CheckPeersPerIp_(const rai::Peer&) const;
-    bool CheckPeersPerProxy_(const rai::Peer&) const;
-    bool NeedSyn_(const rai::Cookie&);
+    size_t CountByIp_(const rai::IP&) const;
+    size_t CountByProxy_(const rai::IP&) const;
+    void NeedSyn_(rai::Cookie&);
     void Keeplive_(rai::PeerContainer&, size_t);
     std::unordered_set<rai::Peer> RandomSet_(const rai::PeerContainer&,
                                              size_t) const;
@@ -216,6 +221,9 @@ private:
     void Routes_(const rai::PeerContainer&,
                  const std::unordered_set<rai::Account>&,
                  std::vector<rai::Route>&) const;
+    void Purge_(const rai::Account&);
+    void PurgeByIp_(const rai::IP&);
+    void PurgeByProxy_(const rai::IP&);
 
     rai::Node& node_;
     mutable std::mutex mutex_;

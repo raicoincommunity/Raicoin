@@ -19,7 +19,9 @@ rai::Cookie::Cookie(const rai::Endpoint& remote)
       cutoff_time_(std::chrono::steady_clock::now()
                    + rai::Peers::COOKIE_CUTOFF_TIME),
       attempts_(0),
-      use_proxy_(false)
+      use_proxy_(false),
+      syn_direct_(false),
+      syn_proxy_(false)
 {
     rai::random_pool.GenerateBlock(cookie_.bytes.data(), cookie_.bytes.size());
 }
@@ -32,7 +34,9 @@ rai::Cookie::Cookie(const rai::Endpoint& remote, const rai::Account& account)
       cutoff_time_(std::chrono::steady_clock::now()
                    + rai::Peers::COOKIE_CUTOFF_TIME),
       attempts_(0),
-      use_proxy_(false)
+      use_proxy_(false),
+      syn_direct_(false),
+      syn_proxy_(false)
 {
     rai::random_pool.GenerateBlock(cookie_.bytes.data(), cookie_.bytes.size());
 }
@@ -47,7 +51,9 @@ rai::Cookie::Cookie(const rai::Endpoint& remote,
       cutoff_time_(std::chrono::steady_clock::now()
                    + rai::Peers::COOKIE_CUTOFF_TIME),
       attempts_(0),
-      use_proxy_(false)
+      use_proxy_(false),
+      syn_direct_(false),
+      syn_proxy_(false)
 {
     rai::random_pool.GenerateBlock(cookie_.bytes.data(), cookie_.bytes.size());
 }
@@ -122,21 +128,44 @@ bool rai::Peer::operator==(const rai::Peer& other) const
     return account_ == other.account_;
 }
 
-boost::optional<rai::Proxy> rai::Peer::GetProxy() const
+bool rai::Peer::operator<(const rai::Peer& other) const
 {
-    if (!proxy_secondary_)
+    if (*this == other)
     {
-        return proxy_;
+        return false;
     }
 
-    if (lost_acks_ <= rai::Peers::MAX_LOST_ACKS / 2)
+    if (proxy_ && !other.proxy_)
     {
-        return proxy_;
+        return true;
     }
-    else
+
+    if (!proxy_ && other.proxy_)
     {
-        return proxy_secondary_;
+        return false;
     }
+
+    if (rep_weight_ != other.rep_weight_)
+    {
+        return rep_weight_ < other.rep_weight_;
+    }
+
+    return account_ < other.account_;
+}
+
+bool rai::Peer::operator>(const rai::Peer& other) const
+{
+    if (*this == other)
+    {
+        return false;
+    }
+
+    return !(*this < other);
+}
+
+boost::optional<rai::Proxy> rai::Peer::GetProxy() const
+{
+    return proxy_;
 }
 
 bool rai::Peer::SetProxy(const rai::Proxy& proxy)
@@ -178,10 +207,6 @@ rai::TcpEndpoint rai::Peer::TcpEndpoint() const
 
 rai::IP rai::Peer::KeyIp() const
 {
-    if (proxy_)
-    {
-        return rai::Peer::InvalidIp();
-    }
     return ip_;
 }
 
@@ -216,12 +241,15 @@ rai::Ptree rai::Peer::Ptree() const
         std::stringstream stream;
         stream << proxy_->Endpoint();
         ptree.put("proxy", stream.str());
+        ptree.put("proxy_priority", std::to_string(proxy_->Priority()));
     }
     if (proxy_secondary_)
     {
         std::stringstream stream;
         stream << proxy_secondary_->Endpoint();
         ptree.put("proxy_secondary", stream.str());
+        ptree.put("proxy_secondary_priority",
+                  std::to_string(proxy_secondary_->Priority()));
     }
     ptree.put("timestamp", timestamp_);
     auto now = std::chrono::steady_clock::now();
@@ -252,6 +280,19 @@ rai::Route rai::Peer::Route() const
     }
 }
 
+std::string rai::Peer::Json() const
+{
+    std::stringstream ostream;
+    boost::property_tree::write_json(ostream, Ptree());
+    return ostream.str();
+}
+
+void rai::Peer::SwitchProxy()
+{
+    std:swap(proxy_, proxy_secondary_);
+    proxy_secondary_ = boost::none;
+}
+
 rai::IP rai::Peer::InvalidIp()
 {
     return rai::IP(0xffffffff);
@@ -261,47 +302,50 @@ rai::Peers::Peers(rai::Node& node) : node_(node)
 {
 }
 
-bool rai::Peers::Insert(const rai::Peer& peer)
+void rai::Peers::Insert(const rai::Peer& peer)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    bool ret = Check_(peer);
-    IF_ERROR_RETURN(ret, true);
 
-    boost::optional<rai::Peer> optional_peer(Query_(peer.account_));
-    if (!optional_peer)
-    {
-        return Insert_(peer);
-    }
-
-    rai::Peer& old = *optional_peer;
+    bool update = false;
     do
     {
+        boost::optional<rai::Peer> optional_peer(Query_(peer.account_));
+        if (!optional_peer)
+        {
+            Insert_(peer);
+            break;
+        }
+
+        rai::Peer& old = *optional_peer;
         if (!old.proxy_ && peer.proxy_)
         {
-            return true;
+            return;
         }
         else if (old.proxy_ && !peer.proxy_)
         {
+            update = true;
             break;
         }
         else if (!old.proxy_ && !peer.proxy_)
         {
             if (old.ip_ < peer.ip_)
             {
-                return true;
+                return;
             }
             else if (old.ip_ > peer.ip_)
             {
+                update = true;
                 break;
             }
             else
             {
                 if (old.port_ <= peer.port_)
                 {
-                    return true;
+                    return;
                 }
                 else
                 {
+                    update = true;
                     break;
                 }
             }
@@ -314,23 +358,29 @@ bool rai::Peers::Insert(const rai::Peer& peer)
                 if (!ret)
                 {
                     Modify_(old);
+                    break;
                 }
-                return true;
+                return;
             }
             else
             {
-                if ((*peer.proxy_).Priority() > (*old.proxy_).Priority())
+                if (peer.proxy_->Priority() > old.proxy_->Priority())
                 {
+                    update = true;
                     break;
                 }
+                return;
             }
         }
-        return true;
     } while (0);
 
-    Remove_(old.account_);
-    Insert_(peer);
-    return true;
+    if (update)
+    {
+        Remove_(peer.account_);
+        Insert_(peer);
+    }
+
+    Purge_(peer.account_);
 }
 
 void rai::Peers::SetPeerWeight(const rai::Account& account,
@@ -425,12 +475,14 @@ void rai::Peers::Contact(const rai::Account& account, uint64_t timestamp,
 bool rai::Peers::InsertCookie(const rai::Cookie& cookie)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!NeedSyn_(cookie))
+    rai::Cookie cookie_l(cookie);
+    NeedSyn_(cookie_l);
+    if (!cookie_l.syn_direct_ && !cookie_l.syn_proxy_)
     {
         return true;
     }
 
-    auto ret = cookies_.insert(cookie);
+    auto ret = cookies_.insert(cookie_l);
     return !ret.second;
 }
 
@@ -532,7 +584,7 @@ void rai::Peers::SynCookies()
         }
 
         uint32_t max_attempts = rai::Peers::MAX_COOKIE_ATTEMPTS;
-        if (!it->learned_from_)
+        if (!it->learned_from_ || !it->syn_proxy_)
         {
             max_attempts /= 2;
         }
@@ -543,7 +595,7 @@ void rai::Peers::SynCookies()
         }
 
         if ((it->attempts_ == rai::Peers::MAX_COOKIE_ATTEMPTS / 2)
-            && it->learned_from_)
+            && it->learned_from_ && it->syn_proxy_)
         {
             cookies_.modify(it, [](rai::Cookie& cookie) {
                 cookie.use_proxy_ = true;
@@ -793,123 +845,98 @@ bool rai::Peers::Modify_(const rai::Peer& peer)
     return !ret;
 }
 
-bool rai::Peers::Check_(const rai::Peer& peer) const
+size_t rai::Peers::CountByIp_(const rai::IP& ip) const
 {
-    bool error = CheckPeersPerIp_(peer);
-    IF_ERROR_RETURN(error, true);
-
-    error = CheckPeersPerProxy_(peer);
-    IF_ERROR_RETURN(error, true);
-
-    return false;
-}
-
-bool rai::Peers::CheckPeersPerIp_(const rai::Peer& peer) const
-{
-    if (peer.proxy_)
-    {
-        return false;
-    }
-
     size_t count = 0;
-    count += peers_.get<rai::PeerByIp>().count(peer.ip_);
-    count += peers_low_weight_.get<rai::PeerByIp>().count(peer.ip_);
-    if (count >= rai::Peers::MAX_PEERS_PER_IP)
-    {
-        return true;
-    }
-
-    return false;
+    count += peers_.get<rai::PeerByIp>().count(ip);
+    count += peers_low_weight_.get<rai::PeerByIp>().count(ip);
+    return count;
 }
 
-bool rai::Peers::CheckPeersPerProxy_(const rai::Peer& peer) const
+size_t rai::Peers::CountByProxy_(const rai::IP& ip) const
 {
-    if (!peer.proxy_)
-    {
-        return false;
-    }
-    rai::Proxy proxy(*peer.proxy_);
-
     size_t count = 0;
-    count += peers_.get<rai::PeerByProxy>().count(proxy.Ip());
-    count += peers_low_weight_.get<rai::PeerByProxy>().count(proxy.Ip());
-    count += peers_.get<rai::PeerByProxySecondary>().count(proxy.Ip());
+    count += peers_.get<rai::PeerByProxy>().count(ip);
+    count += peers_low_weight_.get<rai::PeerByProxy>().count(ip);
+    count += peers_.get<rai::PeerByProxySecondary>().count(ip);
     count +=
-        peers_low_weight_.get<rai::PeerByProxySecondary>().count(proxy.Ip());
-    if (count >= rai::Peers::MAX_PEERS_PER_PROXY)
-    {
-        return true;
-    }
-
-    if (!peer.proxy_secondary_)
-    {
-        return false;
-    }
-    proxy = *peer.proxy_secondary_;
-
-    count = 0;
-    count += peers_.get<rai::PeerByProxy>().count(proxy.Ip());
-    count += peers_low_weight_.get<rai::PeerByProxy>().count(proxy.Ip());
-    count += peers_.get<rai::PeerByProxySecondary>().count(proxy.Ip());
-    count +=
-        peers_low_weight_.get<rai::PeerByProxySecondary>().count(proxy.Ip());
-    if (count >= rai::Peers::MAX_PEERS_PER_PROXY)
-    {
-        return true;
-    }
-
-    return false;
+        peers_low_weight_.get<rai::PeerByProxySecondary>().count(ip);
+    return count;
 }
 
-bool rai::Peers::NeedSyn_(const rai::Cookie& cookie)
+void rai::Peers::NeedSyn_(rai::Cookie& cookie)
 {
+    cookie.syn_direct_ = false;
+    cookie.syn_proxy_ = false;
     auto existing(cookies_.find(cookie.endpoint_));
     if (existing != cookies_.end())
     {
-        return false;
+        return;
     }
 
     if (!cookie.account_)
     {
-        return true;
+        cookie.syn_direct_ = true;
+        return;
     }
     rai::Account target_account = *cookie.account_;
 
     boost::optional<rai::Peer> optional_peer = Query_(target_account);
     if (!optional_peer)
     {
-        return true;
+        cookie.syn_direct_ = true;
+        cookie.syn_proxy_ = true;
+        return;
     }
 
     const rai::Peer& peer = *optional_peer;
-    if (peer.ip_ != cookie.endpoint_.address().to_v4())
+    if (!peer.GetProxy())
     {
-        return true;
+        if (cookie.endpoint_.address().to_v4() < peer.ip_)
+        {
+            cookie.syn_direct_ = true;
+            return;
+        }
+
+        if (cookie.endpoint_.address().to_v4() == peer.ip_
+            && cookie.endpoint_.port() < peer.port_)
+        {
+            cookie.syn_direct_ = true;
+        }
+
+        return;
     }
-    if (peer.port_ != cookie.endpoint_.port())
+    cookie.syn_direct_ = true;
+
+    if (!cookie.learned_from_)
     {
-        return true;
+        return;
+    }
+    rai::Endpoint from = *cookie.learned_from_;
+
+    if (CountByProxy_(from.address().to_v4())
+        >= rai::Peers::MAX_PEERS_PER_PROXY)
+    {
+        return;
     }
 
-    if (!peer.proxy_ || !cookie.learned_from_)
+    rai::Proxy proxy(from, node_.account_, target_account);
+    if (proxy == *peer.proxy_)
     {
-        return false;
-    }
-    rai::Endpoint endpoint = *cookie.learned_from_;
-
-
-    rai::Proxy proxy(endpoint, node_.account_, target_account);
-    if (!peer.proxy_secondary_)
-    {
-        return proxy == *peer.proxy_ ? false : true;
+        return;
     }
 
-    if ((*peer.proxy_secondary_).Priority() >= proxy.Priority())
+    if (peer.Endpoint() != cookie.endpoint_)
     {
-        return false;
+        cookie.syn_proxy_ = proxy.Priority() > peer.GetProxy()->Priority();
+        return;
     }
 
-    return true;
+    if (!peer.proxy_secondary_
+        || peer.proxy_secondary_->Priority() < proxy.Priority())
+    {
+        cookie.syn_proxy_ = true;
+    }
 }
 
 void rai::Peers::Keeplive_(rai::PeerContainer& peers, size_t max_peers)
@@ -944,6 +971,13 @@ void rai::Peers::Keeplive_(rai::PeerContainer& peers, size_t max_peers)
         {
             peers.erase(it);
             continue;
+        }
+
+        if (it->lost_acks_ >= rai::Peers::MAX_LOST_ACKS / 2)
+        {
+            peers.modify(it, [&](rai::Peer& peer) {
+                peer.SwitchProxy();
+            });
         }
 
         std::vector<rai::Peer> peer_vec = RandomPeers_(max_peers);
@@ -1024,7 +1058,7 @@ bool rai::Peers::Reachable_(const rai::PeerContainer& peers,
     auto end = peers.get<rai::PeerByIp>().upper_bound(ip);
     for (auto i = begin; i != end; ++i)
     {
-        if (i->port_ == endpoint.port())
+        if (i->port_ == endpoint.port() && !i->GetProxy())
         {
             return true;
         }
@@ -1073,5 +1107,127 @@ void rai::Peers::Routes_(const rai::PeerContainer& peers,
             continue;
         }
         result.push_back(i->Route());
+    }
+}
+
+void rai::Peers::Purge_(const rai::Account& account)
+{
+    while (true)
+    {
+        boost::optional<rai::Peer> peer(Query_(account));
+        if (!peer)
+        {
+            return;
+        }
+
+        if (CountByIp_(peer->ip_) > rai::Peers::MAX_PEERS_PER_IP)
+        {
+            PurgeByIp_(peer->ip_);
+            continue;
+        }
+
+        if (peer->proxy_)
+        {
+            rai::IP ip = peer->proxy_->Ip();
+            if (CountByProxy_(ip) > rai::Peers::MAX_PEERS_PER_PROXY)
+            {
+                PurgeByProxy_(ip);
+                continue;
+            }
+        }
+
+        if (peer->proxy_secondary_)
+        {
+            rai::IP ip = peer->proxy_secondary_->Ip();
+            if (CountByProxy_(ip) > rai::Peers::MAX_PEERS_PER_PROXY)
+            {
+                PurgeByProxy_(ip);
+                continue;
+            }
+        }
+
+        return;
+    }
+}
+
+void rai::Peers::PurgeByIp_(const rai::IP& ip)
+{
+    boost::optional<rai::Peer> peer(boost::none);
+
+    auto begin = peers_.get<rai::PeerByIp>().lower_bound(ip);
+    auto end = peers_.get<rai::PeerByIp>().upper_bound(ip);
+    for (auto i = begin; i != end; ++i)
+    {
+        if (!peer || *i < *peer)
+        {
+            peer = *i;
+        }
+    }
+
+    auto begin_low = peers_low_weight_.get<rai::PeerByIp>().lower_bound(ip);
+    auto end_low = peers_low_weight_.get<rai::PeerByIp>().upper_bound(ip);
+    for (auto i = begin_low; i != end_low; ++i)
+    {
+        if (!peer || *i < *peer)
+        {
+            peer = *i;
+        }
+    }
+
+    if (peer)
+    {
+        Remove_(peer->account_);
+    }
+}
+
+void rai::Peers::PurgeByProxy_(const rai::IP& ip)
+{
+    boost::optional<rai::Peer> peer(boost::none);
+
+    auto begin = peers_.get<rai::PeerByProxy>().lower_bound(ip);
+    auto end = peers_.get<rai::PeerByProxy>().upper_bound(ip);
+    for (auto i = begin; i != end; ++i)
+    {
+        if (!peer || *i < *peer)
+        {
+            peer = *i;
+        }
+    }
+
+    auto begin_sec = peers_.get<rai::PeerByProxySecondary>().lower_bound(ip);
+    auto end_sec = peers_.get<rai::PeerByProxySecondary>().upper_bound(ip);
+    for (auto i = begin_sec; i != end_sec; ++i)
+    {
+        if (!peer || *i < *peer)
+        {
+            peer = *i;
+        }
+    }
+
+    auto begin_low = peers_low_weight_.get<rai::PeerByProxy>().lower_bound(ip);
+    auto end_low = peers_low_weight_.get<rai::PeerByProxy>().upper_bound(ip);
+    for (auto i = begin_low; i != end_low; ++i)
+    {
+        if (!peer || *i < *peer)
+        {
+            peer = *i;
+        }
+    }
+
+    auto begin_low_sec =
+        peers_low_weight_.get<rai::PeerByProxySecondary>().lower_bound(ip);
+    auto end_low_sec =
+        peers_low_weight_.get<rai::PeerByProxySecondary>().upper_bound(ip);
+    for (auto i = begin_low_sec; i != end_low_sec; ++i)
+    {
+        if (!peer || *i < *peer)
+        {
+            peer = *i;
+        }
+    }
+
+    if (peer)
+    {
+        Remove_(peer->account_);
     }
 }
