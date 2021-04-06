@@ -280,6 +280,27 @@ public:
     virtual ~BlockVisitor() = default;
 };
 
+class BlockBuilder
+{
+public:
+    virtual rai::ErrorCode Change(std::shared_ptr<rai::Block>&,
+                                  const rai::Account&, uint64_t) = 0;
+};
+
+class TxBlockBuilder : public BlockBuilder
+{
+public:
+    TxBlockBuilder(const rai::Account&, const rai::RawKey&,
+                   const std::shared_ptr<rai::Block>&);
+
+    rai::ErrorCode Change(std::shared_ptr<rai::Block>&,
+                          const rai::Account&, uint64_t) override;
+
+    rai::Account account_;
+    rai::RawKey private_key_;
+    std::shared_ptr<rai::Block> previous_;
+};
+
 std::unique_ptr<rai::Block> DeserializeBlockJson(rai::ErrorCode&,
                                                  const rai::Ptree&);
 

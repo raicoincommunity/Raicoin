@@ -1638,6 +1638,54 @@ bool rai::AdBlock::CheckOpcode(rai::BlockOpcode opcode)
     return std::find(opcodes.begin(), opcodes.end(), opcode) == opcodes.end();
 }
 
+rai::TxBlockBuilder::TxBlockBuilder(const rai::Account& account,
+                                    const rai::RawKey& private_key,
+                                    const std::shared_ptr<rai::Block>& previous)
+    : account_(account), private_key_(private_key), previous_(previous)
+{
+}
+
+rai::ErrorCode rai::TxBlockBuilder::Change(std::shared_ptr<rai::Block>& block,
+                                           const rai::Account& rep,
+                                           uint64_t now)
+{
+    if (!previous_)
+    {
+        return rai::ErrorCode::BLOCK_OPCODE;
+    }
+
+    if (previous_->Type() != rai::BlockType::TX_BLOCK)
+    {
+        return rai::ErrorCode::BLOCK_TYPE;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::CHANGE;
+    uint16_t credit = previous_->Credit();
+    uint64_t timestamp =
+        now > previous_->Timestamp() ? now : previous_->Timestamp();
+    if (timestamp > now + 60)
+    {
+        return rai::ErrorCode::BLOCK_TIMESTAMP;
+    }
+
+    uint32_t counter = rai::SameDay(timestamp, previous_->Timestamp())
+                           ? previous_->Counter() + 1
+                           : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        return rai::ErrorCode::ACCOUNT_ACTION_CREDIT;
+    }
+
+    uint64_t height = previous_->Height() + 1;
+    rai::BlockHash previousHash = previous_->Hash();
+    rai::Amount balance = previous_->Balance();
+    rai::uint256_union link(0);
+    previous_ = block = std::make_shared<rai::TxBlock>(
+        opcode, credit, counter, timestamp, height, account_, previousHash, rep,
+        balance, link, 0, std::vector<uint8_t>(), private_key_, account_);
+    return rai::ErrorCode::SUCCESS;
+}
+
 std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
     rai::ErrorCode& error_code, const rai::Ptree& ptree)
 {

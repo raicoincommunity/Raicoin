@@ -125,14 +125,14 @@ rai::Amount rai::CreditPrice(uint64_t timestamp)
         900  * mRAI, 800  * mRAI, 700  * mRAI, 600  * mRAI,  // 2nd year
         500  * mRAI, 500  * mRAI, 400  * mRAI, 400  * mRAI,  // 3rd year
         300  * mRAI, 300  * mRAI, 200  * mRAI, 200  * mRAI,  // 4th year
-        100  * mRAI, 100  * mRAI, 100 *  mRAI, 100  * mRAI,  // 5th year
-        90   * mRAI, 80   * mRAI, 70  *  mRAI, 60   * mRAI,  // 6th year
-        50   * mRAI, 50   * mRAI, 40  *  mRAI, 40   * mRAI,  // 7th year
-        30   * mRAI, 30   * mRAI, 20  *  mRAI, 20   * mRAI,  // 8th year
-        10   * mRAI, 10   * mRAI, 10  *  mRAI, 10   * mRAI,  // 9th year
-        9    * mRAI, 8    * mRAI, 7   *  mRAI, 6    * mRAI,  // 10th year
-        5    * mRAI, 5    * mRAI, 4   *  mRAI, 4    * mRAI,  // 11th year
-        3    * mRAI, 3    * mRAI, 2   *  mRAI, 2    * mRAI,  // 12th year
+        100  * mRAI, 100  * mRAI, 100  * mRAI, 100  * mRAI,  // 5th year
+        90   * mRAI, 80   * mRAI, 70   * mRAI, 60   * mRAI,  // 6th year
+        50   * mRAI, 50   * mRAI, 40   * mRAI, 40   * mRAI,  // 7th year
+        30   * mRAI, 30   * mRAI, 20   * mRAI, 20   * mRAI,  // 8th year
+        10   * mRAI, 10   * mRAI, 10   * mRAI, 10   * mRAI,  // 9th year
+        9    * mRAI, 8    * mRAI, 7    * mRAI, 6    * mRAI,  // 10th year
+        5    * mRAI, 5    * mRAI, 4    * mRAI, 4    * mRAI,  // 11th year
+        3    * mRAI, 3    * mRAI, 2    * mRAI, 2    * mRAI,  // 12th year
     };
 
     if (timestamp < rai::EpochTimestamp())

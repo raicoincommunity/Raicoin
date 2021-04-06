@@ -474,6 +474,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Http get failed";
         }
+        case rai::ErrorCode::NODE_ACCOUNT_DUPLICATED:
+        {
+            return "Duplicated node account found";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
