@@ -303,6 +303,7 @@ public:
     std::shared_ptr<rai::Rpc> rpc_;
     rai::Genesis genesis_;
     rai::Account account_;
+    rai::Account secure_;
     rai::Observers observers_;
     rai::Store store_;
     rai::Ledger ledger_;
