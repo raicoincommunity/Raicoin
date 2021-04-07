@@ -530,6 +530,7 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
         key_.Get(private_key);
         account_ = rai::GeneratePublicKey(private_key.data_);
     }
+    rai::random_pool.GenerateBlock(secure_.bytes.data(), secure_.bytes.size());
 
     if (config_.callback_url_)
     {
@@ -762,7 +763,7 @@ public:
                 peer_endpoint, message.account_, message.signature_);
             if (cookie)
             {
-                rai::Peer peer(*cookie, node_.account_, message.Version(),
+                rai::Peer peer(*cookie, node_.secure_, message.Version(),
                                message.VersionMin(),
                                node_.RepWeight(message.account_));
                 node_.peers_.Insert(peer);

@@ -98,7 +98,7 @@ rai::Peer::Peer(const rai::Account& account, const rai::IP& ip, uint16_t port,
 {
 }
 
-rai::Peer::Peer(const rai::Cookie& cookie, const rai::Account& node_account,
+rai::Peer::Peer(const rai::Cookie& cookie, const rai::Account& node_secure,
                 uint8_t version, uint8_t version_min,
                 const rai::Amount& rep_weight)
     : account_(*cookie.account_),
@@ -119,7 +119,7 @@ rai::Peer::Peer(const rai::Cookie& cookie, const rai::Account& node_account,
     if (cookie.use_proxy_)
     {
         proxy_ =
-            rai::Proxy(*cookie.learned_from_, node_account, *cookie.account_);
+            rai::Proxy(*cookie.learned_from_, node_secure, *cookie.account_);
     }
 }
 
@@ -920,7 +920,7 @@ void rai::Peers::NeedSyn_(rai::Cookie& cookie)
         return;
     }
 
-    rai::Proxy proxy(from, node_.account_, target_account);
+    rai::Proxy proxy(from, node_.secure_, target_account);
     if (proxy == *peer.proxy_)
     {
         return;
