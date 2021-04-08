@@ -63,6 +63,7 @@ public:
     void ElectionInfo();
     void Elections();
     void Forks();
+    void FullPeerCount();
     void MessageDump();
     void MessageDumpOff();
     void MessageDumpOn();

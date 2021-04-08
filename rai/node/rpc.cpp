@@ -207,6 +207,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         Forks();
     }
+    else if (action == "full_peer_count")
+    {
+        FullPeerCount();
+    }
     else if (action == "message_dump")
     {
         MessageDump();
@@ -927,6 +931,11 @@ void rai::NodeRpcHandler::Forks()
     }
     response_.put("count", std::to_string(i));
     response_.put_child("forks", forks);
+}
+
+void rai::NodeRpcHandler::FullPeerCount()
+{
+    response_.put("count", node_.peers_.FullPeerSize());
 }
 
 void rai::NodeRpcHandler::MessageDump()

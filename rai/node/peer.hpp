@@ -184,6 +184,7 @@ public:
     void Routes(const std::unordered_set<rai::Account>&, bool,
                 std::vector<rai::Route>&);
     size_t Size() const;
+    size_t FullPeerSize() const;
     std::unordered_set<rai::Account> Accounts(bool) const;
 
     static bool LowWeightPeer(const rai::Peer&);
