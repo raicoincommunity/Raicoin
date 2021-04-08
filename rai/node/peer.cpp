@@ -713,6 +713,12 @@ boost::optional<rai::Peer> rai::Peers::RandomFullNodePeer(bool exclude_self) con
     {
         auto index = rai::random_pool.GenerateWord32(0, size - 1);
         result = Query_(full_node_index_.get<1>()[index]);
+        if (!result)
+        {
+            rai::Stats::Add(rai::ErrorCode::UNEXPECTED,
+                            "RandomFullNodePeer: failed to query peer");
+            return result;
+        }
 
         if (!exclude_self || result->account_ != node_.account_)
         {
@@ -749,6 +755,12 @@ size_t rai::Peers::Size() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     return peers_.size() + peers_low_weight_.size();
+}
+
+size_t rai::Peers::FullPeerSize() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return full_node_index_.size();
 }
 
 std::unordered_set<rai::Account> rai::Peers::Accounts(bool all) const
@@ -947,7 +959,15 @@ void rai::Peers::Keeplive_(rai::PeerContainer& peers, size_t max_peers)
 
     auto contact_begin = peers.get<rai::PeerByLastContact>().begin();
     auto contact_end = peers.get<rai::PeerByLastContact>().lower_bound(cutoff);
-    peers.get<rai::PeerByLastContact>().erase(contact_begin, contact_end);
+    std::vector<rai::Account> accounts_cutoff;
+    for (auto i = contact_begin, n = contact_end; i != n; ++i)
+    {
+        accounts_cutoff.push_back(i->account_);
+    }
+    for (const auto& account : accounts_cutoff)
+    {
+        Remove_(account);
+    }
 
     std::chrono::steady_clock::time_point attempt(
         now - rai::Peers::PEER_ATTEMPT_TIME);
@@ -969,7 +989,7 @@ void rai::Peers::Keeplive_(rai::PeerContainer& peers, size_t max_peers)
 
         if (it->lost_acks_ >= rai::Peers::MAX_LOST_ACKS)
         {
-            peers.erase(it);
+            Remove_(it->account_);
             continue;
         }
 
