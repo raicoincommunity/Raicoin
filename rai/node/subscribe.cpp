@@ -3,6 +3,26 @@
 
 std::chrono::seconds constexpr rai::Subscriptions::CUTOFF_TIME;
 
+rai::SubscriptionEvent rai::StringToSubscriptionEvent(const std::string& str)
+{
+    if (str == "block_append")
+    {
+        return rai::SubscriptionEvent::BLOCK_APPEND;
+    }
+    else if (str == "block_confirm")
+    {
+        return rai::SubscriptionEvent::BLOCK_CONFIRM;
+    }
+    else if (str == "block_rollback")
+    {
+        return rai::SubscriptionEvent::BLOCK_ROLLBACK;
+    }
+    else
+    {
+        return rai::SubscriptionEvent::INVALID;
+    }
+}
+
 rai::Subscriptions::Subscriptions(rai::Node& node) : node_(node)
 {
     node_.observers_.block_.Add(
@@ -59,9 +79,16 @@ void rai::Subscriptions::Add(const rai::Account& account)
     }
 }
 
+void rai::Subscriptions::Add(rai::SubscriptionEvent event)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    event_subscriptions_[event] = std::chrono::steady_clock::now();
+}
+
 void rai::Subscriptions::BlockAppend(const std::shared_ptr<rai::Block>& block)
 {
-    if (Exists(block->Account()))
+    if (Exists(block->Account())
+        || Exists(rai::SubscriptionEvent::BLOCK_APPEND))
     {
         rai::Ptree ptree;
         ptree.put("notify", "block_append");
@@ -70,7 +97,10 @@ void rai::Subscriptions::BlockAppend(const std::shared_ptr<rai::Block>& block)
         block->SerializeJson(block_ptree);
         ptree.put_child("block", block_ptree);
         node_.SendCallback(ptree);
+    }
 
+    if (Exists(block->Account()))
+    {
         node_.StartElection(block);
         node_.Push(block);
     }
@@ -171,7 +201,8 @@ void rai::Subscriptions::BlockConfirm(const std::shared_ptr<rai::Block>& block,
 
 void rai::Subscriptions::BlockRollback(const std::shared_ptr<rai::Block>& block)
 {
-    if (Exists(block->Account()))
+    if (Exists(block->Account())
+        || Exists(rai::SubscriptionEvent::BLOCK_ROLLBACK))
     {
         rai::Ptree ptree;
         ptree.put("notify", "block_rollback");
@@ -261,6 +292,19 @@ void rai::Subscriptions::Cutoff()
     auto begin = subscriptions_.get<rai::SubscriptionByTime>().begin();
     auto end = subscriptions_.get<rai::SubscriptionByTime>().lower_bound(cutoff);
     subscriptions_.get<rai::SubscriptionByTime>().erase(begin, end);
+
+    std::vector<rai::SubscriptionEvent> events;
+    for (const auto& i : event_subscriptions_)
+    {
+        if (i.second < cutoff)
+        {
+            events.push_back(i.first);
+        }
+    }
+    for (const auto& i : events)
+    {
+        event_subscriptions_.erase(i);
+    }
 }
 
 void rai::Subscriptions::Erase(const rai::Account& account)
@@ -273,6 +317,15 @@ void rai::Subscriptions::Erase(const rai::Account& account)
     }
 }
 
+void rai::Subscriptions::Erase(rai::SubscriptionEvent event)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = event_subscriptions_.find(event);
+    if (it != event_subscriptions_.end())
+    {
+        event_subscriptions_.erase(it);
+    }
+}
 
 bool rai::Subscriptions::Exists(const rai::Account& account) const
 {
@@ -280,12 +333,17 @@ bool rai::Subscriptions::Exists(const rai::Account& account) const
     return subscriptions_.find(account) != subscriptions_.end();
 }
 
+bool rai::Subscriptions::Exists(rai::SubscriptionEvent event) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return event_subscriptions_.find(event) != event_subscriptions_.end();
+}
+
 size_t rai::Subscriptions::Size() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     return subscriptions_.size();
 }
-
 
 std::vector<rai::Account> rai::Subscriptions::List() const
 {
@@ -372,9 +430,36 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Account& account,
     return Subscribe(account, timestamp);
 }
 
+rai::ErrorCode rai::Subscriptions::Subscribe(const std::string& str)
+{
+    if (!node_.config_.callback_url_)
+    {
+        return rai::ErrorCode::SUBSCRIBE_NO_CALLBACK;
+    }
+
+    if (node_.Status() != rai::NodeStatus::RUN)
+    {
+        return rai::ErrorCode::NODE_STATUS;
+    }
+
+    rai::SubscriptionEvent event = rai::StringToSubscriptionEvent(str);
+    if (event == rai::SubscriptionEvent::INVALID)
+    {
+        return rai::ErrorCode::SUBSCRIPTION_EVENT;
+    }
+
+    Add(event);
+    return rai::ErrorCode::SUCCESS;
+}
+
 void rai::Subscriptions::Unsubscribe(const rai::Account& account)
 {
     Erase(account);
+}
+
+void rai::Subscriptions::Unsubscribe(rai::SubscriptionEvent event)
+{
+    Erase(event);
 }
 
 void rai::Subscriptions::StartElection_(rai::Transaction& transaction,
@@ -405,7 +490,9 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
                                        const std::shared_ptr<rai::Block>& block,
                                        uint64_t head_height)
 {
-    if (block->Height() == head_height && Exists(block->Account()))
+    if (block->Height() == head_height
+        && (Exists(block->Account())
+            || Exists(rai::SubscriptionEvent::BLOCK_CONFIRM)))
     {
         rai::Ptree ptree;
         ptree.put("notify", "block_confirm");
