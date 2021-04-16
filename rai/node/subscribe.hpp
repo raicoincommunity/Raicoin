@@ -25,11 +25,21 @@ class SubscriptionByTime
 {
 };
 
+enum class SubscriptionEvent
+{
+    INVALID        = 0,
+    BLOCK_APPEND   = 1,
+    BLOCK_CONFIRM  = 2,
+    BLOCK_ROLLBACK = 3,
+};
+rai::SubscriptionEvent StringToSubscriptionEvent(const std::string&);
+
 class Subscriptions
 {
 public:
     Subscriptions(rai::Node&);
     void Add(const rai::Account&);
+    void Add(rai::SubscriptionEvent);
     void BlockAppend(const std::shared_ptr<rai::Block>&);
     void BlockConfirm(const std::shared_ptr<rai::Block>&, uint64_t);
     void BlockRollback(const std::shared_ptr<rai::Block>&);
@@ -39,14 +49,18 @@ public:
     void ConfirmReceivables(const rai::Account&);
     void Cutoff();
     void Erase(const rai::Account&);
+    void Erase(rai::SubscriptionEvent);
     bool Exists(const rai::Account&) const;
+    bool Exists(rai::SubscriptionEvent) const;
     size_t Size() const;
     std::vector<rai::Account> List() const;
     void StartElection(const rai::Account&);
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t);
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t,
                              const rai::Signature&);
+    rai::ErrorCode Subscribe(const std::string&);
     void Unsubscribe(const rai::Account&);
+    void Unsubscribe(rai::SubscriptionEvent);
 
     static std::chrono::seconds constexpr CUTOFF_TIME =
         std::chrono::seconds(900);
@@ -71,5 +85,8 @@ private:
                     rai::Subscription, std::chrono::steady_clock::time_point,
                     &rai::Subscription::time_>>>>
         subscriptions_;
+    std::unordered_map<rai::SubscriptionEvent,
+                       std::chrono::steady_clock::time_point>
+        event_subscriptions_;
 };
 }

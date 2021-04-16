@@ -478,6 +478,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Duplicated node account found";
         }
+        case rai::ErrorCode::SUBSCRIPTION_EVENT:
+        {
+            return "Unknown event";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -834,7 +838,7 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::RPC_MISS_FIELD_AMOUNT:
         {
-            return "[RPC] The to amount is missing";
+            return "[RPC] The amount field is missing";
         }
         case rai::ErrorCode::RPC_INVALID_FIELD_AMOUNT:
         {
@@ -843,6 +847,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_INVALID_FIELD_REP:
         {
             return "[RPC] Invalid representative field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_EVENT:
+        {
+            return "[RPC] The event field is missing";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

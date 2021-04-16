@@ -125,6 +125,7 @@ enum class ErrorCode : int
     BLOCK_HEIGHT_DUPLICATED              = 115,
     KEEPLIVE_ACK                         = 116,
     NODE_ACCOUNT_DUPLICATED              = 117,
+    SUBSCRIPTION_EVENT                   = 118,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,
@@ -221,6 +222,7 @@ enum class ErrorCode : int
     RPC_MISS_FIELD_AMOUNT       = 328,
     RPC_INVALID_FIELD_AMOUNT    = 329,
     RPC_INVALID_FIELD_REP       = 330,
+    RPC_MISS_FIELD_EVENT        = 331,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

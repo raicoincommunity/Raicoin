@@ -145,6 +145,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         AccountUnsubscribe();
     }
+    else if (action == "block_confirm")
+    {
+        BlockConfirm();
+    }
     else if (action == "block_count")
     {
         BlockCount();
@@ -202,6 +206,14 @@ void rai::NodeRpcHandler::ProcessImpl()
     else if (action == "elections")
     {
         Elections();
+    }
+    else if (action == "event_subscribe")
+    {
+        EventSubscribe();
+    }
+    else if (action == "event_unsubscribe")
+    {
+        EventUnsubscribe();
     }
     else if (action == "forks")
     {
@@ -498,6 +510,59 @@ void rai::NodeRpcHandler::AccountUnsubscribe()
     IF_ERROR_RETURN_VOID(error);
 
     node_.subscriptions_.Unsubscribe(account);
+    response_.put("success", "");
+}
+
+void rai::NodeRpcHandler::BlockConfirm()
+{
+    rai::BlockHash hash;
+    boost::optional<rai::Ptree&> block_ptree =
+        request_.get_child_optional("block");
+    if (!block_ptree)
+    {
+        bool error = GetHash_(hash);
+        IF_ERROR_RETURN_VOID(error);
+    }
+    else
+    {
+        std::shared_ptr<rai::Block> block =
+            rai::DeserializeBlockJson(error_code_, *block_ptree);
+        IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+        if (block == nullptr)
+        {
+            error_code_ = rai::ErrorCode::UNEXPECTED;
+            return;
+        }
+        hash = block->Hash();
+    }
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    if (error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    bool error = node_.ledger_.BlockGet(transaction, hash, block);
+    if (error)
+    {
+        response_.put("status", "miss");
+        response_.put("success", "");
+        return;
+    }
+
+    rai::AccountInfo info;
+    error = node_.ledger_.AccountInfoGet(transaction, block->Account(), info);
+    if (!error && info.Confirmed(block->Height()))
+    {
+        response_.put("status", "confirmed");
+        response_.put("success", "");
+        return;
+    }
+
+    node_.elections_.Add(block);
+    
+    response_.put("status", "pending");
     response_.put("success", "");
 }
 
@@ -861,6 +926,34 @@ void rai::NodeRpcHandler::Elections()
         elections_ptree.push_back(std::make_pair("", election));
     }
     response_.put_child("elections", elections_ptree);
+}
+
+void rai::NodeRpcHandler::EventSubscribe()
+{
+    auto event_o = request_.get_optional<std::string>("event");
+    if (!event_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_EVENT;
+        return;
+    }
+
+    error_code_ = node_.subscriptions_.Subscribe(*event_o);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    response_.put("success", "");
+}
+
+void rai::NodeRpcHandler::EventUnsubscribe()
+{
+    auto event_o = request_.get_optional<std::string>("event");
+    if (!event_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_EVENT;
+        return;
+    }
+
+    error_code_ = node_.subscriptions_.Unsubscribe(*event_o);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    response_.put("success", "");
 }
 
 void rai::NodeRpcHandler::Forks()

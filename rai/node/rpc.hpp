@@ -47,6 +47,7 @@ public:
     void AccountInfo();
     void AccountSubscribe();
     void AccountUnsubscribe();
+    void BlockConfirm();
     void BlockCount();
     void BlockDump();
     void BlockDumpOff();
@@ -62,6 +63,8 @@ public:
     void ElectionCount();
     void ElectionInfo();
     void Elections();
+    void EventSubscribe();
+    void EventUnsubscribe();
     void Forks();
     void FullPeerCount();
     void MessageDump();
