@@ -257,10 +257,17 @@ rai::Ptree rai::Peer::Ptree() const
         std::chrono::duration_cast<std::chrono::seconds>(now - last_contact_)
             .count();
     ptree.put("last_contact", std::to_string(last_contact) + " seconds ago");
-    auto last_attempt =
-        std::chrono::duration_cast<std::chrono::seconds>(now - last_attempt_)
-            .count();
-    ptree.put("last_attempt", std::to_string(last_attempt) + " seconds ago");
+    if (last_attempt_ == std::chrono::steady_clock::time_point())
+    {
+        ptree.put("last_attempt", "never");
+    }
+    else
+    {
+        auto last_attempt =
+            std::chrono::duration_cast<std::chrono::seconds>(now - last_attempt_)
+                .count();
+        ptree.put("last_attempt", std::to_string(last_attempt) + " seconds ago");
+    }
     ptree.put("lost_acks", static_cast<uint32_t>(lost_acks_));
     ptree.put("last_hash", last_hash_.StringHex());
 
