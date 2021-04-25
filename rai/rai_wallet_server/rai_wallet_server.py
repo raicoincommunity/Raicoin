@@ -291,12 +291,13 @@ async def client_handler(r : web.Request):
     return ws
 
 async def destory_client(r : web.Request, client_id):
+    accounts = list(r.app['subscriptions'].keys())
+    for account in accounts:
+        unsubscribe(r, account, client_id)
     if client_id not in r.app['clients']:
         return
     client = r.app['clients'][client_id]
-    if 'accounts' in client:
-        for account in client['accounts']:
-            unsubscribe(r, account, client_id)
+    client['accounts'].clear()
     try:
         await client['ws'].close()
     except:
@@ -306,6 +307,10 @@ async def destory_client(r : web.Request, client_id):
 async def notify_account_unsubscribe(r : web.Request, uid, account):
     if uid not in r.app['clients']:
         return
+    client = r.app['clients'][uid]
+    if account not in client['accounts']:
+        return
+    client['accounts'].remove(account)
     notify = {'notify':'account_unsubscribe', 'account':account}
     try:
         await r.app['clients'][uid]['ws'].send_str(json.dumps(notify))
@@ -324,9 +329,13 @@ async def destroy_node(r: web.Request, node_id):
         if v['node'] == node_id:
             accounts.append(k)
     for account in accounts:
-        for uid in r.app['subscriptions'][account]['clients']:
+        if account not in r.app['subscriptions'] or r.app['subscriptions'][account]['node'] != node_id:
+            continue
+        uids = r.app['subscriptions'][account]['clients'].copy()
+        for uid in uids:
             await notify_account_unsubscribe(r, uid, account)
-        del r.app['subscriptions'][account]
+        if account in r.app['subscriptions'] and r.app['subscriptions'][account]['node'] == node_id:
+            del r.app['subscriptions'][account]
 
 # Primary handler for callback
 def callback_check_ip(r : web.Request):
@@ -357,8 +366,14 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
                 return
 
             log.server_logger.info("Pushing to clients %s", str(subs[account]))
-            for sub in subs[account]['clients']:
+
+            sub_clients = subs[account]['clients'].copy()
+            for sub in sub_clients:
                 try:
+                    if sub not in r.app['clients']:
+                        continue
+                    if account not in r.app['clients'][sub]['accounts']:
+                        continue
                     await r.app['clients'][sub]['ws'].send_str(message)
                 except:
                     pass
@@ -376,6 +391,8 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
                         clients[client_id]['accounts'].add(account)
                     else:
                         unsubscribe(r, account, client_id)
+                        if account in clients[client_id]['accounts']:
+                            clients[client_id]['accounts'].remove(account)
                 else:
                     log.server_logger.error('unexpected account_subscribe ack:message=%s;', message)
             try:
