@@ -137,6 +137,9 @@ public:
     void AccountForksQuery(const rai::Account&);
     rai::ErrorCode AccountChange(const rai::Account&,
                                  const rai::AccountActionCallback&);
+    rai::ErrorCode AccountChange(const rai::Account&,
+                                 const std::vector<uint8_t>&,
+                                 const rai::AccountActionCallback&);
     rai::ErrorCode AccountCredit(uint16_t, const rai::AccountActionCallback&);
     rai::ErrorCode AccountDestroy(const rai::AccountActionCallback&);
     rai::ErrorCode AccountSend(const rai::Account&, const rai::Amount&,
@@ -175,6 +178,7 @@ public:
                                     std::shared_ptr<rai::Block>>>&);
     void ProcessAccountChange(const std::shared_ptr<rai::Wallet>&,
                               const rai::Account&, const rai::Account&,
+                              const std::vector<uint8_t>&,
                               const rai::AccountActionCallback&);
     void ProcessAccountCredit(const std::shared_ptr<rai::Wallet>&,
                               const rai::Account&, uint16_t,

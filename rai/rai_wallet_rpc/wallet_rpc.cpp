@@ -190,6 +190,10 @@ void rai::WalletRpcHandler::ProcessImpl()
     {
         AccountSend();
     }
+    else if (action == "account_change")
+    {
+        AccountChange();
+    }
     else if (action == "block_query")
     {
         BlockQuery();
@@ -311,6 +315,16 @@ void rai::WalletRpcHandler::AccountSend()
     rai::Amount amount;
     std::vector<uint8_t> extensions;
     error_code_ = ParseAccountSend(request_, to, amount, extensions);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    main_.AddRequest(request_);
+    response_.put("success", "");
+}
+
+void rai::WalletRpcHandler::AccountChange()
+{
+    rai::Account rep;
+    std::vector<uint8_t> extensions;
+    error_code_ = ParseAccountChange(request_, rep, extensions);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
     main_.AddRequest(request_);
     response_.put("success", "");
@@ -604,6 +618,49 @@ void rai::WalletRpcHandler::CurrentAccount()
     response_.put("account", main_.wallets_->SelectedAccount().StringAccount());
 }
 
+rai::ErrorCode rai::WalletRpcHandler::ParseNote(
+    const rai::Ptree& request, std::vector<uint8_t>& extensions)
+{
+    auto note_o = request.get_optional<std::string>("note");
+    if (note_o && !note_o->empty())
+    {
+        bool error =
+            rai::ExtensionAppend(rai::ExtensionType::NOTE, *note_o, extensions);
+        IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::WalletRpcHandler::ParseExtensions(
+    const rai::Ptree& request, std::vector<uint8_t>& extensions)
+{
+    auto custom_o = request.get_child_optional("custom_extensions");
+    if (custom_o && !custom_o->empty())
+    {
+        try
+        {
+            for (const auto& i : *custom_o)
+            {
+                auto type_str = i.second.get<std::string>("type");
+                uint16_t type;
+                bool error = rai::StringToUint(type_str, type);
+                IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
+                auto value = i.second.get<std::string>("value");
+                error = rai::ExtensionAppend(
+                    static_cast<rai::ExtensionType>(type), value, extensions);
+                IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
+            }
+        }
+        catch (...)
+        {
+            return rai::ErrorCode::EXTENSION_APPEND;
+        }
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
 rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
     const rai::Ptree& request, rai::Account& destination, rai::Amount& amount,
     std::vector<uint8_t>& extensions)
@@ -638,38 +695,41 @@ rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
     IF_ERROR_RETURN(error, rai::ErrorCode::RPC_INVALID_FIELD_AMOUNT);
     amount = u;
 
-    auto note_o = request.get_optional<std::string>("note");
-    if (note_o && !note_o->empty())
-    {
-        error =
-            rai::ExtensionAppend(rai::ExtensionType::NOTE, *note_o, extensions);
-        IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
-    }
+    rai::ErrorCode error_code = rai::RpcHandler::ParseNote(request, extensions);
+    IF_NOT_SUCCESS_RETURN(error_code);
 
     // other extensions here
 
-    auto custom_o = request.get_child_optional("custom_extensions");
-    if (custom_o && !custom_o->empty())
+    error_code = rai::RpcHandler::ParseExtensions(request, extensions);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
     {
-        try
-        {
-            for (const auto& i : *custom_o)
-            {
-                auto type_str = i.second.get<std::string>("type");
-                uint16_t type;
-                error = rai::StringToUint(type_str, type);
-                IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
-                auto value = i.second.get<std::string>("value");
-                error = rai::ExtensionAppend(
-                    static_cast<rai::ExtensionType>(type), value, extensions);
-                IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
-            }
-        }
-        catch(...)
-        {
-            return rai::ErrorCode::EXTENSION_APPEND;
-        }
+        return rai::ErrorCode::EXTENSIONS_LENGTH;
     }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::WalletRpcHandler::ParseAccountChange(
+    const rai::Ptree& request, rai::Account& rep,
+    std::vector<uint8_t>& extensions)
+{
+    rep = 0;
+    auto rep_o = request.get_optional<std::string>("representative");
+    if (rep_o)
+    {
+        bool error = rep.DecodeAccount(*rep_o);
+        IF_ERROR_RETURN(error, rai::ErrorCode::RPC_INVALID_FIELD_REP);
+    }
+
+    rai::ErrorCode error_code = rai::RpcHandler::ParseNote(request, extensions);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    // other extensions here
+
+    error_code = rai::RpcHandler::ParseExtensions(request, extensions);
+    IF_NOT_SUCCESS_RETURN(error_code);
 
     if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
     {
@@ -1287,6 +1347,24 @@ void rai::WalletRpc::ProcessRequests_(std::unique_lock<std::mutex>& lock,
             }
             error_code =
                 wallets_->AccountSend(to, amount, extensions, callback);
+            if (error_code != rai::ErrorCode::SUCCESS)
+            {
+                callback(error_code, nullptr);
+                break;
+            }
+        }
+        else if (account_action == "account_change")
+        {
+            rai::Account rep;
+            std::vector<uint8_t> extensions;
+            error_code = rai::WalletRpcHandler::ParseAccountChange(request, rep,
+                                                                   extensions);
+            if (error_code != rai::ErrorCode::SUCCESS)
+            {
+                callback(error_code, nullptr);
+                break;
+            }
+            error_code = wallets_->AccountChange(rep, extensions, callback);
             if (error_code != rai::ErrorCode::SUCCESS)
             {
                 callback(error_code, nullptr);

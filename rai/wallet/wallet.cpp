@@ -836,6 +836,13 @@ void rai::Wallets::AccountForksQuery(const rai::Account& account)
 rai::ErrorCode rai::Wallets::AccountChange(
     const rai::Account& rep, const rai::AccountActionCallback& callback)
 {
+    return AccountChange(rep, std::vector<uint8_t>(), callback);
+}
+
+rai::ErrorCode rai::Wallets::AccountChange(
+    const rai::Account& rep, const std::vector<uint8_t>& extensions,
+    const rai::AccountActionCallback& callback)
+{
     rai::ErrorCode error_code = ActionCommonCheck_();
     IF_NOT_SUCCESS_RETURN(error_code);
 
@@ -843,13 +850,14 @@ rai::ErrorCode rai::Wallets::AccountChange(
     rai::Account account = wallet->SelectedAccount();
 
     std::weak_ptr<rai::Wallets> this_w(Shared());
-    QueueAction(
-        rai::WalletActionPri::HIGH, [this_w, wallet, account, rep, callback]() {
-            if (auto this_s = this_w.lock())
-            {
-                this_s->ProcessAccountChange(wallet, account, rep, callback);
-            }
-        });
+    QueueAction(rai::WalletActionPri::HIGH,
+                [this_w, wallet, account, rep, extensions, callback]() {
+                    if (auto this_s = this_w.lock())
+                    {
+                        this_s->ProcessAccountChange(wallet, account, rep,
+                                                     extensions, callback);
+                    }
+                });
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -1534,7 +1542,8 @@ void rai::Wallets::ProcessAccountForks(
 
 void rai::Wallets::ProcessAccountChange(
     const std::shared_ptr<rai::Wallet>& wallet, const rai::Account& account,
-    const rai::Account& rep, const rai::AccountActionCallback& callback)
+    const rai::Account& rep, const std::vector<uint8_t>& extensions,
+    const rai::AccountActionCallback& callback)
 {
     std::shared_ptr<rai::Block> block(nullptr);
     if (!wallet->ValidPassword())
@@ -1567,6 +1576,7 @@ void rai::Wallets::ProcessAccountChange(
         callback(rai::ErrorCode::LEDGER_BLOCK_GET, block);
         return;
     }
+    rai::Account rep_l = rep.IsZero() ? head->Representative() : rep;
 
     rai::BlockOpcode opcode = rai::BlockOpcode::CHANGE;
     uint16_t credit = head->Credit();
@@ -1602,6 +1612,21 @@ void rai::Wallets::ProcessAccountChange(
     rai::BlockHash previous = info.head_;
     rai::Amount balance = head->Balance();
     rai::uint256_union link(0);
+
+    if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
+    {
+        callback(rai::ErrorCode::EXTENSIONS_LENGTH, block);
+        return;
+    }
+
+    rai::Ptree extensions_ptree;
+    if (rai::ExtensionsToPtree(extensions, extensions_ptree))
+    {
+        callback(rai::ErrorCode::UNEXPECTED, block);
+        return;
+    }
+    uint32_t extensions_length = static_cast<uint32_t>(extensions.size());
+
     rai::RawKey private_key;
     error_code = wallet->PrivateKey(account, private_key);
     if (error_code != rai::ErrorCode::SUCCESS)
@@ -1613,14 +1638,15 @@ void rai::Wallets::ProcessAccountChange(
     if (info.type_ == rai::BlockType::TX_BLOCK)
     {
         block = std::make_shared<rai::TxBlock>(
-            opcode, credit, counter, timestamp, height, account, previous, rep,
-            balance, link, 0, std::vector<uint8_t>(), private_key, account);
+            opcode, credit, counter, timestamp, height, account, previous,
+            rep_l, balance, link, extensions_length, extensions, private_key,
+            account);
     }
     else if (info.type_ == rai::BlockType::AD_BLOCK)
     {
         block = std::make_shared<rai::AdBlock>(
-            opcode, credit, counter, timestamp, height, account, previous, rep,
-            balance, link, private_key, account);
+            opcode, credit, counter, timestamp, height, account, previous,
+            rep_l, balance, link, private_key, account);
     }
     else
     {
@@ -1927,9 +1953,10 @@ void rai::Wallets::ProcessAccountSend(
     rai::Ptree extensions_ptree;
     if (rai::ExtensionsToPtree(extensions, extensions_ptree))
     {
-        callback(rai::ErrorCode::GENERIC, block);
+        callback(rai::ErrorCode::UNEXPECTED, block);
         return;
     }
+    uint32_t extensions_length = static_cast<uint32_t>(extensions.size());
 
     rai::RawKey private_key;
     error_code = wallet->PrivateKey(account, private_key);
@@ -1943,7 +1970,7 @@ void rai::Wallets::ProcessAccountSend(
     {
         block = std::make_shared<rai::TxBlock>(
             opcode, credit, counter, timestamp, height, account, previous,
-            head->Representative(), balance, link, extensions.size(),
+            head->Representative(), balance, link, extensions_length,
             extensions, private_key, account);
     }
     else
