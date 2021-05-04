@@ -50,6 +50,7 @@ public:
 
     void AccountInfo();
     void AccountSend();
+    void AccountChange();
     void BlockQuery();
     void BlockQueryByHash(std::shared_ptr<rai::Block>&);
     void BlockQueryByHeight(std::shared_ptr<rai::Block>&);
@@ -58,8 +59,13 @@ public:
     void Status();
     void Stop();
 
+    static rai::ErrorCode ParseNote(const rai::Ptree&, std::vector<uint8_t>&);
+    static rai::ErrorCode ParseExtensions(const rai::Ptree&,
+                                          std::vector<uint8_t>&);
     static rai::ErrorCode ParseAccountSend(const rai::Ptree&, rai::Account&,
                                            rai::Amount&, std::vector<uint8_t>&);
+    static rai::ErrorCode ParseAccountChange(const rai::Ptree&, rai::Account&,
+                                             std::vector<uint8_t>&);
 
     rai::WalletRpc& main_;
 };
