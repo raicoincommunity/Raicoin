@@ -1,7 +1,8 @@
 #include <rai/rai_wallet_rpc/wallet_rpc.hpp>
+
 #include <rai/common/blocks.hpp>
-#include <rai/common/parameters.hpp>
 #include <rai/common/log.hpp>
+#include <rai/common/parameters.hpp>
 
 rai::WalletRpcConfig::WalletRpcConfig()
     : auto_credit_(true), auto_receive_(true), receive_mininum_(rai::RAI)
@@ -109,7 +110,12 @@ rai::ErrorCode rai::WalletRpcConfig::DeserializeJson(bool& upgraded,
         {
             upgraded = true;
             ptree.put("rai_api_key", rai_api_key_);
-        }        
+        }
+
+        error_code = rai::ErrorCode::JSON_CONFIG_LOG;
+        rai::Ptree& log_ptree = ptree.get_child("log");
+        error_code = log_.DeserializeJson(upgraded, log_ptree);
+        IF_NOT_SUCCESS_RETURN(error_code);
     }
     catch (const std::exception&)
     {
@@ -152,9 +158,16 @@ rai::ErrorCode rai::WalletRpcConfig::UpgradeJson(bool& upgraded,
                                                  uint32_t version,
                                                  rai::Ptree& ptree) const
 {
+    rai::ErrorCode error_code;
     switch (version)
     {
         case 1:
+        {
+            upgraded = true;
+            error_code = UpgradeV1V2(ptree);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 2:
         {
             break;
         }
@@ -163,6 +176,24 @@ rai::ErrorCode rai::WalletRpcConfig::UpgradeJson(bool& upgraded,
             return rai::ErrorCode::CONFIG_VERSION;
         }
     }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+
+rai::ErrorCode rai::WalletRpcConfig::UpgradeV1V2(rai::Ptree& ptree) const
+{
+    ptree.put("version", 2);
+
+    auto log_o = ptree.get_child_optional("log");
+    if (log_o)
+    {
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    rai::Ptree log_ptree;
+    log_.SerializeJson(log_ptree);
+    ptree.add_child("log", log_ptree);
 
     return rai::ErrorCode::SUCCESS;
 }
@@ -231,7 +262,7 @@ void rai::WalletRpcHandler::CheckApiKey()
     {
         api_key = header_api_key_;
     }
-    
+
     if (api_key != main_.config_.rai_api_key_)
     {
         error_code_ = rai::ErrorCode::API_KEY;
@@ -358,7 +389,7 @@ void rai::WalletRpcHandler::BlockQuery()
     {
         response_.put("hash", block->Hash().StringHex());
     }
-    
+
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
     auto status = response_.get<std::string>("status");
     if (status != "success")
@@ -477,7 +508,6 @@ void rai::WalletRpcHandler::BlockQueryByHeight(
 
     rai::Transaction transaction(error_code_, main_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
-
 
     rai::AccountInfo info;
     error = main_.ledger_.AccountInfoGet(transaction, account, info);
@@ -695,12 +725,13 @@ rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
     IF_ERROR_RETURN(error, rai::ErrorCode::RPC_INVALID_FIELD_AMOUNT);
     amount = u;
 
-    rai::ErrorCode error_code = rai::RpcHandler::ParseNote(request, extensions);
+    rai::ErrorCode error_code =
+        rai::WalletRpcHandler::ParseNote(request, extensions);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     // other extensions here
 
-    error_code = rai::RpcHandler::ParseExtensions(request, extensions);
+    error_code = rai::WalletRpcHandler::ParseExtensions(request, extensions);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
@@ -723,12 +754,13 @@ rai::ErrorCode rai::WalletRpcHandler::ParseAccountChange(
         IF_ERROR_RETURN(error, rai::ErrorCode::RPC_INVALID_FIELD_REP);
     }
 
-    rai::ErrorCode error_code = rai::RpcHandler::ParseNote(request, extensions);
+    rai::ErrorCode error_code =
+        rai::WalletRpcHandler::ParseNote(request, extensions);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     // other extensions here
 
-    error_code = rai::RpcHandler::ParseExtensions(request, extensions);
+    error_code = rai::WalletRpcHandler::ParseExtensions(request, extensions);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (extensions.size() > rai::TxBlock::MaxExtensionsLength())
@@ -842,7 +874,7 @@ void rai::WalletRpc::Stop()
         }
         stopped_ = true;
     }
-    
+
     if (thread_.joinable())
     {
         thread_.join();
@@ -915,7 +947,7 @@ void rai::WalletRpc::ProcessAccountActionResult(
             data.error_code_ = error_code;
             data.block_ = block;
         });
-    } while(0);
+    } while (0);
     condition_.notify_all();
 }
 
@@ -944,21 +976,21 @@ rai::RpcHandlerMaker rai::WalletRpc::RpcHandlerMaker()
                   const boost::asio::ip::address_v4& ip,
                   const std::function<void(const rai::Ptree&)>& send_response)
                -> std::unique_ptr<rai::RpcHandler> {
-        return std::make_unique<rai::WalletRpcHandler>(
-            *this, rpc, body, ip, send_response);
+        return std::make_unique<rai::WalletRpcHandler>(*this, rpc, body, ip,
+                                                       send_response);
     };
 }
 
 uint64_t rai::WalletRpc::CurrentTimestamp() const
 {
     uint64_t now = 0;
-    bool error = wallets_->CurrentTimestamp(now); // server time
+    bool error = wallets_->CurrentTimestamp(now);  // server time
     if (!error)
     {
         return now;
     }
 
-    return rai::CurrentTimestamp(); // local time
+    return rai::CurrentTimestamp();  // local time
 }
 
 rai::Ptree rai::WalletRpc::MakeResponse_(
@@ -989,7 +1021,7 @@ rai::Ptree rai::WalletRpc::MakeResponse_(
             response.put_child("source_block", ptree_source);
         }
     }
-    
+
     if (!result.request_.empty())
     {
         response.put_child("request", result.request_);
@@ -1098,7 +1130,7 @@ void rai::WalletRpc::ProcessPendings_(std::unique_lock<std::mutex>& lock,
 
     uint64_t timestamp = CurrentTimestamp();
     rai::Ptree response = MakeResponse_(*it, amount, source);
-    actions_.modify(it, [timestamp](rai::WalletRpcAction& data){
+    actions_.modify(it, [timestamp](rai::WalletRpcAction& data) {
         data.callback_error_ = false;
         data.last_callback_ = timestamp;
     });
@@ -1274,7 +1306,7 @@ void rai::WalletRpc::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock,
 
         receive = true;
         link = it->second;
-    } while(0);
+    } while (0);
     lock.lock();
 
     if (!receive)

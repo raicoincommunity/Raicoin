@@ -4,6 +4,7 @@
 #include <rai/common/errors.hpp>
 #include <rai/common/numbers.hpp>
 #include <rai/common/runner.hpp>
+#include <rai/common/log.hpp>
 #include <rai/rai_wallet_rpc/wallet_rpc.hpp>
 #include <rai/secure/util.hpp>
 
@@ -172,6 +173,8 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm,
                       << std::endl;
             return rai::ErrorCode::SUCCESS;
         }
+
+        rai::Log::Init(data_path, config.log_);
 
         boost::asio::io_service service;
         rai::Alarm alarm(service);
