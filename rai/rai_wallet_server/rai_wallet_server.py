@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#V1.5.0
+#V1.6.0
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,12 +18,12 @@ import random
 
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
-from aiohttp import ClientSession, WSMessage, WSMsgType, log, web
+from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
 from functools import partial
 
 # whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
 ALLOWED_RPC_ACTIONS = [
-    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables', 'current_timestamp'
+    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables', 'current_timestamp', 'service_subscribe'
 ]
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -78,8 +78,21 @@ if len(CALLBACK_TOKEN) != 43:
 
 CHECK_CF_CONNECTING_IP = True if int(os.getenv('USE_CLOUDFLARE', 0)) == 1 else False
 
-class Util:
+BSC_BRIDGE_URL = os.getenv('BSC_BRIDGE_URL', 'wss://bsc-bridge.raicoin.org/')
+if not BSC_BRIDGE_URL.startswith('wss://'):
+    print("Error found in .env: invalid BSC_BRIDGE_URL")
+    sys.exit(0)
 
+
+SRV_PROVIDERS = 'service_providers'
+SRV_SUBS = 'service_subscriptions'
+MAX_FILTERS_PER_SUBSCRIPTION = 4
+MAX_FILTER_VALUE_SIZE = 256
+
+
+GS = {} # Global States
+
+class Util:
     def __init__(self, check_cf : bool):
         self.check_cf = check_cf
 
@@ -128,7 +141,7 @@ def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
     r.app['limit'][ip]['count'] -= 1
     return False
 
-async def websocket_forward_to_node(r: web.Request, request_json : dict, uid):
+async def forward_to_node(r: web.Request, request_json : dict, uid):
     request_json['client_id'] = uid
 
     account = ''
@@ -140,7 +153,7 @@ async def websocket_forward_to_node(r: web.Request, request_json : dict, uid):
     if not account:
         node_id = random_node(r)
         if not node_id or node_id not in r.app['nodes']:
-            return json.dumps({'error':'node is offline'})
+            return {'error':'node is offline'}
         try:
             await r.app['nodes'][node_id]['ws'].send_str(json.dumps(request_json))
         except Exception as e:
@@ -153,7 +166,7 @@ async def websocket_forward_to_node(r: web.Request, request_json : dict, uid):
     else:
         node_id = random_node(r)            
     if not node_id or node_id not in r.app['nodes']:
-        return json.dumps({'error':'node is offline'})
+        return {'error':'node is offline'}
     subscribe(r, account, uid, node_id)
 
     node = r.app['nodes'][node_id]
@@ -161,6 +174,28 @@ async def websocket_forward_to_node(r: web.Request, request_json : dict, uid):
         await node['ws'].send_str(json.dumps(request_json))
     except Exception as e:
         log.server_logger.error('rpc error;%s;%s', str(e), ip)
+
+async def forward_to_service_provider(r: web.Request, request_json : dict, uid):
+    action  = request_json['action']
+    service = request_json['service']
+    res = {'ack':action, 'service':service}
+
+    if 'request_id' in request_json:
+        res['request_id'] = request_json['request_id']
+
+    if service not in r.app[SRV_PROVIDERS]:
+        return res.update({'error': 'service not found'})
+    if 'actions' not in r.app[SRV_PROVIDERS][service]:
+        return res.update({'error': 'provider not found'})
+    if action not in r.app[SRV_PROVIDERS][service]['actions']:
+        return res.update({'error': 'invalid action'})
+    request_json['client_id'] = uid
+
+    try:
+        await r.app[SRV_PROVIDERS][service]['ws'].send_str(json.dumps(request_json))
+    except Exception as e:
+        log.server_logger.error('service %s rpc error:%s', service, str(e))
+        return res.update({'error': 'rpc error'})
 
 def subscribe(r : web.Request, account : str, uid : str, nid : str):
     subs = r.app['subscriptions']
@@ -181,12 +216,70 @@ def unsubscribe(r : web.Request, account : str, uid : str):
         log.server_logger.info('unsubscribe:%s', account)
         del subs[account]
 
+def service_subscribe(r : web.Request, uid, service, filters):
+    providers = r.app[SRV_PROVIDERS]
+    subs = r.app[SRV_SUBS]
+    if service not in providers:
+        return True
+    if len(filters) > MAX_FILTERS_PER_SUBSCRIPTION:
+        return True
+        
+    for f in filters:
+        if f['key'] not in providers[service]['filters']:
+            return True
+        if len(str(f['value'])) > MAX_FILTER_VALUE_SIZE:
+            return True
+
+    for f in filters:
+        k = f['key']
+        v = str(f['value'])
+        if service not in subs:
+            subs[service] = {}
+        if k not in subs[service]:
+            subs[service][k] = {}
+        if v not in subs[service][k]:
+            subs[service][k][v] = set()
+        
+        subs[service][k][v].add(uid)
+    return False
+
+def service_unsubscribe(r: web.Request, uid, service = None):
+    clients = r.app['clients']
+    if uid not in clients:
+        return
+    client = r.app['clients'][uid]
+
+    subs = r.app[SRV_SUBS]
+    services = []
+    if service == None:
+        services = client[SRV_SUBS].keys()
+    else:
+        services.append(service)
+
+    for service in services:
+        if service not in client[SRV_SUBS]:
+            continue
+        filters = client[SRV_SUBS][service]
+        for f in filters:
+            k = f['key']
+            v = str(f['value'])
+            if service not in subs or k not in subs[service] or v not in subs[service][k]:
+                continue
+            if uid not in subs[service][k][v]:
+                continue
+            subs[service][k][v].remove(uid)
+            if len(subs[service][k][v]) == 0:
+                del subs[service][k][v]
+            if len(subs[service][k]) == 0:
+                del subs[service][k]
+            if len(subs[service]) == 0:
+                del subs[service]
+
 # Primary handler for all client websocket connections
 async def handle_client_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by client"""
     if websocket_rate_limit(r, ws):
-        reply = {'error': 'Messaging too quickly'}
-        return json.dumps(reply)
+        return {'error': 'Messaging too quickly'}
 
     ip = UTIL.get_request_ip(r)
     uid = ws.id
@@ -199,10 +292,29 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
 
     try:
         clients = r.app['clients']
-
         request_json = json.loads(message)
+        action = request_json['action']
+
+        res = {'ack':action}
+        if 'request_id' in request_json and len(request_json['request_id']) <= 256:
+            res['request_id'] = request_json['request_id']
+
+        if 'service' in request_json:
+            service = request_json['service']
+            res['service'] = service
+            if action == 'service_subscribe':
+                filters = request_json['filters']
+                service_unsubscribe(r, uid, service)
+                r.app['clients'][uid][SRV_SUBS][service] = filters
+                error = service_subscribe(r, uid, service, filters)
+                if error:
+                    del r.app['clients'][uid][SRV_SUBS][service]
+                    res.update({'error': 'failed to subscribe'})
+                    return res
+            return await forward_to_service_provider(r, request_json, uid)
+
         if request_json['action'] not in ALLOWED_RPC_ACTIONS:
-            return json.dumps({'error':'action not allowed'})
+            return res.update({'error':'action not allowed'})
 
         # adjust counts so nobody can block the node with a huge request
         if 'count' in request_json:
@@ -216,31 +328,31 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
             account = request_json['account']
 
             if uid not in clients:
-                return json.dumps({'error':'uid not found'})
+                return res.update({'error':'uid not found'})
             if 'accounts' not in clients[uid] or account not in clients[uid]['accounts']:
-                return json.dumps({'error':'account not subscribed'})
+                return res.update({'error':'account not subscribed'})
             clients[uid]['accounts'].remove(account)
             
             unsubscribe(r, account, uid)
-            return json.dumps({'success':'', 'ack':'account_unsubscribe'})
+            return res.update({'success':''})
         elif request_json['action'] == "current_timestamp":
-            return json.dumps({'timestamp': str(int(time.time())), 'ack': 'current_timestamp'})
+            return res.update({'timestamp': str(int(time.time()))})
         # rpc: defaut forward the request
         else:
             try:
-                return await websocket_forward_to_node(r, request_json, uid)
+                return await forward_to_node(r, request_json, uid)
             except Exception as e:
                 log.server_logger.error('rpc error;%s;%s;%s', str(e), ip, uid)
-                return json.dumps({
+                return res.update({
                     'error':'rpc error',
                     'detail': str(e)
                 })
     except Exception as e:
         log.server_logger.exception('uncaught error;%s;%s', ip, uid)
-        return json.dumps({
+        return {
             'error':'general error',
             'detail':str(sys.exc_info())
-        })
+        }
     finally:
         r.app['active_messages'].remove(message)
 
@@ -263,7 +375,7 @@ async def client_handler(r : web.Request):
         return ws
     ws.id = str(uuid.uuid4())
     ip = UTIL.get_request_ip(r)
-    r.app['clients'][ws.id] = {'ws':ws, 'accounts':set()}
+    r.app['clients'][ws.id] = {'ws':ws, 'accounts':set(), SRV_SUBS:{}}
     log.server_logger.info('new client connection;%s;%s;User-Agent:%s', ip, ws.id, str(
         r.headers.get('User-Agent')))
 
@@ -273,10 +385,11 @@ async def client_handler(r : web.Request):
                 if msg.data == 'close':
                     await ws.close()
                 else:
-                    reply = await handle_client_messages(r, msg.data, ws=ws)
-                    if reply:
-                        log.server_logger.debug('Sending response %s to %s', reply, ip)
-                        await ws.send_str(reply)
+                    res = await handle_client_messages(r, msg.data, ws=ws)
+                    if res:
+                        res = json.dumps(res)
+                        log.server_logger.debug('Sending response %s to %s', res, ip)
+                        await ws.send_str(res)
             elif msg.type == WSMsgType.CLOSE:
                 log.server_logger.info('Client Connection closed normally')
                 break
@@ -296,6 +409,7 @@ async def destory_client(r : web.Request, client_id):
         unsubscribe(r, account, client_id)
     if client_id not in r.app['clients']:
         return
+    service_unsubscribe(r, client_id)
     client = r.app['clients'][client_id]
     client['accounts'].clear()
     try:
@@ -437,11 +551,100 @@ async def node_handler(r : web.Request):
                 break
 
         log.server_logger.info('Node connection closed normally')
-    except Exception:
-        log.server_logger.exception('Node closed with exception')
+    except Exception as e:
+        log.server_logger.exception('Node closed with exception=%s', e)
     finally:
         await destroy_node(r, ws.id)
     return ws
+
+async def handle_bsc_bridge_messages(app, msg_str, ws):
+    log.server_logger.info('message from bsc bridge: %s', msg_str)
+
+    try:
+        msg = json.loads(msg_str)
+        if 'register' in msg:
+            service = msg['register']
+            app[SRV_PROVIDERS][service] = {'ws':ws, 'filters': msg['filters']}
+            if 'actions' in msg:
+                app[SRV_PROVIDERS][service]['actions'] = msg['actions']
+
+        elif 'notify' in msg:
+            service = msg['service']
+            filters = msg['filters']
+            subs = app[SRV_SUBS]
+
+            if service not in subs:
+                log.server_logger.error('bsc bridge service missing')
+                return
+
+            for f in filters:
+                k = f['key']
+                v = f['value']
+                if k not in subs[service] or v not in subs[service][k]:
+                    continue
+                for uid in subs[service][k][v]:
+                    try:
+                        app['clients'][uid]['ws'].send_str(msg_str)
+                    except:
+                        pass
+
+        elif 'ack' in msg:
+            if 'client_id' not in msg:
+                log.server_logger.error('handle_bsc_bridge_messages: client_id missing')
+                return
+            uid = msg['client_id']
+            if uid not in app['clients']:
+                return
+            del msg['client_id']
+            try:
+                app['clients'][uid]['ws'].send_str(json.dumps(msg))
+            except:
+                pass
+    except Exception as e:
+        log.server_logger.exception('handle_bsc_bridge_messages: uncaught exception=%s', e)
+
+async def destroy_service_provider(app, ws_id):
+    for k, v in app[SRV_PROVIDERS]:
+        if v['ws'].id == ws_id:
+            try:
+                await v['ws'].close()
+            except:
+                pass
+            del app[SRV_PROVIDERS][k]
+
+async def connect_to_bsc_bridge():
+    print('connect_to_bsc_bridge in')
+    global GS, APP
+    if GS['bsc_bridge_active']:
+        return
+    GS['bsc_bridge_active'] = True
+
+    print('connect_to_bsc_bridge in2')
+
+    try:
+        session = ClientSession()
+        async with session.ws_connect(BSC_BRIDGE_URL) as ws:
+            ws.id = str(uuid.uuid4())
+            async for msg in ws:
+                if msg.type == WSMsgType.TEXT:
+                    if msg.data == 'close':
+                        await ws.close()
+                    else:
+                        await handle_bsc_bridge_messages(APP, msg.data, ws)
+                elif msg.type == WSMsgType.CLOSE:
+                    log.server_logger.info('BSC bridge connection closed normally')
+                    break
+                elif msg.type == WSMsgType.ERROR:
+                    log.server_logger.info('BSC bridge connection closed with error %s', ws.exception())
+                    break
+        log.server_logger.info('Bsc bridge connection closed normally')
+    except Exception as e:
+        log.server_logger.exception('Bsc bridge connection closed with exception: %s', e)
+    else:
+        log.server_logger.exception('Bsc bridge uncaught exception!')
+    finally:
+        GS['bsc_bridge_active'] = False
+        destroy_service_provider(APP, ws.id)
 
 def debug_check_ip(r : web.Request):
     ip = UTIL.get_request_ip(r)
@@ -455,6 +658,8 @@ class JsonEncoder(json.JSONEncoder):
             return list(obj)
         if isinstance(obj, web.WebSocketResponse):
             return 'WebSocketResponse object'
+        if isinstance(obj, ClientWebSocketResponse):
+            return 'ClientWebSocketResponse object'
         return json.JSONEncoder.default(self, obj)
 
 DEBUG_DUMPS = partial(json.dumps, cls=JsonEncoder, indent=4)
@@ -473,6 +678,10 @@ async def debug_handler(r : web.Request):
             return web.json_response(r.app['nodes'], dumps=DEBUG_DUMPS)
         elif query == 'clients':
             return web.json_response(r.app['clients'], dumps=DEBUG_DUMPS)
+        elif query == SRV_PROVIDERS:
+            return web.json_response(r.app[SRV_PROVIDERS], dumps=DEBUG_DUMPS)
+        elif query == SRV_SUBS:
+            return web.json_response(r.app[SRV_SUBS], dumps=DEBUG_DUMPS)
         else:
             pass
         return web.HTTPOk()
@@ -481,6 +690,7 @@ async def debug_handler(r : web.Request):
         return web.HTTPInternalServerError(reason="Something went wrong %s" % str(sys.exc_info()))
 
 async def init_app():
+    global GS
     # Setup logger
     if DEBUG_MODE:
         print("debug mode")
@@ -501,6 +711,10 @@ async def init_app():
     app['limit'] = {} # Limit messages based on IP
     app['active_messages'] = set() # Avoid duplicate messages from being processes simultaneously
     app['subscriptions'] = {} # Store subscription UUIDs, this is used for targeting callback accounts
+    app[SRV_SUBS] = {}
+    app[SRV_PROVIDERS] = {}
+
+    GS['bsc_bridge_active'] = False
 
     app.add_routes([web.get('/', client_handler)]) # All client WS requests
     app.add_routes([web.get(f'/callback/{CALLBACK_TOKEN}', node_handler)]) # ws/wss callback from nodes
@@ -510,7 +724,15 @@ async def init_app():
 
 APP = LOOP.run_until_complete(init_app())
 
+async def periodic(period, fn, *args):
+    while True:
+        begin = time.time()
+        await fn(*args)
+        elapsed = time.time() - begin
+        await asyncio.sleep(period - elapsed)
+
 def main():
+    global APP, GS
     # Start web/ws server
     async def start():
         runner = web.AppRunner(APP)
@@ -519,12 +741,14 @@ def main():
         await site.start()
 
     async def end():
+        GS['task_bsc_bridge'].cancel()
         await APP.shutdown()
 
     LOOP.run_until_complete(start())
 
     # Main program
     try:
+        GS['task_bsc_bridge'] = LOOP.create_task(periodic(5, connect_to_bsc_bridge))
         LOOP.run_forever()
     except KeyboardInterrupt:
         pass

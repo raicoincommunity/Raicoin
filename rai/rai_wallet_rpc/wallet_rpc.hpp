@@ -9,6 +9,7 @@
 
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/log.hpp>
 #include <rai/secure/http.hpp>
 #include <rai/secure/rpc.hpp>
 #include <rai/wallet/wallet.hpp>
@@ -22,6 +23,7 @@ public:
     rai::ErrorCode DeserializeJson(bool&, rai::Ptree&);
     void SerializeJson(rai::Ptree&) const;
     rai::ErrorCode UpgradeJson(bool&, uint32_t, rai::Ptree&) const;
+    rai::ErrorCode UpgradeV1V2(rai::Ptree&) const;
 
     static uint16_t constexpr DEFAULT_PORT =
         rai::RAI_NETWORK == rai::RaiNetworks::LIVE ? 7177 : 54302;
@@ -33,6 +35,7 @@ public:
     bool auto_receive_;
     rai::Amount receive_mininum_;
     std::string rai_api_key_;
+    rai::LogConfig log_;
 };
 
 
