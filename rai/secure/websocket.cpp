@@ -17,8 +17,8 @@ rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
       resolver_(service_),
       ctx_(boost::asio::ssl::context::tlsv12_client),
       session_id_(0),
-      sending_(false)
-
+      sending_(false),
+      connect_at_()
 {
     if (ssl)
     {
@@ -356,10 +356,17 @@ void rai::WebsocketClient::Run()
         return;
     }
 
-    if (status_ != rai::WebsocketStatus::DISCONNECTED)
+    if (status_ == rai::WebsocketStatus::CONNECTED)
     {
         return;
     }
+
+    auto cutoff = std::chrono::steady_clock::now() - std::chrono::seconds(10);
+    if (status_ == rai::WebsocketStatus::CONNECTING && connect_at_ >= cutoff)
+    {
+        return;
+    }
+    connect_at_ = std::chrono::steady_clock::now();
     ChangeStatus_(rai::WebsocketStatus::CONNECTING);
 
     CloseStream_();

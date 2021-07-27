@@ -804,12 +804,19 @@ rai::WalletRpc::WalletRpc(const std::shared_ptr<rai::Wallets>& wallets,
       thread_([this]() { Run(); })
 
 {
+    wallets_->observers_.block_.Add(
+        [this](const std::shared_ptr<rai::Block>& block, bool rollback) {
+            Notify();
+        });
 }
 
 void rai::WalletRpc::AddRequest(const rai::Ptree& request)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    requests_.push_back(request);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        requests_.push_back(request);
+    }
+    condition_.notify_all();
 }
 
 void rai::WalletRpc::Run()
@@ -881,6 +888,11 @@ void rai::WalletRpc::Stop()
     }
 
     wallets_->Stop();
+}
+
+void rai::WalletRpc::Notify()
+{
+    condition_.notify_all();
 }
 
 void rai::WalletRpc::SendCallback(const rai::Ptree& message)
