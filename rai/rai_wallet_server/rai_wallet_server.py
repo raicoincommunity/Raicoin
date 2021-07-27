@@ -15,7 +15,7 @@ import uuid
 import uvloop
 import secrets
 import random
-
+import traceback
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
@@ -83,6 +83,16 @@ if not BSC_BRIDGE_URL.startswith('wss://'):
     print("Error found in .env: invalid BSC_BRIDGE_URL")
     sys.exit(0)
 
+PANCAKESWAP_LP_REWARDER_URL = os.getenv(
+    'PANCAKESWAP_LP_REWARD_URL', 'wss://pancakeswap-lp-reward.raicoin.org')
+if not PANCAKESWAP_LP_REWARDER_URL.startswith('wss://'):
+    print("Error found in .env: invalid PANCAKESWAP_LP_REWARDER_URL")
+    sys.exit(0)
+
+BSC_FAUCET_URL = os.getenv('BSC_FAUCET_URL', 'wss://bsc-faucet.raicoin.org/')
+if not BSC_FAUCET_URL.startswith('wss://'):
+    print("Error found in .env: invalid BSC_FAUCET_URL")
+    sys.exit(0)
 
 SRV_PROVIDERS = 'service_providers'
 SRV_SUBS = 'service_subscriptions'
@@ -91,6 +101,25 @@ MAX_FILTER_VALUE_SIZE = 256
 
 
 GS = {} # Global States
+
+TASKS = [
+    {
+        'desc': 'BSC bridge',
+        'url': BSC_BRIDGE_URL,
+        'active': False
+    },
+    {
+        'desc': 'Pancakeswap LP rewarder',
+        'url': PANCAKESWAP_LP_REWARDER_URL,
+        'active': False
+    },
+    {
+        'desc': 'BSC faucet',
+        'url': BSC_FAUCET_URL,
+        'active': False
+    },
+]
+GS['tasks'] = TASKS
 
 class Util:
     def __init__(self, check_cf : bool):
@@ -600,8 +629,8 @@ async def node_handler(r : web.Request):
         await destroy_node(r, ws.id)
     return ws
 
-async def handle_bsc_bridge_messages(app, msg_str, ws):
-    log.server_logger.info('message from bsc bridge: %s', msg_str)
+async def handle_service_provider_message(app, msg_str, ws):
+    log.server_logger.info('message from service provider: %s', msg_str)
 
     try:
         msg = json.loads(msg_str)
@@ -617,23 +646,27 @@ async def handle_bsc_bridge_messages(app, msg_str, ws):
             subs = app[SRV_SUBS]
 
             if service not in subs:
-                log.server_logger.error('bsc bridge service missing')
+                log.server_logger.error('service %s missing', service)
                 return
 
+            uids = set()
             for f in filters:
                 k = f['key']
                 v = f['value']
                 if k not in subs[service] or v not in subs[service][k]:
                     continue
                 for uid in subs[service][k][v]:
-                    try:
-                        await app['clients'][uid]['ws'].send_str(msg_str)
-                    except:
-                        pass
+                    uids.add(uid)
+            
+            for uid in uids:
+                try:
+                    await app['clients'][uid]['ws'].send_str(msg_str)
+                except:
+                    pass
 
         elif 'ack' in msg:
             if 'client_id' not in msg:
-                log.server_logger.error('handle_bsc_bridge_messages: client_id missing')
+                log.server_logger.error('handle_service_provider_message: client_id missing')
                 return
             uid = msg['client_id']
             if uid not in app['clients']:
@@ -644,7 +677,7 @@ async def handle_bsc_bridge_messages(app, msg_str, ws):
             except:
                 pass
     except Exception as e:
-        log.server_logger.exception('handle_bsc_bridge_messages: uncaught exception=%s', e)
+        log.server_logger.exception('handle_service_provider_message: uncaught exception=%s', e)
 
 async def destroy_service_provider(app, ws_id):
     keys = []
@@ -659,35 +692,36 @@ async def destroy_service_provider(app, ws_id):
     for k in keys:
         del app[SRV_PROVIDERS][k]
 
-async def connect_to_bsc_bridge():
-    global GS, APP
-    if GS['bsc_bridge_active']:
+async def connect_to_service_provider(task):
+    global APP
+    if task['active']:
         return
-    GS['bsc_bridge_active'] = True
+    task['active'] = True
+    desc = task['desc']
 
     ws_id = ''
     try:
         session = ClientSession()
-        async with session.ws_connect(BSC_BRIDGE_URL) as ws:
+        async with session.ws_connect(task['url']) as ws:
             ws_id = ws.id = str(uuid.uuid4())
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
                     if msg.data == 'close':
                         await ws.close()
                     else:
-                        await handle_bsc_bridge_messages(APP, msg.data, ws)
+                        await handle_service_provider_message(APP, msg.data, ws)
                 elif msg.type == WSMsgType.CLOSE:
-                    log.server_logger.info('BSC bridge connection closed normally')
+                    log.server_logger.info('%s connection closed normally', desc)
                     break
                 elif msg.type == WSMsgType.ERROR:
-                    log.server_logger.info('BSC bridge connection closed with error %s', ws.exception())
+                    log.server_logger.info('%s connection closed with error %s', desc, ws.exception())
                     break
         
-        log.server_logger.info('Bsc bridge connection closed normally')
+        log.server_logger.info('%s connection closed normally', desc)
     except Exception as e:
-        log.server_logger.exception('Bsc bridge connection closed with exception: %s', e)
+        log.server_logger.exception('%s connection closed with exception: %s', desc, e)
     except:
-        log.server_logger.exception('Bsc bridge uncaught exception!')
+        log.server_logger.exception('%s uncaught exception!', desc)
     finally:
         if not session.closed:
             try:
@@ -697,7 +731,7 @@ async def connect_to_bsc_bridge():
 
         if ws_id:
             await destroy_service_provider(APP, ws_id)
-        GS['bsc_bridge_active'] = False
+        task['active'] = False
 
 def debug_check_ip(r : web.Request):
     ip = UTIL.get_request_ip(r)
@@ -767,8 +801,6 @@ async def init_app():
     app[SRV_SUBS] = {}
     app[SRV_PROVIDERS] = {}
 
-    GS['bsc_bridge_active'] = False
-
     app.add_routes([web.get('/', client_handler)]) # All client WS requests
     app.add_routes([web.get(f'/callback/{CALLBACK_TOKEN}', node_handler)]) # ws/wss callback from nodes
     app.add_routes([web.post('/debug', debug_handler)]) # local debug interface
@@ -782,8 +814,9 @@ async def periodic(period, fn, *args):
         begin = time.time()
         try:
             await fn(*args)
-        except:
-            pass
+        except Exception as e:
+            log.server_logger.error(f'periodic exception={str(e)}')
+            traceback.print_tb(e.__traceback__)
         elapsed = time.time() - begin
         await asyncio.sleep(period - elapsed)
 
@@ -797,14 +830,16 @@ def main():
         await site.start()
 
     async def end():
-        GS['task_bsc_bridge'].cancel()
+        for task in GS['tasks']:
+            task['inst'].cancel()
         await APP.shutdown()
 
     LOOP.run_until_complete(start())
 
     # Main program
     try:
-        GS['task_bsc_bridge'] = LOOP.create_task(periodic(5, connect_to_bsc_bridge))
+        for task in GS['tasks']:
+            task['inst'] = LOOP.create_task(periodic(5, connect_to_service_provider, task))
         LOOP.run_forever()
     except KeyboardInterrupt:
         pass

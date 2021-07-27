@@ -97,6 +97,7 @@ public:
     void AddRequest(const rai::Ptree&);
     void Run();
     void Stop();
+    void Notify();
     void SendCallback(const rai::Ptree&);
     void ProcessCallbackResult(rai::ErrorCode);
     void ProcessAccountActionResult(rai::ErrorCode,

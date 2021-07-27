@@ -74,5 +74,6 @@ private:
     std::shared_ptr<boost::beast::multi_buffer> receive_buffer_;
     bool sending_;
     std::deque<std::string> send_queue_;
+    std::chrono::steady_clock::time_point connect_at_;
 };
 };  // namespace rai
