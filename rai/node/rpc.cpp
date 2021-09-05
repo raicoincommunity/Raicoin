@@ -183,6 +183,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         BlockQuery();
     }
+    else if (action == "blocks_query")
+    {
+        BlocksQuery();
+    }
     else if (action == "bootstrap_status")
     {
         BootstrapStatus();
@@ -515,55 +519,91 @@ void rai::NodeRpcHandler::AccountUnsubscribe()
 
 void rai::NodeRpcHandler::BlockConfirm()
 {
+    rai::Account account;
+    uint64_t height = 0;
     rai::BlockHash hash;
-    boost::optional<rai::Ptree&> block_ptree =
+    boost::optional<rai::Ptree&> block_ptree_o =
         request_.get_child_optional("block");
-    if (!block_ptree)
-    {
-        bool error = GetHash_(hash);
-        IF_ERROR_RETURN_VOID(error);
-    }
-    else
+    if (block_ptree_o)
     {
         std::shared_ptr<rai::Block> block =
-            rai::DeserializeBlockJson(error_code_, *block_ptree);
+            rai::DeserializeBlockJson(error_code_, *block_ptree_o);
         IF_NOT_SUCCESS_RETURN_VOID(error_code_);
         if (block == nullptr)
         {
             error_code_ = rai::ErrorCode::UNEXPECTED;
             return;
         }
+        account = block->Account();
+        height = block->Height();
         hash = block->Hash();
+    }
+    else
+    {
+        bool error = GetAccount_(account);
+        IF_ERROR_RETURN_VOID(error);
+        error = GetHeight_(height);
+        IF_ERROR_RETURN_VOID(error);
+        error = GetHash_(hash);
+        IF_ERROR_RETURN_VOID(error);
     }
 
     rai::Transaction transaction(error_code_, node_.ledger_, false);
-    if (error_code_ != rai::ErrorCode::SUCCESS)
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::AccountInfo info;
+    bool error = node_.ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
     {
+        response_.put("status", "miss");
         return;
     }
 
+    if (height < info.tail_height_)
+    {
+        response_.put("status", "pruned");
+        return;
+    }
+
+    if (height > info.head_height_)
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    bool fork = false;
     std::shared_ptr<rai::Block> block(nullptr);
     bool error = node_.ledger_.BlockGet(transaction, hash, block);
     if (error)
     {
-        response_.put("status", "miss");
-        response_.put("success", "");
-        return;
+        fork = true;
+        error = node_.ledger_.BlockGet(transaction, account, height, block);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+            return;
+        }
     }
+    response_.put("status", fork ? "fork" : "success");
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    response_.add_child("block", block_ptree);
+    AppendBlockAmount_(transaction, *block);
 
-    rai::AccountInfo info;
-    error = node_.ledger_.AccountInfoGet(transaction, block->Account(), info);
-    if (!error && info.Confirmed(block->Height()))
+    bool confirmed = info.Confirmed(height);
+    response_.put("confirmed", confirmed ? "true" : "false");
+    if (confirmed)
     {
-        response_.put("status", "confirmed");
-        response_.put("success", "");
         return;
     }
-
-    node_.elections_.Add(block);
     
-    response_.put("status", "pending");
-    response_.put("success", "");
+    node_.elections_.Add(block);
+
+    auto notify_o = request_.get_optional<std::string>("notify");
+    if (notify_o && *notify_o == "true")
+    {
+        error_code_ = node_.subscriptions_.Subscribe(*block);
+    }
 }
 
 void rai::NodeRpcHandler::BlockCount()
@@ -670,6 +710,13 @@ void rai::NodeRpcHandler::BlockQuery()
     if (hash_o)
     {
         BlockQueryByHash();
+        return;
+    }
+
+    auto previous_o = request_.get_optional<std::string>("previous");
+    if (!previous_o)
+    {
+        BlockQueryByHeight();
         return;
     }
 
@@ -835,6 +882,139 @@ void rai::NodeRpcHandler::BlockQueryByHash()
     }
 }
 
+void rai::NodeRpcHandler::BlockQueryByHeight()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    
+    rai::AccountInfo info;
+    error = node_.ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    if (height < info.tail_height_)
+    {
+        response_.put("status", "pruned");
+        return;
+    }
+
+    if (height > info.head_height_)
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    error = node_.ledger_.BlockGet(transaction, account, height, block);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+        return;
+    }
+    response_.put("status", "success");
+    response_.put("confirmed", info.Confirmed(height) ? "true" : "false");
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    response_.add_child("block", block_ptree);
+    AppendBlockAmount_(transaction, *block);
+}
+
+void rai::NodeRpcHandler::BlocksQuery()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+
+    uint64_t count = 0;
+    error = GetCount_(count);
+    IF_ERROR_RETURN_VOID(error);
+    if (count == 0 || count > 100)
+    {
+        count = 100;
+    }
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::AccountInfo info;
+    error = node_.ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    if (height < info.tail_height_)
+    {
+        response_.put("status", "pruned");
+        return;
+    }
+
+    if (height > info.head_height_)
+    {
+        response_.put("status", "miss");
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    rai::BlockHash successor;
+    error =
+        node_.ledger_.BlockGet(transaction, account, height, block, successor);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+        return;
+    }
+
+    bool more = true;
+    std::vector<std::shared_ptr<rai::Block>> blocks;
+    blocks.push_back(block);
+    while (blocks.size() < count)
+    {
+        if (successor.IsZero())
+        {
+            more = false;
+            break;
+        }
+
+        error =
+            node_.ledger_.BlockGet(transaction, successor, block, successor);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+            return;
+        }
+        blocks.push_back(block);
+    }
+
+    rai::Ptree blocks_ptree;
+    for (auto &i : blocks)
+    {
+        rai::Ptree entry;
+        i->SerializeJson(entry);
+        blocks_ptree.push_back(std::make_pair("", entry));
+    }
+
+    response_.put("status", "success");
+    response_.put("more", more ? "true" : "false");
+    response_.put_child("blocks", blocks_ptree);
+}
+
 void rai::NodeRpcHandler::BootstrapStatus()
 {
     response_.put("count", node_.bootstrap_.Count());
@@ -951,8 +1131,13 @@ void rai::NodeRpcHandler::EventUnsubscribe()
         return;
     }
 
-    error_code_ = node_.subscriptions_.Unsubscribe(*event_o);
-    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    rai::SubscriptionEvent event = rai::StringToSubscriptionEvent(*event_o);
+    if (event == rai::SubscriptionEvent::INVALID)
+    {
+        error_code_ = rai::ErrorCode::SUBSCRIPTION_EVENT;
+        return;
+    }
+    node_.subscriptions_.Unsubscribe(event);
     response_.put("success", "");
 }
 

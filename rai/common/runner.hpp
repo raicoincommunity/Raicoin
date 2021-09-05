@@ -16,4 +16,22 @@ private:
     std::vector<std::thread> threads_;
 };
 
+class OngoingServiceRunner
+{
+public:
+    OngoingServiceRunner(boost::asio::io_service&);
+    ~OngoingServiceRunner();
+    void Notify();
+    void Run();
+    void Stop();
+    void Join();
+
+private:
+    boost::asio::io_service& service_;
+    std::condition_variable condition_;
+    mutable std::mutex mutex_;
+    bool stopped_;
+    std::thread thread_;
+};
+
 }

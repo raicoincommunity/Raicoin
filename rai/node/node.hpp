@@ -233,6 +233,7 @@ public:
                            const std::shared_ptr<rai::Block>&,
                            const std::shared_ptr<rai::Block>&);
     bool Busy() const;
+    bool CallbackEnabled() const;
     void Confirm(const rai::Account&, const std::shared_ptr<rai::Block>&);
     void Confirm(const std::vector<rai::Account>&,
                  const std::shared_ptr<rai::Block>&);
