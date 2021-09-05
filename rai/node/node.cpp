@@ -1370,6 +1370,11 @@ bool rai::Node::Busy() const
     return block_processor_.Busy() || syncer_.Busy();
 }
 
+bool rai::Node::CallbackEnabled() const
+{
+    return !!config_.callback_url_;
+}
+
 void rai::Node::Confirm(const rai::Account& to,
                         const std::shared_ptr<rai::Block>& block)
 {

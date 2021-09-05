@@ -57,6 +57,8 @@ public:
     void BlockQuery();
     void BlockQueryByPrevious();
     void BlockQueryByHash();
+    void BlockQueryByHeight();
+    void BlocksQuery();
     void BootstrapStatus();
     void ConfirmManagerStatus();
     void DelegatorList();

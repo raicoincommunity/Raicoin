@@ -113,6 +113,15 @@ private:
     std::string sub_account_;
 };
 
+class AccountHeight
+{
+public:
+    rai::Account account_;
+    uint64_t height_;
+
+    bool operator<(const AccountHeight& other) const;
+};
+
 class RawKey
 {
 public:

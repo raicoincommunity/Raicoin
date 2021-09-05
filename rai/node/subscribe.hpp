@@ -27,10 +27,9 @@ class SubscriptionByTime
 
 enum class SubscriptionEvent
 {
-    INVALID        = 0,
-    BLOCK_APPEND   = 1,
-    BLOCK_CONFIRM  = 2,
-    BLOCK_ROLLBACK = 3,
+    INVALID         = 0,
+    BLOCK_APPEND    = 1,
+    BLOCK_ROLLBACK  = 2,
 };
 rai::SubscriptionEvent StringToSubscriptionEvent(const std::string&);
 
@@ -50,8 +49,10 @@ public:
     void Cutoff();
     void Erase(const rai::Account&);
     void Erase(rai::SubscriptionEvent);
+    void Erase(const rai::Block&);
     bool Exists(const rai::Account&) const;
     bool Exists(rai::SubscriptionEvent) const;
+    bool Exists(const rai::Block&) const;
     size_t Size() const;
     std::vector<rai::Account> List() const;
     void StartElection(const rai::Account&);
@@ -59,6 +60,7 @@ public:
     rai::ErrorCode Subscribe(const rai::Account&, uint64_t,
                              const rai::Signature&);
     rai::ErrorCode Subscribe(const std::string&);
+    rai::ErrorCode Subscribe(const rai::Block&);
     void Unsubscribe(const rai::Account&);
     void Unsubscribe(rai::SubscriptionEvent);
 
@@ -71,6 +73,18 @@ private:
     void BlockConfirm_(rai::Transaction&, const std::shared_ptr<rai::Block>&,
                        uint64_t);
     bool NeedConfirm_(rai::Transaction&, const rai::Account&);
+
+
+    class ConfirmRequest
+    {
+    public:
+        rai::AccountHeight key_;
+        std::chrono::steady_clock::time_point time_;
+    };
+
+    class ConfirmRequestByTime
+    {
+    };
 
     rai::Node& node_;
     mutable std::mutex mutex_;
@@ -85,8 +99,22 @@ private:
                     rai::Subscription, std::chrono::steady_clock::time_point,
                     &rai::Subscription::time_>>>>
         subscriptions_;
+        
     std::unordered_map<rai::SubscriptionEvent,
                        std::chrono::steady_clock::time_point>
         event_subscriptions_;
+
+    boost::multi_index_container<
+        ConfirmRequest,
+        boost::multi_index::indexed_by<
+            boost::multi_index::ordered_unique<boost::multi_index::member<
+                ConfirmRequest, rai::AccountHeight, &ConfirmRequest::key_>>,
+            boost::multi_index::ordered_non_unique<
+                boost::multi_index::tag<ConfirmRequestByTime>,
+                boost::multi_index::member<
+                    ConfirmRequest, std::chrono::steady_clock::time_point,
+                    &ConfirmRequest::time_>>>>
+        confirm_requests_;
+    
 };
 }

@@ -712,6 +712,19 @@ bool rai::AccountParser::Error() const
     return error_;
 }
 
+bool rai::AccountHeight::operator<(const rai::AccountHeight& other) const
+{
+    if (account_ < other.account_)
+    {
+        return true;
+    }
+    if (height_ < other.height_)
+    {
+        return true;
+    }
+    return false;
+}
+
 rai::RawKey::~RawKey()
 {
     data_.SecureClear();

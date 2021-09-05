@@ -290,7 +290,27 @@ enum class ErrorCode : int
     BOOTSTRAP_MESSAGE_TYPE    = 512,
     BOOTSTRAP_SLOW_CONNECTION = 513,
 
-    MAX = 600
+
+    APP_GENERIC                         = 600,
+    APP_INVALID_GATEWAY_URL             = 601,
+    APP_PROCESS_GAP_PREVIOUS            = 602,
+    APP_PROCESS_LEDGER_ACCOUNT_PUT      = 603,
+    APP_PROCESS_LEDGER_BLOCK_PUT        = 604,
+    APP_PROCESS_PRUNED                  = 605,
+    APP_PROCESS_PREVIOUS_MISMATCH       = 606,
+    APP_PROCESS_LEDGER_SUCCESSOR_SET    = 607,
+    APP_PROCESS_FORK                    = 608,
+    APP_PROCESS_CONFIRMED_FORK          = 609,
+    APP_PROCESS_EXIST                   = 610,
+    APP_PROCESS_CONFIRMED               = 611,
+    APP_PROCESS_ROLLBACK_ACCOUNT_MISS   = 612,
+    APP_PROCESS_ROLLBACK_NON_HEAD       = 613,
+    APP_PROCESS_ROLLBACK_CONFIRMED      = 614,
+    APP_PROCESS_ROLLBACK_BLOCK_PUT      = 615,
+    APP_PROCESS_LEDGER_BLOCK_DEL        = 616,
+    APP_PROCESS_LEDGER_ACCOUNT_DEL      = 617,
+
+    MAX = 700
 };
 
 std::string ErrorString(rai::ErrorCode);

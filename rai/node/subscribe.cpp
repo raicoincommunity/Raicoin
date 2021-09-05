@@ -9,10 +9,6 @@ rai::SubscriptionEvent rai::StringToSubscriptionEvent(const std::string& str)
     {
         return rai::SubscriptionEvent::BLOCK_APPEND;
     }
-    else if (str == "block_confirm")
-    {
-        return rai::SubscriptionEvent::BLOCK_CONFIRM;
-    }
     else if (str == "block_rollback")
     {
         return rai::SubscriptionEvent::BLOCK_ROLLBACK;
@@ -28,6 +24,11 @@ rai::Subscriptions::Subscriptions(rai::Node& node) : node_(node)
     node_.observers_.block_.Add(
         [this](const rai::BlockProcessResult& result,
                const std::shared_ptr<rai::Block>& block) {
+            if (!node_.CallbackEnabled())
+            {
+                return;
+            }
+
             if (result.error_code_ != rai::ErrorCode::SUCCESS)
             {
                 return;
@@ -58,6 +59,10 @@ rai::Subscriptions::Subscriptions(rai::Node& node) : node_(node)
     node_.observers_.fork_.Add(
         [this](bool add, const std::shared_ptr<rai::Block>& first,
                const std::shared_ptr<rai::Block>& second) {
+            if (!node_.CallbackEnabled())
+            {
+                return;
+            }
             BlockFork(add, first, second);
         });
 }
@@ -305,6 +310,11 @@ void rai::Subscriptions::Cutoff()
     {
         event_subscriptions_.erase(i);
     }
+
+    auto begin_c_r = confirm_requests_.get<ConfirmRequestByTime>().begin();
+    auto end_c_r =
+        confirm_requests_.get<ConfirmRequestByTime>().lower_bound(cutoff);
+    confirm_requests_.get<ConfirmRequestByTime>().erase(begin_c_r, end_c_r);
 }
 
 void rai::Subscriptions::Erase(const rai::Account& account)
@@ -327,6 +337,17 @@ void rai::Subscriptions::Erase(rai::SubscriptionEvent event)
     }
 }
 
+void rai::Subscriptions::Erase(const rai::Block& block)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    ConfirmRequestKey key{block.Account() , block.Height()};
+    auto it = confirm_requests_.find(key);
+    if (it != confirm_requests_.end())
+    {
+        confirm_requests_.erase(it);
+    }
+}
+
 bool rai::Subscriptions::Exists(const rai::Account& account) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -337,6 +358,13 @@ bool rai::Subscriptions::Exists(rai::SubscriptionEvent event) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     return event_subscriptions_.find(event) != event_subscriptions_.end();
+}
+
+bool rai::Subscriptions::Exists(const rai::Block& block) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    ConfirmRequestKey key{block.Account() , block.Height()};
+    return confirm_requests_.find(key) != confirm_requests_.end();
 }
 
 size_t rai::Subscriptions::Size() const
@@ -452,6 +480,34 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const std::string& str)
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Block& block)
+{
+    if (!node_.config_.callback_url_)
+    {
+        return rai::ErrorCode::SUBSCRIBE_NO_CALLBACK;
+    }
+
+    if (node_.Status() != rai::NodeStatus::RUN)
+    {
+        return rai::ErrorCode::NODE_STATUS;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    ConfirmRequestKey key{block.Account(), block.Height()};
+    auto it = confirm_requests_.find(key);
+    if (it == confirm_requests_.end())
+    {
+        confirm_requests_.insert({key, std::chrono::steady_clock::now()});
+    }
+    else
+    {
+        confirm_requests_.modify(it, [](ConfirmRequest& data){
+            data.time_ =  std::chrono::steady_clock::now();
+        });
+    }
+}
+
+
 void rai::Subscriptions::Unsubscribe(const rai::Account& account)
 {
     Erase(account);
@@ -490,10 +546,11 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
                                        const std::shared_ptr<rai::Block>& block,
                                        uint64_t head_height)
 {
-    if (block->Height() == head_height
-        && (Exists(block->Account())
-            || Exists(rai::SubscriptionEvent::BLOCK_CONFIRM)))
+    if ((block->Height() == head_height && Exists(block->Account()))
+        || Exists(*block))
     {
+        Erase(*block);
+
         rai::Ptree ptree;
         ptree.put("notify", "block_confirm");
         ptree.put("account", block->Account().StringAccount());
@@ -531,6 +588,17 @@ bool rai::Subscriptions::NeedConfirm_(rai::Transaction& transaction,
     if (Exists(account))
     {
         return true;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ConfirmRequestKey key_low{account, 0};
+        ConfirmRequestKey key_up{account, std::numeric_limits<uint64_t>::max()};
+        if (confirm_requests_.lower_bound(key_low)
+            != confirm_requests_.upper_bound(key_up))
+        {
+            return true;
+        }
     }
 
     rai::AccountInfo info;

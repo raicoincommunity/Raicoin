@@ -1096,6 +1096,78 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Slow connection";
         }
+        case rai::ErrorCode::APP_GENERIC:
+        {
+            return "App generic error";
+        }
+        case rai::ErrorCode::APP_INVALID_GATEWAY_URL:
+        {
+            return "Invalid gateway url";
+        }
+        case rai::ErrorCode::APP_PROCESS_GAP_PREVIOUS:
+        {
+            return "Previous block does not exist";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT:
+        {
+            return "Failed to put account infomation to ledger";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_BLOCK_PUT:
+        {
+            return "Failed to put block to ledger";
+        }
+        case rai::ErrorCode::APP_PROCESS_PRUNED:
+        {
+            return "Block has been pruned";
+        }
+        case rai::ErrorCode::APP_PROCESS_PREVIOUS_MISMATCH:
+        {
+            return "Block previous mismatch";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_SUCCESSOR_SET:
+        {
+            return "Failed to set block successor to ledger";
+        }
+        case rai::ErrorCode::APP_PROCESS_FORK:
+        {
+            return "Fork detected";
+        }
+        case rai::ErrorCode::APP_PROCESS_CONFIRMED_FORK:
+        {
+            return "Confirmed fork detected";
+        }
+        case rai::ErrorCode::APP_PROCESS_EXIST:
+        {
+            return "Block exists";
+        }
+        case rai::ErrorCode::APP_PROCESS_CONFIRMED:
+        {
+            return "Block confirmed";
+        }
+        case rai::ErrorCode::APP_PROCESS_ROLLBACK_ACCOUNT_MISS:
+        {
+            return "Rollback account miss";
+        }
+        case rai::ErrorCode::APP_PROCESS_ROLLBACK_NON_HEAD:
+        {
+            return "Rollback non-head block";
+        }
+        case rai::ErrorCode::APP_PROCESS_ROLLBACK_CONFIRMED:
+        {
+            return "Rollback confirmed block";
+        }
+        case rai::ErrorCode::APP_PROCESS_ROLLBACK_BLOCK_PUT:
+        {
+            return "Failed to put rollback block";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_BLOCK_DEL:
+        {
+            return "Failed to delete block from ledger";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_DEL:
+        {
+            return "Failed to delete account from ledger";
+        }
         default:
         {
             return "Invalid error code";
