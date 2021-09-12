@@ -3,6 +3,7 @@
 #include <rai/common/blocks.hpp>
 #include <rai/common/log.hpp>
 #include <rai/common/parameters.hpp>
+#include <rai/common/extensions.hpp>
 
 rai::WalletRpcConfig::WalletRpcConfig()
     : auto_credit_(true), auto_receive_(true), receive_mininum_(rai::RAI)
@@ -655,7 +656,7 @@ rai::ErrorCode rai::WalletRpcHandler::ParseNote(
     if (note_o && !note_o->empty())
     {
         bool error =
-            rai::ExtensionAppend(rai::ExtensionType::NOTE, *note_o, extensions);
+            rai::ExtensionAppend(rai::ExtensionNote(*note_o), extensions);
         IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
     }
 
@@ -710,8 +711,8 @@ rai::ErrorCode rai::WalletRpcHandler::ParseAccountSend(
     std::string sub_account = parser.SubAccount();
     if (!sub_account.empty())
     {
-        bool error = rai::ExtensionAppend(rai::ExtensionType::SUB_ACCOUNT,
-                                          sub_account, extensions);
+        bool error = rai::ExtensionAppend(rai::ExtensionSubAccount(sub_account),
+                                          extensions);
         IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
     }
 

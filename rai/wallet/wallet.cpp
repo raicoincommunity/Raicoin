@@ -1,6 +1,7 @@
 #include <rai/wallet/wallet.hpp>
 #include <rai/common/util.hpp>
 #include <rai/common/parameters.hpp>
+#include <rai/common/extensions.hpp>
 
 rai::WalletServiceRunner::WalletServiceRunner(boost::asio::io_service& service)
     : service_(service), stopped_(false), thread_([this]() { this->Run(); })

@@ -16,6 +16,7 @@ class BlockConfirmEntry
 {
 public:
     BlockConfirmEntry(const std::shared_ptr<rai::Block>&);
+    BlockConfirmEntry(const rai::Account&, uint64_t, const rai::BlockHash&);
 
     rai::AccountHeight key_;
     rai::BlockHash hash_;
@@ -31,6 +32,8 @@ public:
     void Run();
     void Stop();
     void Add(const std::shared_ptr<rai::Block>&);
+    void Add(const rai::Account&, uint64_t, const rai::BlockHash&);
+    void Add(const rai::BlockConfirmEntry&);
     void Remove(const std::shared_ptr<rai::Block>&);
 
     rai::App& app_;

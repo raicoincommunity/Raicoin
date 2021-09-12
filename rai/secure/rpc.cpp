@@ -487,6 +487,62 @@ bool rai::RpcHandler::GetTimestamp_(uint64_t& timestamp)
     return false;
 }
 
+bool rai::RpcHandler::GetNext_(rai::Account& next)
+{
+    auto next_o = request_.get_optional<std::string>("next");
+    if (!next_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_NEXT;
+        return true;
+    }
+
+    if (next.DecodeAccount(*next_o))
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_NEXT;
+        return true;
+    }
+
+    return false;
+}
+
+bool rai::RpcHandler::GetAccountTypes_(std::vector<rai::BlockType>& types)
+{
+    auto types_o = request_.get_child_optional("account_types");
+    if (!types_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_ACCOUNT_TYPES;
+        return true;
+    }
+
+    try
+    {
+        for (const auto& i : *types_o)
+        {
+            rai::BlockType type =
+                rai::StringToBlockType(i.second.get<std::string>(""));
+            if (type == rai::BlockType::INVALID)
+            {
+                error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT_TYPES;
+                return true;
+            }
+            types.push_back(type);
+        }
+    }
+    catch(...)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT_TYPES;
+        return true;
+    }
+    
+    if (types.empty())
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT_TYPES;
+        return true;
+    }
+
+    return false;
+}
+
 std::unique_ptr<rai::Rpc> rai::MakeRpc(boost::asio::io_service& service,
                                        const rai::RpcConfig& config,
                                        const rai::RpcHandlerMaker& maker)

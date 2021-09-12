@@ -16,7 +16,11 @@ add_library (rai_common
 	runner.cpp
 	runner.hpp
 	stat.cpp
-	stat.hpp)
+	stat.hpp
+	extensions.cpp
+	extensions.hpp)
+
+
 target_link_libraries (rai_common
 	ed25519
 	${Boost_LIBRARIES}

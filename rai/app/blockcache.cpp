@@ -14,7 +14,7 @@ void rai::BlockCache::Insert(const std::shared_ptr<rai::Block>& block)
     rai::BlockHash previous = block->Previous();
     if (previous.IsZero())
     {
-      return;
+        return;
     }
 
     auto it = entries_.find(previous);
@@ -26,7 +26,17 @@ void rai::BlockCache::Insert(const std::shared_ptr<rai::Block>& block)
     }
     else
     {
-      entries_.insert(rai::BlockCacheEntry(block));
+        entries_.insert(rai::BlockCacheEntry(block));
+    }
+}
+
+void rai::BlockCache::Remove(const rai::BlockHash& previous)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = entries_.find(previous);
+    if (it != entries_.end())
+    {
+        entries_.erase(it);
     }
 }
 
@@ -40,7 +50,7 @@ std::shared_ptr<rai::Block> rai::BlockCache::Query(
     auto it = entries_.find(previous);
     if (it != entries_.end())
     {
-      block = it->block_;
+        block = it->block_;
     }
 
     return block;

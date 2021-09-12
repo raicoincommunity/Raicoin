@@ -6,6 +6,7 @@
 #include <rai/common/parameters.hpp>
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/blocks.hpp>
 
 namespace rai
 {
@@ -96,6 +97,8 @@ protected:
     bool GetPrevious_(rai::BlockHash&);
     bool GetSignature_(rai::Signature&);
     bool GetTimestamp_(uint64_t&);
+    bool GetNext_(rai::Account&);
+    bool GetAccountTypes_(std::vector<rai::BlockType>&);
 };
 
 std::unique_ptr<rai::Rpc> MakeRpc(boost::asio::io_service&,

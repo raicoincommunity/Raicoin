@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <assert.h>
 #include <chrono>
@@ -288,6 +289,14 @@ std::string ToString(Args... args)
     std::stringstream stream;
     ToStringStream(stream, args...);
     return stream.str();
+}
+
+template <class Container>
+bool Contain(const Container& container,
+              const typename Container::value_type& element)
+{
+    return std::find(container.begin(), container.end(), element)
+           != container.end();
 }
 
 // only for config parsing

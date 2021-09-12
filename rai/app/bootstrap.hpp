@@ -3,6 +3,7 @@
 #include <atomic>
 #include <mutex>
 #include <rai/common/numbers.hpp>
+#include <rai/common/util.hpp>
 
 namespace rai
 {
@@ -24,25 +25,24 @@ class AppBootstrap
 public:
     AppBootstrap(rai::App&);
 
+    bool Ready();
     void Run();
     void Reset();
     void Stop();
     void ReceiveAccountHeadMessage(const std::shared_ptr<rai::Ptree>&);
 
-    uint64_t NewRequestId();
-
     rai::App& app_;
 
 private:
+    uint64_t NewRequestId_(std::unique_lock<std::mutex>&);
     void SendRequest_(std::unique_lock<std::mutex>&);
-    void ProcessAccountHeads(std::unique_lock<std::mutex>&,
-                             const std::vector<rai::AccountHead>&);
+    void ProcessAccountHeads_(const std::vector<rai::AccountHead>&);
 
-    std::atomic<uint64_t> request_id_;
     mutable std::mutex mutex_;
     bool stopped_;
     bool running_;
     uint64_t count_;
+    uint64_t request_id_;
     std::chrono::steady_clock::time_point last_run_;
     std::chrono::steady_clock::time_point last_request_;
     rai::Account next_;

@@ -17,6 +17,7 @@ enum class BlockType : uint8_t
     AD_BLOCK    = 3,  // Airdrop Block
 };
 std::string BlockTypeToString(rai::BlockType);
+rai::BlockType StringToBlockType(const std::string&);
 
 enum class BlockOpcode : uint8_t
 {
@@ -80,25 +81,6 @@ private:
     mutable bool signature_error_;
 };
 
-enum class ExtensionType : uint16_t
-{
-    INVALID     = 0,
-    SUB_ACCOUNT = 1, // UTF-8 encode string
-    NOTE        = 2, // UTF-8 encode string
-    UNIQUE_ID   = 3,
-
-    RESERVED_MAX = 1023,
-};
-std::string ExtensionTypeToString(rai::ExtensionType);
-rai::ExtensionType StringToExtensionType(const std::string&);
-bool ExtensionAppend(rai::ExtensionType, const std::string&,
-                     std::vector<uint8_t>&);
-bool ExtensionAppend(rai::ExtensionType, uint64_t,
-                     std::vector<uint8_t>&);
-
-bool ExtensionsToPtree(const std::vector<uint8_t>&, rai::Ptree&);
-rai::ErrorCode PtreeToExtensions(const rai::Ptree&, std::vector<uint8_t>&);
-
 // Transaction Block
 class TxBlock : public Block
 {
@@ -138,7 +120,6 @@ public:
     bool HasRepresentative() const override;
 
     std::vector<uint8_t> Extensions() const;
-
 
     static bool CheckOpcode(rai::BlockOpcode);
     static bool CheckExtensionsLength(uint32_t);

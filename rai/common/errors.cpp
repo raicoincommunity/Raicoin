@@ -482,6 +482,18 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Unknown event";
         }
+        case rai::ErrorCode::EXTENSIONS_BROKEN_STREAM:
+        {
+            return "Broken stream";
+        }
+        case rai::ErrorCode::EXTENSION_TYPE:
+        {
+            return "Invalid extension type";
+        }
+        case rai::ErrorCode::EXTENSION_PARSE_UNKNOWN:
+        {
+            return "Unknown extension type";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -561,6 +573,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_BLOCK_END_TIME:
         {
             return "Failed to parse end time from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSIONS_RAW:
+        {
+            return "Failed to parse block extensions_raw from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_FORMAT:
+        {
+            return "Invalid block extensions format in json";
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
@@ -851,6 +871,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_MISS_FIELD_EVENT:
         {
             return "[RPC] The event field is missing";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_NEXT:
+        {
+            return "[RPC] The next field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_NEXT:
+        {
+            return "[RPC] Invalid next field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_ACCOUNT_TYPES:
+        {
+            return "[RPC] The account_types field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT_TYPES:
+        {
+            return "[RPC] Invalid account_types field";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

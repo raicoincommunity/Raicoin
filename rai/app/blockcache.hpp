@@ -27,7 +27,7 @@ class BlockCache
 {
 public:
     void Insert(const std::shared_ptr<rai::Block>&);
-    void remove(const rai::BlockHash&);
+    void Remove(const rai::BlockHash&);
     std::shared_ptr<rai::Block> Query(const rai::BlockHash&) const;
     void Age(uint64_t);
     size_t Size() const;

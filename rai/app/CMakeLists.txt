@@ -1,8 +1,12 @@
 add_library (app
 	app.cpp
-    app.hpp
+	app.hpp
 	blockcache.cpp
 	blockcache.hpp
+	blockconfirm.cpp
+	blockconfirm.hpp
+	bootstrap.cpp
+	bootstrap.hpp
 )
 
 target_link_libraries (app

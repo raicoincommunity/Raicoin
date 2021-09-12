@@ -8,6 +8,13 @@ rai::BlockConfirmEntry::BlockConfirmEntry(
 {
 }
 
+rai::BlockConfirmEntry::BlockConfirmEntry(const rai::Account& account,
+                                          uint64_t height,
+                                          const rai::BlockHash& hash)
+    : key_{account, height}, hash_(hash)
+{
+}
+
 rai::BlockConfirm::BlockConfirm(rai::App& app)
     : app_(app), stopped_(false), thread_([this]() { Run(); })
 {
@@ -21,6 +28,18 @@ rai::BlockConfirm::~BlockConfirm()
 void rai::BlockConfirm::Add(const std::shared_ptr<rai::Block>& block)
 {
     rai::BlockConfirmEntry entry(block);
+    Add(entry);
+}
+
+void rai::BlockConfirm::Add(const rai::Account& account, uint64_t height,
+                            const rai::BlockHash& hash)
+{
+    rai::BlockConfirmEntry entry(account, height, hash);
+    Add(entry);
+}
+
+void rai::BlockConfirm::Add(const rai::BlockConfirmEntry& entry)
+{
     {
         std::unique_lock<std::mutex> lock(mutex_);
         auto it = entries_.find(entry.key_);
@@ -30,9 +49,8 @@ void rai::BlockConfirm::Add(const std::shared_ptr<rai::Block>& block)
         }
         else
         {
-            entries_.modify(it, [&](rai::BlockConfirmEntry& data){
-                data = entry;
-            });
+            entries_.modify(
+                it, [&](rai::BlockConfirmEntry& data) { data = entry; });
         }
     }
     condition_.notify_all();

@@ -44,9 +44,11 @@ public:
 
     void AccountCount();
     void AccountForks();
+    void AccountHeads();
     void AccountInfo();
     void AccountSubscribe();
     void AccountUnsubscribe();
+    void ActiveAccountHeads();
     void BlockConfirm();
     void BlockCount();
     void BlockDump();

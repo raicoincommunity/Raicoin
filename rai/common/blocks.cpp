@@ -9,6 +9,7 @@
 #include <boost/endian/conversion.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <rai/common/parameters.hpp>
+#include <rai/common/extensions.hpp>
 
 namespace
 {
@@ -47,6 +48,26 @@ std::string rai::BlockTypeToString(rai::BlockType type)
         {
             return "unknow";
         }
+    }
+}
+
+rai::BlockType rai::StringToBlockType(const std::string& str)
+{
+    if (str == "transaction")
+    {
+        return rai::BlockType::TX_BLOCK;
+    }
+    else if (str == "representative")
+    {
+        return rai::BlockType::REP_BLOCK;
+    }
+    else if (str == "airdrop")
+    {
+        return rai::BlockType::AD_BLOCK;
+    }
+    else
+    {
+        return rai::BlockType::INVALID;
     }
 }
 
@@ -279,304 +300,6 @@ rai::TxBlock::TxBlock(rai::ErrorCode& error_code, const rai::Ptree& ptree)
     error_code = DeserializeJson(ptree);
 }
 
-std::string rai::ExtensionTypeToString(rai::ExtensionType type)
-{
-    std::string result;
-
-    switch (type)
-    {
-        case rai::ExtensionType::INVALID:
-        {
-            result = "invalid";
-            break;
-        }
-        case rai::ExtensionType::SUB_ACCOUNT:
-        {
-            result = "sub_account";
-            break;
-        }
-        case rai::ExtensionType::NOTE:
-        {
-            result = "note";
-            break;
-        }
-        case rai::ExtensionType::UNIQUE_ID:
-        {
-            result = "unique_id";
-            break;
-        }
-        default:
-        {
-            result = std::to_string(static_cast<uint16_t>(type));
-            break;
-        }
-    }
-
-    return result;
-}
-
-rai::ExtensionType rai::StringToExtensionType(const std::string& str)
-{
-    uint16_t type = 0;
-    bool error = rai::StringToUint(str, type);
-    if (!error)
-    {
-        return static_cast<rai::ExtensionType>(type);
-    }
-
-    if ("sub_account" == str)
-    {
-        return rai::ExtensionType::SUB_ACCOUNT;
-    }
-    else if ("note" == str)
-    {
-        return rai::ExtensionType::NOTE;
-    }
-    else if ("unique_id" == str)
-    {
-        return rai::ExtensionType::UNIQUE_ID;
-    }
-    else
-    {
-        return rai::ExtensionType::INVALID;
-    }
-}
-
-bool rai::ExtensionAppend(rai::ExtensionType type, const std::string& value,
-                          std::vector<uint8_t>& extensions)
-{
-    if (extensions.size() > std::numeric_limits<uint16_t>::max())
-    {
-        return true;
-    }
-
-    uint16_t length = 0;
-    std::vector<uint8_t> extension;
-    switch (type)
-    {
-        case rai::ExtensionType::SUB_ACCOUNT:
-        case rai::ExtensionType::NOTE:
-        {
-            rai::VectorStream stream(extension);
-            rai::Write(stream, type);
-            length = static_cast<uint16_t>(value.size());
-            rai::Write(stream, length);
-            rai::Write(stream,
-                       std::vector<uint8_t>(value.begin(), value.end()));
-            break;
-        }
-        default:
-        {
-            if (type <= rai::ExtensionType::RESERVED_MAX)
-            {
-                return true;
-            }
-            std::vector<uint8_t> bytes;
-            bool error = rai::HexToBytes(value, bytes);
-            IF_ERROR_RETURN(error, true);
-            rai::VectorStream stream(extension);
-            rai::Write(stream, type);
-            length = static_cast<uint16_t>(bytes.size());
-            rai::Write(stream, length);
-            rai::Write(stream, bytes);
-        }
-    }
-
-    extensions.insert(extensions.end(), extension.begin(), extension.end());
-    return false;
-}
-
-
-bool rai::ExtensionAppend(rai::ExtensionType type, uint64_t value,
-                          std::vector<uint8_t>& extensions)
-{
-    if (extensions.size() > std::numeric_limits<uint16_t>::max())
-    {
-        return true;
-    }
-
-    uint16_t length = 0;
-    std::vector<uint8_t> extension;
-    switch (type)
-    {
-        case rai::ExtensionType::UNIQUE_ID:
-        {
-            rai::VectorStream stream(extension);
-            rai::Write(stream, type);
-            length = sizeof(uint64_t);
-            rai::Write(stream, length);
-            rai::Write(stream, value);
-            break;
-        }
-        default:
-        {
-            return true;
-        }
-    }
-
-    extensions.insert(extensions.end(), extension.begin(), extension.end());
-    return false;
-}
-
-bool rai::ExtensionsToPtree(const std::vector<uint8_t>& data, rai::Ptree& tree)
-{
-    if (data.empty())
-    {
-        return false;
-    }
-
-    rai::BufferStream stream(data.data(), data.size());
-    while (true)
-    {
-        rai::Ptree entry;
-        rai::Ptree error_info;
-
-        rai::ExtensionType type;
-        bool error = rai::Read(stream, type);
-        if (error)
-        {
-            if (!rai::StreamEnd(stream))
-            {
-                error_info.put("error", "deserialize extension type");
-                tree.push_back(std::make_pair("", error_info));
-                return true;
-            }
-            break;
-        }
-        entry.put("type", rai::ExtensionTypeToString(type));
-
-        uint16_t length;
-        error = rai::Read(stream, length);
-        if (error)
-        {
-            error_info.put("error", "deserialize extension length");
-            tree.push_back(std::make_pair("", error_info));
-            return true;
-        }
-        entry.put("length", std::to_string(length));
-
-        std::vector<uint8_t> value;
-        error = rai::Read(stream, length, value);
-        if (error)
-        {
-            error_info.put("error", "deserialize extension value");
-            error_info.put("type", rai::ExtensionTypeToString(type));
-            error_info.put("length", std::to_string(length));
-            tree.push_back(std::make_pair("", error_info));
-            return true;
-        }
-
-        std::string value_str;
-        switch (type)
-        {
-            case rai::ExtensionType::SUB_ACCOUNT:
-            case rai::ExtensionType::NOTE:
-            {
-                value_str = std::string(
-                    reinterpret_cast<const char*>(value.data()), value.size());
-                break;
-            }
-            case rai::ExtensionType::UNIQUE_ID:
-            {
-                if (length != sizeof(uint64_t))
-                {
-                    error_info.put("error", "invalid unique_id value length");
-                    error_info.put("type", rai::ExtensionTypeToString(type));
-                    error_info.put("length", std::to_string(length));
-                    tree.push_back(std::make_pair("", error_info));
-                    return true;
-                }
-                uint64_t unique_id = 0;
-                {
-                    rai::BufferStream stream(value.data(), value.size());
-                    rai::Read(stream, unique_id);
-                }
-                value_str = std::to_string(unique_id);
-                break;
-            }
-            default:
-            {
-                value_str = rai::BytesToHex(value.data(), value.size());
-            }
-        }
-        entry.put("value", value_str);
-
-        tree.push_back(std::make_pair("", entry));
-    }
-
-    return false;
-}
-
-rai::ErrorCode rai::PtreeToExtensions(const rai::Ptree& tree,
-                                      std::vector<uint8_t>& extensions)
-{
-    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    try
-    {
-        rai::VectorStream stream(extensions);
-        for (const auto& i : tree)
-        {
-            error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TYPE;
-            std::string type_str = i.second.get<std::string>("type");
-            rai::ExtensionType type = rai::StringToExtensionType(type_str);
-            if (type == rai::ExtensionType::INVALID)
-            {
-                return error_code;
-            }
-            rai::Write(stream, type);
-
-            std::vector<uint8_t> value;
-            error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE;
-            std::string value_str = i.second.get<std::string>("value");
-            switch (type)
-            {
-                case rai::ExtensionType::SUB_ACCOUNT:
-                case rai::ExtensionType::NOTE:
-                {
-                    value = std::vector<uint8_t>(value_str.begin(),
-                                                 value_str.end());
-                    break;
-                }
-                case rai::ExtensionType::UNIQUE_ID:
-                {
-                    uint64_t unique_id = 0;
-                    bool error = rai::StringToUint(value_str, unique_id);
-                    IF_ERROR_RETURN(error, error_code);
-                    {
-                        rai::VectorStream stream_l(value);
-                        rai::Write(stream_l, unique_id);
-                    }
-                    break;
-                }
-                default:
-                {
-                    bool error = rai::HexToBytes(value_str, value);
-                    IF_ERROR_RETURN(error, error_code);
-                }
-            }
-
-           if (value.size() > std::numeric_limits<uint16_t>::max())
-           {
-               return error_code;
-           }
-           uint16_t length = static_cast<uint16_t>(value.size());
-           rai::Write(stream, length);
-           rai::Write(stream, value);
-        }
-    }
-    catch (...)
-    {
-        return error_code;
-    }
-
-    if (extensions.empty())
-    {
-        return rai::ErrorCode::JSON_BLOCK_EXTENSIONS_EMPTY;
-    }
-
-    return rai::ErrorCode::SUCCESS;
-}
-
 bool rai::TxBlock::operator==(const rai::Block& other) const
 {
     return BlocksEqual(*this, other);
@@ -726,6 +449,8 @@ void rai::TxBlock::SerializeJson(rai::Ptree& ptree) const
     rai::Ptree extensions;
     rai::ExtensionsToPtree(extensions_, extensions);
     ptree.add_child("extensions", extensions);
+    ptree.put("extensions_raw",
+              rai::BytesToHex(extensions_.data(), extensions_.size()));
     ptree.put("signature", signature_.StringHex());
 }
 
@@ -809,11 +534,20 @@ rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
         }
         IF_ERROR_RETURN(error, error_code);
 
-        auto extensions  = ptree.get_child_optional("extensions");
-        if (extensions && !extensions->empty())
+        auto extensions_raw = ptree.get_optional<std::string>("extensions_raw");
+        if (extensions_raw)
         {
-            error_code = rai::PtreeToExtensions(*extensions, extensions_);
-            IF_NOT_SUCCESS_RETURN(error_code);
+            error = rai::HexToBytes(*extensions_raw, extensions_);
+            IF_ERROR_RETURN(error, rai::ErrorCode::JSON_BLOCK_EXTENSIONS_RAW);
+        }
+        else
+        {
+            auto extensions  = ptree.get_child_optional("extensions");
+            if (extensions && !extensions->empty())
+            {
+                error_code = rai::PtreeToExtensions(*extensions, extensions_);
+                IF_NOT_SUCCESS_RETURN(error_code);
+            }
         }
 
         extensions_length_ = static_cast<uint32_t>(extensions_.size());
@@ -948,7 +682,7 @@ bool rai::TxBlock::CheckExtensionsLength(uint32_t length)
 
 uint32_t rai::TxBlock::MaxExtensionsLength()
 {
-    return 256;
+    return static_cast<uint32_t>(MAX_EXTENSIONS_SIZE);
 }
 
 rai::RepBlock::RepBlock(rai::BlockOpcode opcode, uint16_t credit,
@@ -1726,7 +1460,6 @@ std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
         {
             return result;
         }
-
     }
     catch (const std::runtime_error&)
     {

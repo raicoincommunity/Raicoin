@@ -21,6 +21,8 @@ class AppObservers
 {
 public:
     rai::ObserverContainer<rai::WebsocketStatus> gateway_status_;
+    rai::ObserverContainer<const std::shared_ptr<rai::Block>&, bool> block_;
+    rai::ObserverContainer<const std::shared_ptr<rai::Block>&> block_rollback_;
 };
 
 class AppTrace
@@ -61,6 +63,7 @@ public:
     void Start();
     void Stop();
     void Run();
+    bool Busy() const;
     void Ongoing(const std::function<void()>&, const std::chrono::seconds&);
 
     rai::Ptree AccountTypes() const;
@@ -69,6 +72,8 @@ public:
     bool GatewayConnected() const;
     void ProcessBlock(const std::shared_ptr<rai::Block>&, bool);
     void ProcessBlockRollback(const std::shared_ptr<rai::Block>&);
+    void PullNextBlock(const std::shared_ptr<rai::Block>&);
+    void PullNextBlockAsync(const std::shared_ptr<rai::Block>&);
     void QueueAction(rai::AppActionPri, const std::function<void()>&);
     void QueueBlock(const std::shared_ptr<rai::Block>&, bool,
                     rai::AppActionPri = rai::AppActionPri::NORMAL);
@@ -76,6 +81,8 @@ public:
     void ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockAppendNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockConfirmNotify(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveBlockConfirmAck(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>&);
     void SendToGateway(const rai::Ptree&);
     void SyncAccount(const rai::Account&);
     void SyncAccount(const rai::Account&, uint64_t,
@@ -90,6 +97,7 @@ public:
         service_.post(action);
     }
 
+    static size_t constexpr MAX_ACTIONS = 32 * 1024;
     static size_t constexpr MAX_BLOCK_CACHE_SIZE = 100 * 1024;
     static uint64_t constexpr BLOCKS_QUERY_COUNT = 100;
 
@@ -121,6 +129,11 @@ private:
     rai::ErrorCode RollbackBlock_(rai::Transaction&, const std::shared_ptr<rai::Block>&);
     bool GetHeadBlock_(rai::Transaction&, const rai::Account&,
                        std::shared_ptr<rai::Block>&);
+
+    std::function<void(const std::shared_ptr<rai::Block>&, bool)>
+        block_observer_;
+    std::function<void(const std::shared_ptr<rai::Block>&)>
+        block_rollback_observer_;
 
     std::condition_variable condition_;
     mutable std::mutex mutex_;
