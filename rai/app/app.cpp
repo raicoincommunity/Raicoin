@@ -17,7 +17,8 @@ rai::App::App(rai::ErrorCode& error_code, rai::Alarm& alarm,
       gateway_url_(gateway_url),
       account_types_(account_types),
       service_runner_(service_),
-      bootstrap_(*this)
+      bootstrap_(*this),
+      block_confirm_(*this)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
@@ -43,6 +44,8 @@ void rai::App::Start()
 
     Ongoing(std::bind(&rai::App::ConnectToGateway, this),
             std::chrono::seconds(5));
+    Ongoing(std::bind(&rai::AppBootstrap::Run, &bootstrap_),
+            std::chrono::seconds(3));
 
     // todo:
 }
@@ -90,6 +93,13 @@ void rai::App::Run()
         lock.lock();
     }
 }
+
+bool rai::App::Busy() const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    return actions_.size() > 100000;
+}
+
 
 void rai::App::Ongoing(const std::function<void()>& process,
                        const std::chrono::seconds& delay)
@@ -153,6 +163,7 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
         {
             case rai::ErrorCode::SUCCESS:
             {
+                PullNextBlockAsync(block);
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT:
@@ -160,6 +171,8 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             case rai::ErrorCode::APP_PROCESS_LEDGER_SUCCESSOR_SET:
             {
                 // log
+                std::cout << "App::ProcessBlock: ledger operation error code "
+                          << static_cast<uint32_t>(error_code) << std::endl;
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_GAP_PREVIOUS:
@@ -190,18 +203,40 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             {
                 if (confirmed)
                 {
-
+                    std::shared_ptr<rai::Block> head(nullptr);
+                    bool error = GetHeadBlock_(transaction, block->Account(), head);
+                    if (error)
+                    {
+                        // log
+                        std::cout << "App::ProcessBlock: failed to get head "
+                                     "block, account="
+                                  << block->Account().StringAccount()
+                                  << std::endl;
+                    }
+                    else
+                    {
+                        QueueBlockRollback(head);
+                        QueueBlock(block, confirmed, rai::AppActionPri::HIGH);
+                    }
                 }
                 else
                 {
-
+                    block_confirm_.Add(block);
                 }
                 break;
             }
-
-    APP_PROCESS_CONFIRMED_FORK          = 609,
-    APP_PROCESS_EXIST                   = 610,
-    APP_PROCESS_CONFIRMED               = 611,
+            case rai::ErrorCode::APP_PROCESS_CONFIRMED_FORK:
+            case rai::ErrorCode::APP_PROCESS_EXIST:
+            case rai::ErrorCode::APP_PROCESS_CONFIRMED:
+            {
+                break;
+            }
+            default:
+            {
+                // log
+                std::cout << "App::ProcessBlock: unknown error code "
+                          << static_cast<uint32_t>(error_code) << std::endl;
+            }
         }
 
         if (error_code != rai::ErrorCode::SUCCESS)
@@ -210,13 +245,108 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
         }
     }
     
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code, "App::ProcessBlock");
+    }
+    else
+    {
+        if (block_observer_)
+        {
+            block_observer_(block, confirmed);
+        }
+    }
 }
 
 void rai::App::ProcessBlockRollback(const std::shared_ptr<rai::Block>& block)
 {
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    {
+        rai::Transaction transaction(error_code, ledger_, true);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            // log
+            rai::Stats::Add(error_code, "App::ProcessBlockRollback");
+            return;
+        }
 
+        error_code = RollbackBlock_(transaction, block);
+        switch (error_code)
+        {
+            case rai::ErrorCode::SUCCESS:
+            {
+                break;
+            }
+            case rai::ErrorCode::APP_PROCESS_ROLLBACK_ACCOUNT_MISS:
+            case rai::ErrorCode::APP_PROCESS_ROLLBACK_NON_HEAD:
+            case rai::ErrorCode::APP_PROCESS_ROLLBACK_CONFIRMED:
+            case rai::ErrorCode::APP_PROCESS_ROLLBACK_BLOCK_PUT:
+            {
+                break;
+            }
+            case rai::ErrorCode::APP_PROCESS_LEDGER_BLOCK_DEL:
+            case rai::ErrorCode::APP_PROCESS_LEDGER_SUCCESSOR_SET:
+            case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_DEL:
+            case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT:
+            {
+                // log
+                std::cout
+                    << "App::ProcessBlockRollback: ledger operation error code "
+                    << static_cast<uint32_t>(error_code) << std::endl;
+                break;
+            }
+            default:
+            {
+                // log
+                std::cout << "App::ProcessBlockRollback: unknown error code "
+                          << static_cast<uint32_t>(error_code) << std::endl;
+            }
+        }
+
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            transaction.Abort();
+        }
+    }
+
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code, "App::ProcessBlockRollback");
+    }
+    else
+    {
+        if (block_rollback_observer_)
+        {
+            block_rollback_observer_(block);
+        }
+    }
 }
 
+void rai::App::PullNextBlock(const std::shared_ptr<rai::Block>& block)
+{
+    rai::BlockHash hash = block->Hash();
+    std::shared_ptr<rai::Block> next = block_cache_.Query(hash);
+    if (next)
+    {
+        QueueBlock(next, false);
+        block_cache_.Remove(hash);
+    }
+    else
+    {
+        SyncAccount(block->Account(), block->Height() + 1);
+    }
+}
+
+void rai::App::PullNextBlockAsync(const std::shared_ptr<rai::Block>& block)
+{
+    std::weak_ptr<rai::App> app_w(Shared());
+    Background([app_w, block]() {
+        if (auto app_s = app_w.lock())
+        {
+            app_s->PullNextBlock(block);
+        }
+    });
+}
 
 void rai::App::QueueAction(rai::AppActionPri pri,
                            const std::function<void()>& action)
@@ -268,9 +398,13 @@ void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
     if (ack_o)
     {
         std::string ack(*ack_o);
-        if (ack == "blocks_query")
+        if (ack == "account_heads" || ack == "active_account_heads")
         {
-            //todo:
+            bootstrap_.ReceiveAccountHeadMessage(message);
+        }
+        else if (ack == "blocks_query")
+        {
+            ReceiveBlocksQueryAck(message);
         }
         else if (ack == "block_confirm")
         {
@@ -296,13 +430,135 @@ void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
 void rai::App::ReceiveBlockAppendNotify(
     const std::shared_ptr<rai::Ptree>& message)
 {
-    //todo:
+    auto block_o = message->get_child_optional("block");
+    if (!block_o)
+    {
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    block = rai::DeserializeBlockJson(error_code, *block_o);
+    if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+    {
+        rai::Stats::Add(error_code, "App::ReceiveBlockAppendNotify");
+        return;
+    }
+
+    QueueBlock(block, false);
 }
 
 void rai::App::ReceiveBlockConfirmNotify(
     const std::shared_ptr<rai::Ptree>& message)
 {
-    //todo:
+    auto block_o = message->get_child_optional("block");
+    if (!block_o)
+    {
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    block = rai::DeserializeBlockJson(error_code, *block_o);
+    if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+    {
+        rai::Stats::Add(error_code, "App::ReceiveBlockConfirmNotify");
+        return;
+    }
+
+    QueueBlock(block, true);
+    block_confirm_.Remove(block);
+}
+
+void rai::App::ReceiveBlockConfirmAck(
+    const std::shared_ptr<rai::Ptree>& message)
+{
+    auto status_o = message->get_optional<std::string>("status");
+    if (!status_o)
+    {
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    if (*status_o == "rollback")
+    {
+        auto block_o = message->get_child_optional("block");
+        if (!block_o || block_o->empty())
+        {
+            return;
+        }
+        block = rai::DeserializeBlockJson(error_code, *block_o);
+        if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+        {
+            return;
+        }
+
+        QueueBlockRollback(block);
+        return;
+    }
+    else if (*status_o != "success")
+    {
+        return;
+    }
+
+    // todo:
+    
+}
+
+void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
+{
+    auto status_o = message->get_optional<std::string>("status");
+    if (!status_o)
+    {
+        return;
+    }
+
+    rai::Account account;
+    auto account_o = message->get_optional<std::string>("account");
+    if (!account_o || account.DecodeAccount(*account_o))
+    {
+        return;
+    }
+
+    if (*status_o == "miss")
+    {
+        // todo: set account as synced
+        return;
+    }
+    else if (*status_o != "success")
+    {
+        return;
+    }
+
+    auto blocks_o = message->get_child_optional("blocks");
+    if (!blocks_o || blocks_o->empty())
+    {
+        return;
+    }
+    
+    bool enque = true;
+    std::shared_ptr<rai::Block> block(nullptr);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    for (const auto& i : *blocks_o)
+    {
+        block = rai::DeserializeBlockJson(error_code, i.second);
+        if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+        {
+            return;
+        }
+
+        if (enque)
+        {
+            // enque first block
+            enque = false;
+            QueueBlock(block, false);
+        }
+        else
+        {
+            block_cache_.Insert(block);
+        }
+    }
 }
 
 void rai::App::SendToGateway(const rai::Ptree& message)
@@ -322,7 +578,7 @@ void rai::App::SyncAccount(const rai::Account& account)
         rai::AccountInfo info;
         bool error = ledger_.AccountInfoGet(transaction, account, info);
         bool account_exist = !error && info.Valid();
-        if (account_exist)
+        if (!account_exist)
         {
             height = 0;
         }
@@ -356,16 +612,24 @@ void rai::App::SyncAccount(const rai::Account& account, uint64_t height,
 
 void rai::App::SyncAccountAsync(const rai::Account& account)
 {
-    Background([this, account](){
-        SyncAccount(account);
+    std::weak_ptr<rai::App> app_w(Shared());
+    Background([app_w, account](){
+        if (auto app_s = app_w.lock())
+        {
+            app_s->SyncAccount(account);
+        }
     });
 }
 
 void rai::App::SyncAccountAsync(const rai::Account& account, uint64_t height,
                                 uint64_t count)
 {
-    Background([this, account, height, count]() {
-        SyncAccount(account, height, count);
+    std::weak_ptr<rai::App> app_w(Shared());
+    Background([app_w, account, height, count]() {
+        if (auto app_s = app_w.lock())
+        {
+            app_s->SyncAccount(account, height, count);
+        }
     });
 }
 
@@ -378,6 +642,43 @@ void rai::App::RegisterObservers_()
             if (app_s == nullptr) return;
             app_s->ReceiveGatewayMessage(message);
         };
+
+    gateway_ws_->status_observer_ = [app](rai::WebsocketStatus status) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+
+        app_s->Background([app, status]() {
+            if (auto app_s = app.lock())
+            {
+                app_s->observers_.gateway_status_.Notify(status);
+            }
+        });
+    };
+
+    block_observer_ = [app](const std::shared_ptr<rai::Block>& block,
+                            bool confirmed) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+
+        app_s->Background([app, block, confirmed]() {
+            if (auto app_s = app.lock())
+            {
+                app_s->observers_.block_.Notify(block, confirmed);
+            }
+        });
+    };
+
+    block_rollback_observer_ = [app](const std::shared_ptr<rai::Block>& block) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+
+        app_s->Background([app, block]() {
+            if (auto app_s = app.lock())
+            {
+                app_s->observers_.block_rollback_.Notify(block);
+            }
+        });
+    };
 }
 
 rai::ErrorCode rai::App::AppendBlock_(rai::Transaction& transaction,
@@ -525,7 +826,7 @@ rai::ErrorCode rai::App::RollbackBlock_(
 
     if (info.head_height_ == 0)
     {
-        error = ledger_.AccountInfoDel(transaction, block->Account());
+        error = ledger_.AccountInfoDel(transaction, account);
         IF_ERROR_RETURN(error, rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_DEL);
     }
     else
@@ -541,6 +842,7 @@ rai::ErrorCode rai::App::RollbackBlock_(
         IF_ERROR_RETURN(error, rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT);
     }
 
+    return AfterBlockRollback(transaction, block);
 }
 
 bool rai::App::GetHeadBlock_(rai::Transaction& transaction,

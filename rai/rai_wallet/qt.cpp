@@ -4,6 +4,7 @@
 #include <rai/common/blocks.hpp>
 #include <rai/common/parameters.hpp>
 #include <rai/common/numbers.hpp>
+#include <rai/common/extensions.hpp>
 #include <rai/secure/util.hpp>
 
 namespace
@@ -1090,8 +1091,14 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             std::vector<uint8_t> extensions;
             if (!sub_account.empty())
             {
-                rai::ExtensionAppend(rai::ExtensionType::SUB_ACCOUNT,
-                                     sub_account, extensions);
+                error = rai::ExtensionAppend(
+                    rai::ExtensionSubAccount(sub_account), extensions);
+                if (error)
+                {
+                    ShowLineError(*qt_main->send_.destination_);
+                    error_info = "Bad destination sub account";
+                    break;
+                }
             }
 
             std::string amount_str =
@@ -1119,8 +1126,14 @@ void rai::QtSend::Start(const std::weak_ptr<rai::QtMain>& qt_main_w)
             std::string note = qt_main->send_.note_->text().toStdString();
             if (!note.empty())
             {
-                rai::ExtensionAppend(rai::ExtensionType::NOTE, note,
-                                     extensions);
+                error =
+                    rai::ExtensionAppend(rai::ExtensionNote(note), extensions);
+                if (error)
+                {
+                    ShowLineError(*qt_main->send_.note_);
+                    error_info = "Bad note";
+                    break;
+                }
             }
 
             rai::ErrorCode error_code = qt_main->wallets_->AccountSend(
@@ -3111,8 +3124,13 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateSend(
     std::vector<uint8_t> extensions;
     if (!sub_account.empty())
     {
-        rai::ExtensionAppend(rai::ExtensionType::SUB_ACCOUNT, sub_account,
-                             extensions);
+        bool error = rai::ExtensionAppend(rai::ExtensionSubAccount(sub_account),
+                                          extensions);
+        if (error)
+        {
+            ShowError("Bad sub account");
+            return nullptr;
+        }
     }
 
     std::string amount_str = amount_->text().toStdString();

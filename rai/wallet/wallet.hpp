@@ -318,4 +318,4 @@ private:
     std::function<void(const rai::Account&)> fork_observer_;
     std::function<void()> time_synced_observer_;
 };
-};  // namespace rai
+}  // namespace rai

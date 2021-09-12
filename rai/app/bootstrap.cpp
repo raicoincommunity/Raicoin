@@ -36,9 +36,24 @@ rai::AppBootstrap::AppBootstrap(rai::App& app)
 {
 }
 
-void rai::AppBootstrap::Run()
+bool rai::AppBootstrap::Ready()
 {
     if (!app_.GatewayConnected())
+    {
+        return false;
+    }
+
+    if (app_.Busy())
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void rai::AppBootstrap::Run()
+{
+    if (!Ready())
     {
         return;
     }
@@ -64,7 +79,7 @@ void rai::AppBootstrap::Run()
     }
 
     auto retry = std::chrono::seconds(5);
-    if (last_request_ + retry < now)
+    if (last_request_ + retry > now)
     {
         return;
     }
@@ -97,16 +112,57 @@ void rai::AppBootstrap::Stop()
 void rai::AppBootstrap::ReceiveAccountHeadMessage(
     const std::shared_ptr<rai::Ptree>& message)
 {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (stopped_)
+    auto request_id_o = message->get_optional<std::string>("request_id");
+    if (!request_id_o)
     {
         return;
     }
 
+    uint64_t request_id;
+    bool error = rai::StringToUint(*request_id_o, request_id);
+    IF_ERROR_RETURN_VOID(error);
+
     auto status_o = message->get_optional<std::string>("status");
-    if (!status_o)
+    if (!status_o || *status_o != "success")
     {
         return;
+    }
+
+    auto more_o = message->get_optional<std::string>("more");
+    if (!more_o)
+    {
+        return;
+    }
+    bool more = *more_o == "true";
+
+    rai::Account next;
+    auto next_o = message->get_optional<std::string>("next");
+    if (!next_o || next.DecodeAccount(*next_o))
+    {
+        return;
+    }
+
+    bool ready = Ready();
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (stopped_ || request_id != request_id_)
+        {
+            return;
+        }
+
+        if (more)
+        {
+            next_ = next;
+            if (ready)
+            {
+                SendRequest_(lock);
+            }
+        }
+        else
+        {
+            next_ = 0;
+            running_ = false;
+        }
     }
 
     std::vector<rai::AccountHead> heads;
@@ -123,18 +179,21 @@ void rai::AppBootstrap::ReceiveAccountHeadMessage(
             heads.push_back(head);
         }
     }
-
-
-
+    ProcessAccountHeads_(heads);
 }
 
-uint64_t rai::AppBootstrap::NewRequestId()
+uint64_t rai::AppBootstrap::NewRequestId_(std::unique_lock<std::mutex>& lock)
 {
     return ++request_id_;
 }
 
 void rai::AppBootstrap::SendRequest_(std::unique_lock<std::mutex>& lock)
 {
+    last_request_ = std::chrono::steady_clock::now();
+    uint64_t request_id = NewRequestId_(lock);
+    rai::Account next = next_;
+    lock.unlock();
+
     rai::Ptree ptree;
 
     if (count_ <= 3 || 0 == count_ % 12)
@@ -145,20 +204,17 @@ void rai::AppBootstrap::SendRequest_(std::unique_lock<std::mutex>& lock)
     {
         ptree.put("action", "active_account_heads");
     }
-    ptree.put("request_id", std::to_string(NewRequestId()));
-    ptree.put("next", next_.StringAccount());
+    ptree.put("request_id", std::to_string(request_id));
+    ptree.put("next", next.StringAccount());
     ptree.put("count", "1000");
-    ptree.put_child("type", app_.AccountTypes());
+    ptree.put_child("account_types", app_.AccountTypes());
 
-    last_request_ = std::chrono::steady_clock::now();
-
-    lock.unlock();
     app_.SendToGateway(ptree);
+
     lock.lock();
 }
 
-void rai::AppBootstrap::ProcessAccountHeads(
-    std::unique_lock<std::mutex>& lock,
+void rai::AppBootstrap::ProcessAccountHeads_(
     const std::vector<rai::AccountHead>& heads)
 {
     if (heads.empty())
@@ -166,15 +222,45 @@ void rai::AppBootstrap::ProcessAccountHeads(
         return;
     }
 
-    lock.unlock();
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, app_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
+    bool error;
+    bool account_exists;
+    rai::AccountInfo info;
     for (const auto& i : heads)
     {
+        error = app_.ledger_.AccountInfoGet(transaction, i.account_, info);
+        account_exists = !error && info.Valid();
+        if (!account_exists)
+        {
+            app_.SyncAccountAsync(i.account_, 0);
+            continue;
+        }
 
+        if (i.head_ == info.head_)
+        {
+            continue;
+        }
+
+        if (i.height_ < info.tail_height_ || info.Confirmed(i.height_))
+        {
+            continue;
+        }
+
+        if (i.height_ > info.head_height_)
+        {
+            app_.SyncAccountAsync(i.account_, info.head_height_ + 1);
+            continue;
+        }
+
+        if (app_.ledger_.BlockExists(transaction, i.head_))
+        {
+            continue;
+        }
+
+        // fork
+        app_.block_confirm_.Add(i.account_, i.height_, i.head_);
     }
-
-    lock.lock();
 }

@@ -29,6 +29,11 @@ bool rai::StreamEnd(rai::Stream& stream)
 
 std::string rai::BytesToHex(const uint8_t* data, size_t size)
 {
+    if (size == 0)
+    {
+        return "";
+    }
+
     std::stringstream stream;
 
     stream << std::hex << std::uppercase << std::noshowbase

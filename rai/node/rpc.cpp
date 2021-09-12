@@ -133,6 +133,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         AccountForks();
     }
+    else if (action == "account_heads")
+    {
+        AccountHeads();
+    }
     else if (action == "account_info")
     {
         AccountInfo();
@@ -144,6 +148,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     else if (action == "account_unsubscribe")
     {
         AccountUnsubscribe();
+    }
+    else if (action == "active_account_heads")
+    {
+        ActiveAccountHeads();
     }
     else if (action == "block_confirm")
     {
@@ -385,6 +393,58 @@ void rai::NodeRpcHandler::AccountForks()
     response_.put_child("forks", forks);
 }
 
+void rai::NodeRpcHandler::AccountHeads()
+{
+    rai::Account next;
+    bool error = GetNext_(next);
+    IF_ERROR_RETURN_VOID(error);
+    
+    uint64_t count;
+    error = GetCount_(count);
+    IF_ERROR_RETURN_VOID(error);
+    if (count == 0 || count > 1000)
+    {
+        count = 1000;
+    }
+
+    std::vector<rai::BlockType> types;
+    error = GetAccountTypes_(types);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    bool more = true;
+    rai::AccountInfo info;
+    rai::Ptree heads;
+    while (count--)
+    {
+        error = node_.ledger_.NextAccountInfo(transaction, next, info);
+        if (error)
+        {
+            next = 0;
+            more = false;
+            break;
+        }
+
+        if (info.Valid() && rai::Contain(types, info.type_))
+        {
+            rai::Ptree entry;
+            entry.put("account", next.StringAccount());
+            entry.put("height", std::to_string(info.head_height_));
+            entry.put("head", info.head_.StringHex());
+            heads.push_back(std::make_pair("", entry));
+        }
+
+        next += 1;
+    }
+
+    response_.put("status", "success");
+    response_.put("more", more ? "true" : "false");
+    response_.put("next", next.StringAccount());
+    response_.put_child("heads", heads);
+}
+
 void rai::NodeRpcHandler::AccountInfo()
 {
     rai::Account account;
@@ -517,6 +577,65 @@ void rai::NodeRpcHandler::AccountUnsubscribe()
     response_.put("success", "");
 }
 
+void rai::NodeRpcHandler::ActiveAccountHeads()
+{
+    rai::Account next;
+    bool error = GetNext_(next);
+    IF_ERROR_RETURN_VOID(error);
+    
+    uint64_t count;
+    error = GetCount_(count);
+    IF_ERROR_RETURN_VOID(error);
+    if (count == 0 || count > 1000)
+    {
+        count = 1000;
+    }
+
+    std::vector<rai::BlockType> types;
+    error = GetAccountTypes_(types);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    bool more = true;
+    rai::AccountInfo info;
+    rai::Ptree heads;
+    while (count--)
+    {
+        error = node_.active_accounts_.Next(next);
+        if (error)
+        {
+            next = 0;
+            more = false;
+            break;
+        }
+
+        error = node_.ledger_.AccountInfoGet(transaction, next, info);
+        if (error || !info.Valid())
+        {
+            next += 1;
+            continue;
+        }
+
+        if (rai::Contain(types, info.type_))
+        {
+            rai::Ptree entry;
+            entry.put("account", next.StringAccount());
+            entry.put("height", std::to_string(info.head_height_));
+            entry.put("head", info.head_.StringHex());
+            heads.push_back(std::make_pair("", entry));
+        }
+
+        next += 1;
+    }
+
+    response_.put("status", "success");
+    response_.put("more", more ? "true" : "false");
+    response_.put("next", next.StringAccount());
+    response_.put_child("heads", heads);
+}
+
 void rai::NodeRpcHandler::BlockConfirm()
 {
     rai::Account account;
@@ -565,14 +684,24 @@ void rai::NodeRpcHandler::BlockConfirm()
         return;
     }
 
+    std::shared_ptr<rai::Block> block(nullptr);
     if (height > info.head_height_)
     {
-        response_.put("status", "miss");
+        error = node_.ledger_.RollbackBlockGet(transaction, hash, block);
+        if (error)
+        {
+            response_.put("status", "miss");
+            return;
+        }
+
+        rai::Ptree block_ptree;
+        block->SerializeJson(block_ptree);
+        response_.add_child("block", block_ptree);
+        response_.put("status", "rollback");
         return;
     }
 
     bool fork = false;
-    std::shared_ptr<rai::Block> block(nullptr);
     bool error = node_.ledger_.BlockGet(transaction, hash, block);
     if (error)
     {
