@@ -1204,6 +1204,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to delete account from ledger";
         }
+        case rai::ErrorCode::APP_RPC_MISS_FIELD_TRACE:
+        {
+            return "The trace field is missing";
+        }
+        case rai::ErrorCode::APP_RPC_INVALID_FIELD_TRACE:
+        {
+            return "Invalid trace field";
+        }
         default:
         {
             return "Invalid error code";

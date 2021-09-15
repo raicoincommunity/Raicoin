@@ -25,10 +25,11 @@ class AppBootstrap
 public:
     AppBootstrap(rai::App&);
 
-    bool Ready();
+    bool Ready() const;
     void Run();
     void Reset();
     void Stop();
+    void Status(rai::Ptree&) const;
     void ReceiveAccountHeadMessage(const std::shared_ptr<rai::Ptree>&);
 
     rai::App& app_;

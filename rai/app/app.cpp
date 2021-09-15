@@ -46,6 +46,7 @@ void rai::App::Start()
             std::chrono::seconds(5));
     Ongoing(std::bind(&rai::AppBootstrap::Run, &bootstrap_),
             std::chrono::seconds(3));
+    Ongoing(std::bind(&rai::App::Subscribe, this), std::chrono::seconds(300));
 
     // todo:
 }
@@ -128,6 +129,12 @@ rai::Ptree rai::App::AccountTypes() const
     return ptree;
 }
 
+size_t rai::App::ActionSize() const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    return actions_.size();
+}
+
 bool rai::App::BlockCacheFull() const
 {
     return block_cache_.Size() >= rai::App::MAX_BLOCK_CACHE_SIZE;
@@ -148,6 +155,11 @@ bool rai::App::GatewayConnected() const
 void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
                             bool confirmed)
 {
+    if (!rai::Contain(account_types_, block->Type()))
+    {
+        return;
+    }
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     {
         rai::Transaction transaction(error_code, ledger_, true);
@@ -260,6 +272,11 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
 
 void rai::App::ProcessBlockRollback(const std::shared_ptr<rai::Block>& block)
 {
+    if (!rai::Contain(account_types_, block->Type()))
+    {
+        return;
+    }
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     {
         rai::Transaction transaction(error_code, ledger_, true);
@@ -408,7 +425,7 @@ void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
         }
         else if (ack == "block_confirm")
         {
-            //todo:
+            ReceiveBlockConfirmAck(message);
         }
     }
 
@@ -423,6 +440,10 @@ void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
         else if (notify == "block_confirm")
         {
             ReceiveBlockConfirmNotify(message);
+        }
+        else if (notify == "block_rollback")
+        {
+
         }
     }
 }
@@ -495,15 +516,34 @@ void rai::App::ReceiveBlockConfirmAck(
         }
 
         QueueBlockRollback(block);
-        return;
+        block_confirm_.Remove(block);
     }
-    else if (*status_o != "success")
+    else if (*status_o == "success" || *status_o == "fork")
     {
-        return;
-    }
+        auto confirmed_o = message->get_optional<std::string>("confirmed");
+        if (!confirmed_o || *confirmed_o != "true")
+        {
+            return;
+        }
 
-    // todo:
-    
+        auto block_o = message->get_child_optional("block");
+        if (!block_o || block_o->empty())
+        {
+            return;
+        }
+        block = rai::DeserializeBlockJson(error_code, *block_o);
+        if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+        {
+            return;
+        }
+
+        QueueBlock(block, true);
+        block_confirm_.Remove(block);
+    }
+    else
+    {
+        // do nothing
+    }
 }
 
 void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
@@ -561,9 +601,56 @@ void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
     }
 }
 
+void rai::App::ReceiveBlockRollbackNotify(
+    const std::shared_ptr<rai::Ptree>& message)
+{
+
+    auto block_o = message->get_child_optional("block");
+    if (!block_o || block_o->empty())
+    {
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block(nullptr);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    block = rai::DeserializeBlockJson(error_code, *block_o);
+    if (error_code != rai::ErrorCode::SUCCESS || block == nullptr)
+    {
+        return;
+    }
+
+    QueueBlockRollback(block);
+}
+
 void rai::App::SendToGateway(const rai::Ptree& message)
 {
     gateway_ws_->Send(message);
+}
+
+void rai::App::Subscribe()
+{
+    SubscribeBlockAppend();
+    SubscribeBlockRollbacK();
+}
+
+void rai::App::SubscribeBlockAppend()
+{
+    rai::Ptree ptree;
+
+    ptree.put("action", "event_subscribe");
+    ptree.put("event", "block_append");
+
+    SendToGateway(ptree);
+}
+
+void rai::App::SubscribeBlockRollbacK()
+{
+    rai::Ptree ptree;
+
+    ptree.put("action", "event_subscribe");
+    ptree.put("event", "block_rollback");
+
+    SendToGateway(ptree);
 }
 
 void rai::App::SyncAccount(const rai::Account& account)
@@ -679,6 +766,22 @@ void rai::App::RegisterObservers_()
             }
         });
     };
+
+    observers_.gateway_status_.Add([this](rai::WebsocketStatus status) {
+        if (status == rai::WebsocketStatus::CONNECTED)
+        {
+            std::cout << "node gateway connected\n";
+            Subscribe();
+        }
+        else if (status == rai::WebsocketStatus::CONNECTING)
+        {
+            std::cout << "node gateway connecting\n";
+        }
+        else
+        {
+            std::cout << "node gateway disconnected\n";
+        }
+    });
 }
 
 rai::ErrorCode rai::App::AppendBlock_(rai::Transaction& transaction,

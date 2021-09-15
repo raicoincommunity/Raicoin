@@ -71,6 +71,12 @@ void rai::BlockConfirm::Remove(const std::shared_ptr<rai::Block>& block)
     condition_.notify_all();
 }
 
+size_t rai::BlockConfirm::Size() const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    return entries_.size();
+}
+
 void rai::BlockConfirm::Run()
 {
     std::unique_lock<std::mutex> lock(mutex_);
