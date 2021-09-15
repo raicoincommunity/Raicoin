@@ -36,7 +36,7 @@ rai::AppBootstrap::AppBootstrap(rai::App& app)
 {
 }
 
-bool rai::AppBootstrap::Ready()
+bool rai::AppBootstrap::Ready() const
 {
     if (!app_.GatewayConnected())
     {
@@ -107,6 +107,40 @@ void rai::AppBootstrap::Stop()
 {
     std::unique_lock<std::mutex> lock(mutex_);
     stopped_ = true;
+}
+
+void rai::AppBootstrap::Status(rai::Ptree& status) const
+{
+    status.put("ready", rai::BoolToString(Ready()));
+    std::lock_guard<std::mutex> lock(mutex_);
+    status.put("running", rai::BoolToString(running_));
+    status.put("count", std::to_string(count_));
+    status.put("next", next_.StringHex());
+
+    auto now = std::chrono::steady_clock::now();
+    if (last_run_ == std::chrono::steady_clock::time_point())
+    {
+        status.put("last_run", "never");
+    }
+    else
+    {
+        auto last_run =
+            std::chrono::duration_cast<std::chrono::seconds>(now - last_run_)
+                .count();
+        status.put("last_run", std::to_string(last_run) + " seconds ago");
+    }
+
+    if (last_request_ == std::chrono::steady_clock::time_point())
+    {
+        status.put("last_request", "never");
+    }
+    else
+    {
+        auto last_request =
+            std::chrono::duration_cast<std::chrono::seconds>(now - last_request_)
+                .count();
+        status.put("last_request", std::to_string(last_request) + " seconds ago");
+    }
 }
 
 void rai::AppBootstrap::ReceiveAccountHeadMessage(

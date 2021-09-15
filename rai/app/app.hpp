@@ -67,6 +67,7 @@ public:
     void Ongoing(const std::function<void()>&, const std::chrono::seconds&);
 
     rai::Ptree AccountTypes() const;
+    size_t ActionSize() const;
     bool BlockCacheFull() const;
     void ConnectToGateway();
     bool GatewayConnected() const;
@@ -83,7 +84,11 @@ public:
     void ReceiveBlockConfirmNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockConfirmAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveBlockRollbackNotify(const std::shared_ptr<rai::Ptree>&);
     void SendToGateway(const rai::Ptree&);
+    void Subscribe();
+    void SubscribeBlockAppend();
+    void SubscribeBlockRollbacK();
     void SyncAccount(const rai::Account&);
     void SyncAccount(const rai::Account&, uint64_t,
                      uint64_t = rai::App::BLOCKS_QUERY_COUNT);

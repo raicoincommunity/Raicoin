@@ -35,6 +35,7 @@ public:
     void Add(const rai::Account&, uint64_t, const rai::BlockHash&);
     void Add(const rai::BlockConfirmEntry&);
     void Remove(const std::shared_ptr<rai::Block>&);
+    size_t Size() const;
 
     rai::App& app_;
 

@@ -320,6 +320,9 @@ enum class ErrorCode : int
     APP_PROCESS_LEDGER_BLOCK_DEL        = 616,
     APP_PROCESS_LEDGER_ACCOUNT_DEL      = 617,
 
+    APP_RPC_MISS_FIELD_TRACE            = 650,
+    APP_RPC_INVALID_FIELD_TRACE         = 651,
+
     MAX = 700
 };
 

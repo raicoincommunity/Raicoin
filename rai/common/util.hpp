@@ -241,6 +241,11 @@ inline size_t StringCount(const std::string& str, char c)
     return count;
 }
 
+inline std::string BoolToString(bool b)
+{
+    return b ? "true" : "false";
+}
+
 void StringLeftTrim(std::string&, const std::string&);
 void StringRightTrim(std::string&, const std::string&);
 void StringTrim(std::string&, const std::string&);
