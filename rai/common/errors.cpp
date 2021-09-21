@@ -494,6 +494,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Unknown extension type";
         }
+        case rai::ErrorCode::CONFIG_APP_VERSION:
+        {
+            return "Unknow app config version";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -743,6 +747,30 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_CONFIG_ENABLE_DELEGATOR_LIST:
         {
             return "Failed to parse enable_delegator_list from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_APP_VERSION:
+        {
+            return "Failed to parse app version from config file";
+        }
+        case rai::ErrorCode::WEBSOCKET_ACCEPT:
+        {
+            return "Websocket accept failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_CLOSE:
+        {
+            return "Websocket close failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_SEND:
+        {
+            return "Websocket send failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_RECEIVE:
+        {
+            return "Websocket receive failed";
+        }
+        case rai::ErrorCode::JSON_CONFIG_NODE_GATEWAY:
+        {
+            return "Failed to parse node_gateway from config file";
         }
         case rai::ErrorCode::RPC_GENERIC:
         {

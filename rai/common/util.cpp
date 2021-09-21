@@ -273,7 +273,7 @@ rai::Url::operator bool() const
     return !String().empty();
 }
 
-bool rai::Url::CheckProtocol()
+bool rai::Url::CheckProtocol() const
 {
     if (protocol_ != "http" && protocol_ != "https" && protocol_ != "ws"
         && protocol_ != "wss")
@@ -283,3 +283,9 @@ bool rai::Url::CheckProtocol()
 
     return false;
 }
+
+bool rai::Url::Ssl() const
+{
+    return protocol_ == "https" || protocol_ == "wss";
+}
+

@@ -1267,12 +1267,6 @@ void rai::BootstrapListener::Accept()
 {
 
     auto socket = std::make_shared<rai::Socket>(node_.Shared());
-    if (socket == nullptr)
-    {
-        // log
-        // stat
-        return;
-    }
     acceptor_.async_accept(socket->socket_,
                            [this, socket](const boost::system::error_code& ec) {
                                Connected(ec, socket);

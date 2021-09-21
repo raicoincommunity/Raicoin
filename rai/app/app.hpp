@@ -13,6 +13,8 @@
 #include <rai/app/blockcache.hpp>
 #include <rai/app/bootstrap.hpp>
 #include <rai/app/blockconfirm.hpp>
+#include <rai/app/config.hpp>
+#include <rai/app/subscribe.hpp>
 
 namespace rai
 {
@@ -45,7 +47,8 @@ class App : public std::enable_shared_from_this<rai::App>
 {
 public:
     App(rai::ErrorCode&, rai::Alarm&, const boost::filesystem::path&,
-        const rai::Url&, const std::vector<rai::BlockType>&);
+        const rai::AppConfig&, rai::AppSubscriptions&,
+        const std::vector<rai::BlockType>&);
     virtual ~App() = default;
 
     virtual rai::ErrorCode PreBlockAppend(rai::Transaction&,
@@ -107,6 +110,8 @@ public:
     static uint64_t constexpr BLOCKS_QUERY_COUNT = 100;
 
     rai::Alarm& alarm_;
+    const rai::AppConfig& config_;
+    rai::AppSubscriptions& subscribe_;
     rai::Store store_;
     rai::Ledger ledger_;
     rai::Url gateway_url_;

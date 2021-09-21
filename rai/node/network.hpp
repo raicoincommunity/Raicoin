@@ -9,7 +9,6 @@
 
 namespace rai
 {
-using IP = boost::asio::ip::address_v4;
 using UdpEndpoint = boost::asio::ip::udp::endpoint;
 using Endpoint = UdpEndpoint;
 

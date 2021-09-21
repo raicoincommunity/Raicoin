@@ -7,6 +7,10 @@ add_library (app
 	blockconfirm.hpp
 	bootstrap.cpp
 	bootstrap.hpp
+	subscribe.cpp
+	subscribe.hpp
+	config.cpp
+	config.hpp
 )
 
 target_link_libraries (app

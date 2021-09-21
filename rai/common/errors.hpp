@@ -129,6 +129,11 @@ enum class ErrorCode : int
     EXTENSIONS_BROKEN_STREAM             = 119,
     EXTENSION_TYPE                       = 120,
     EXTENSION_PARSE_UNKNOWN              = 121,
+    CONFIG_APP_VERSION                   = 122,
+    WEBSOCKET_ACCEPT                     = 123,
+    WEBSOCKET_CLOSE                      = 124,
+    WEBSOCKET_SEND                       = 125,
+    WEBSOCKET_RECEIVE                    = 126,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,
@@ -195,6 +200,8 @@ enum class ErrorCode : int
     JSON_CONFIG_RECEIVE_MINIMUM          = 287,
     JSON_CONFIG_ENABLE_RICH_LIST         = 288,
     JSON_CONFIG_ENABLE_DELEGATOR_LIST    = 289,
+    JSON_CONFIG_APP_VERSION              = 290,
+    JSON_CONFIG_NODE_GATEWAY             = 291,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                     = 300,
