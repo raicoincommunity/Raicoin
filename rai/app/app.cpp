@@ -9,12 +9,13 @@ rai::AppTrace::AppTrace()
 
 rai::App::App(rai::ErrorCode& error_code, rai::Alarm& alarm,
               const boost::filesystem::path& data_path,
-              const rai::Url& gateway_url,
+              const rai::AppConfig& config, rai::AppSubscriptions& subscribe,
               const std::vector<rai::BlockType>& account_types)
     : alarm_(alarm),
+      config_(config),
+      subscribe_(subscribe),
       store_(error_code, data_path / "app_data.ldb"),
       ledger_(error_code, store_, false),
-      gateway_url_(gateway_url),
       account_types_(account_types),
       service_runner_(service_),
       bootstrap_(*this),
@@ -22,8 +23,9 @@ rai::App::App(rai::ErrorCode& error_code, rai::Alarm& alarm,
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
-    if (!gateway_url
-        || (gateway_url.protocol_ != "ws" && gateway_url.protocol_ != "wss"))
+    if (!config.node_gateway_
+        || (config.node_gateway_.protocol_ != "ws"
+            && config.node_gateway_.protocol_ != "wss"))
     {
         error_code = rai::ErrorCode::APP_INVALID_GATEWAY_URL;
         return;
@@ -443,7 +445,7 @@ void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
         }
         else if (notify == "block_rollback")
         {
-
+            ReceiveBlockRollbackNotify(message);
         }
     }
 }
@@ -555,7 +557,7 @@ void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
     }
 
     rai::Account account;
-    auto account_o = message->get_optional<std::string>("account");
+    auto account_o = message->get_optional<std::string>("request_id");
     if (!account_o || account.DecodeAccount(*account_o))
     {
         return;
@@ -563,7 +565,7 @@ void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
 
     if (*status_o == "miss")
     {
-        // todo: set account as synced
+        subscribe_.Synced(account);
         return;
     }
     else if (*status_o != "success")

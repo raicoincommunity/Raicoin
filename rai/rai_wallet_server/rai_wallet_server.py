@@ -702,7 +702,7 @@ async def connect_to_service_provider(task):
     ws_id = ''
     try:
         session = ClientSession()
-        async with session.ws_connect(task['url']) as ws:
+        async with session.ws_connect(task['url'], heartbeat=30) as ws:
             ws_id = ws.id = str(uuid.uuid4())
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:

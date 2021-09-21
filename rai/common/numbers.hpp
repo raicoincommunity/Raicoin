@@ -87,6 +87,7 @@ union uint256_union
     std::string StringHex() const;
     std::string StringDec() const;
     std::string StringAccount() const;
+    void Random();
 
     std::array<uint8_t, 32> bytes;
     std::array<char, 32> chars;
@@ -98,6 +99,7 @@ using BlockHash  = uint256_union;
 using Account    = uint256_union;
 using PublicKey  = uint256_union;
 using PrivateKey = uint256_union;
+using UniqueId   = uint256_union;
 
 class AccountParser
 {

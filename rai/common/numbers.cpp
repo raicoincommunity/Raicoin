@@ -654,6 +654,11 @@ std::string rai::uint256_union::StringAccount() const
     return result;
 }
 
+void rai::uint256_union::Random()
+{
+    rai::random_pool.GenerateBlock(bytes.data(), bytes.size());
+}
+
 rai::AccountParser::AccountParser(const std::string& str)
 {
     error_ = true;

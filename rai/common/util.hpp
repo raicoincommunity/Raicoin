@@ -11,6 +11,7 @@
 #include <sstream>
 #include <type_traits>
 #include <vector>
+#include <boost/asio/ip/address_v4.hpp>
 #include <boost/endian/conversion.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/iostreams/device/back_inserter.hpp>
@@ -49,6 +50,7 @@ struct is_bytes_array<std::array<uint8_t, N>> : std::true_type
 namespace rai
 {
 using Stream = std::basic_streambuf<uint8_t>;
+using IP = boost::asio::ip::address_v4;
 
 template <typename T>
 typename std::enable_if<!is_bytes_array<T>::value && !std::is_enum<T>::value,
@@ -315,7 +317,8 @@ public:
     std::string String() const;
     uint16_t DefaultPort() const;
     explicit operator bool() const;
-    bool CheckProtocol();
+    bool CheckProtocol() const;
+    bool Ssl() const;
 
     std::string protocol_;
     std::string host_;
