@@ -2,6 +2,8 @@
 
 #include <rai/app/app.hpp>
 
+std::chrono::seconds constexpr rai::AppSubscriptions::CUTOFF_TIME;
+
 rai::AppSubscriptionData::AppSubscriptionData(): synced_(false)
 {
 }
@@ -10,12 +12,13 @@ rai::AppSubscriptions::AppSubscriptions(rai::App& app) : app_(app)
 {
 }
 
-void rai::AppSubscriptions::AfterSubscribe(const rai::Account& account,
-                                           bool existing)
+void rai::AppSubscriptions::AfterSubscribe(
+    const rai::Account& account,
+    const std::shared_ptr<rai::AppSubscriptionData>& data)
 {
 }
 
-void rai::AppSubscriptions::PreUnsubscribe(
+void rai::AppSubscriptions::AfterUnsubscribe(
     const rai::Account& account,
     const std::shared_ptr<rai::AppSubscriptionData>& data)
 {
@@ -27,69 +30,181 @@ std::shared_ptr<rai::AppSubscriptionData> rai::AppSubscriptions::MakeData(
     return std::make_shared<rai::AppSubscriptionData>();
 }
 
-bool rai::AppSubscriptions::Add(const rai::Account& account,
-                                rai::AppSubscription& modified)
+void rai::AppSubscriptions::Cutoff()
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    rai::AppSubscription sub{account, std::chrono::steady_clock::now(),
-                             MakeData(account)};
-    auto it = subscriptions_.find(sub.account_);
-    if (it != subscriptions_.end())
+    std::unique_lock<std::mutex> lock(mutex_);
+
+    auto cutoff =
+        std::chrono::steady_clock::now() - rai::AppSubscriptions::CUTOFF_TIME;
+
+    while (true)
     {
-        subscriptions_.modify(it, [&](rai::AppSubscription& data) {
-            data.time_ = sub.time_;
-            modified = data;
-        });
-        return true;
-    }
-    else
-    {
-        subscriptions_.insert(sub);
-        modified = sub;
-        return false;
+        auto it = subscriptions_.get<rai::AppSubscriptionByTime>().begin();
+        if (it == subscriptions_.get<rai::AppSubscriptionByTime>().end())
+        {
+            return;
+        }
+        
+        if (it->time_ > cutoff)
+        {
+            return;
+        }
+        rai::Account account = it->account_;
+        subscriptions_.get<rai::AppSubscriptionByTime>().erase(it);
+
+        bool erase = false;
+        std::shared_ptr<rai::AppSubscriptionData> data(nullptr);
+        std::pair<rai::AppSubscriptionContainer::iterator,
+                  rai::AppSubscriptionContainer::iterator>
+            it_pair = subscriptions_.equal_range(boost::make_tuple(account));
+        if (it_pair.first == it_pair.second)
+        {
+            erase = true;
+            data = accounts_[account];
+            accounts_.erase(account);
+        }
+
+        if (erase)
+        {
+            lock.unlock();
+            AfterUnsubscribe(account, data);
+            lock.lock();
+        }
     }
 }
 
 void rai::AppSubscriptions::Synced(const rai::Account& account)
 {
-    bool notify = false;
+    std::vector<rai::UniqueId> clients;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = subscriptions_.find(account);
-        if (it == subscriptions_.end())
+        auto it = accounts_.find(account);
+        if (it == accounts_.end())
         {
             return;
         }
-        if (it->data_ && !it->data_->synced_)
+
+        if (it->second->synced_)
         {
-            subscriptions_.modify(it, [&](rai::AppSubscription& data) {
-                data.data_->synced_ = true;
-            });
-            notify = true;
+            return;
+        }
+
+        it->second->synced_ = true;
+    }
+
+    NotifyAccountSynced(account);
+}
+
+void rai::AppSubscriptions::Notify(const rai::Account& account,
+                                   const rai::Ptree& notify)
+{
+    std::vector<rai::UniqueId> clients;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::pair<rai::AppSubscriptionContainer::iterator,
+                  rai::AppSubscriptionContainer::iterator>
+            it_pair = subscriptions_.equal_range(boost::make_tuple(account));
+        for (auto& i = it_pair.first; i != it_pair.second; ++i)
+        {
+            clients.push_back(i->uid_);
         }
     }
 
-    if (notify)
+    for (const auto& i : clients)
     {
-        // todo:
+        app_.SendToClient(notify, i);
     }
 }
 
-rai::ErrorCode rai::AppSubscriptions::Subscribe(const rai::Account& account)
+void rai::AppSubscriptions::NotifyAccountSynced(const rai::Account& account)
 {
-    if (!app_.config_.callback_)
+    using P = rai::Provider;
+    rai::Ptree ptree;
+    P::PutAction(ptree, P::Action::APP_ACCOUNT_SYNC);
+    P::PutId(ptree, app_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+    Notify(account, ptree);
+}
+
+rai::ErrorCode rai::AppSubscriptions::Subscribe(const rai::Account& account,
+                                                const rai::UniqueId& uid)
+{
+    bool existing = false;
+    std::shared_ptr<rai::AppSubscriptionData> data(nullptr);
     {
-        return rai::ErrorCode::SUBSCRIBE_NO_CALLBACK;
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = accounts_.find(account);
+        if (it == accounts_.end())
+        {
+            data = MakeData(account);
+            accounts_[account] = data;
+        }
+        else
+        {
+            existing = true;
+            data = it->second;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        auto it_sub = subscriptions_.find(boost::make_tuple(account, uid));
+        if (it_sub == subscriptions_.end())
+        {
+            rai::AppSubscription sub{account, uid, now};
+            subscriptions_.insert(sub);
+        }
+        else
+        {
+            subscriptions_.modify(it_sub, [&](rai::AppSubscription& sub){
+                sub.time_ = now;
+            });
+        }
     }
 
-    rai::AppSubscription sub;
-    bool existing = Add(account, sub);
-    if (sub.data_ && !sub.data_->synced_)
+    if (!data->synced_)
     {
         app_.SyncAccountAsync(account);
     }
 
-    AfterSubscribe(account, existing);
+    if (!existing)
+    {
+        AfterSubscribe(account, data);
+    }
 
     return rai::ErrorCode::SUCCESS;
+}
+
+void rai::AppSubscriptions::Unsubscribe(const rai::UniqueId& uid)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+
+    while (true)
+    {
+        auto it = subscriptions_.get<rai::AppSubscriptionByUid>().lower_bound(uid);
+        if (it == subscriptions_.get<rai::AppSubscriptionByUid>().upper_bound(uid))
+        {
+            return;
+        }
+
+        rai::Account account = it->account_;
+        subscriptions_.get<rai::AppSubscriptionByUid>().erase(it);
+
+        bool erase = false;
+        std::shared_ptr<rai::AppSubscriptionData> data(nullptr);
+        std::pair<rai::AppSubscriptionContainer::iterator,
+                  rai::AppSubscriptionContainer::iterator>
+            it_pair = subscriptions_.equal_range(boost::make_tuple(account));
+        if (it_pair.first == it_pair.second)
+        {
+            erase = true;
+            data = accounts_[account];
+            accounts_.erase(account);
+        }
+
+        if (erase)
+        {
+            lock.unlock();
+            AfterUnsubscribe(account, data);
+            lock.lock();
+        }
+    }
 }

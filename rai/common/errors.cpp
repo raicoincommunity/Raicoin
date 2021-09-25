@@ -768,9 +768,21 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Websocket receive failed";
         }
+        case rai::ErrorCode::WEBSOCKET_QUEUE_OVERFLOW:
+        {
+            return "Websocket message queue overflow";
+        }
         case rai::ErrorCode::JSON_CONFIG_NODE_GATEWAY:
         {
             return "Failed to parse node_gateway from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_WS_ADDRESS:
+        {
+            return "Failed to parse websocket address from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_WS_PORT:
+        {
+            return "Failed to parse websocket port from config file";
         }
         case rai::ErrorCode::RPC_GENERIC:
         {
@@ -915,6 +927,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_INVALID_FIELD_ACCOUNT_TYPES:
         {
             return "[RPC] Invalid account_types field";
+        }
+        case rai::ErrorCode::RPC_ACTION_NOT_ALLOWED:
+        {
+            return "[RPC] Action not allowed";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

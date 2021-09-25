@@ -70,10 +70,11 @@ public:
     virtual ~RpcHandler() = default;
     void Check();
     void Process();
-    virtual void ProcessImpl() = 0;
     void Response();
-
     void Stop();
+
+    virtual void ProcessImpl() = 0;
+    virtual void ExtraCheck(const std::string&);
 
     static int constexpr MAX_JSON_DEPTH = 20;
     static uint32_t constexpr MAX_BODY_SIZE = 64 * 1024;

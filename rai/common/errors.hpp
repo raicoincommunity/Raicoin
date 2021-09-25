@@ -134,6 +134,7 @@ enum class ErrorCode : int
     WEBSOCKET_CLOSE                      = 124,
     WEBSOCKET_SEND                       = 125,
     WEBSOCKET_RECEIVE                    = 126,
+    WEBSOCKET_QUEUE_OVERFLOW             = 127,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                 = 200,
@@ -202,6 +203,8 @@ enum class ErrorCode : int
     JSON_CONFIG_ENABLE_DELEGATOR_LIST    = 289,
     JSON_CONFIG_APP_VERSION              = 290,
     JSON_CONFIG_NODE_GATEWAY             = 291,
+    JSON_CONFIG_WS_ADDRESS               = 292,
+    JSON_CONFIG_WS_PORT                  = 293,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                     = 300,
@@ -240,6 +243,7 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_NEXT          = 333,
     RPC_MISS_FIELD_ACCOUNT_TYPES    = 334,
     RPC_INVALID_FIELD_ACCOUNT_TYPES = 335,
+    RPC_ACTION_NOT_ALLOWED          = 336,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

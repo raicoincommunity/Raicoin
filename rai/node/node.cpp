@@ -2149,6 +2149,12 @@ rai::Amount rai::Node::Supply()
 
 void rai::Node::ReceiveWsMessage(const std::shared_ptr<rai::Ptree>& message)
 {
+    if (!rpc_)
+    {
+        rai::Ptree response;
+        response.put("error", "rpc not enabled");
+        return;
+    }
     std::stringstream ostream;
     boost::property_tree::write_json(ostream, *message);
     ostream.flush();

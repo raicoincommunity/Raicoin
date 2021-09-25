@@ -3,10 +3,13 @@
 #include <rai/app/app.hpp>
 
 rai::AppRpcHandler::AppRpcHandler(
-    rai::App& app, rai::Rpc& rpc, const std::string& body,
-    const boost::asio::ip::address_v4& ip,
+    rai::App& app, const rai::UniqueId& uid, bool check, rai::Rpc& rpc,
+    const std::string& body, const boost::asio::ip::address_v4& ip,
     const std::function<void(const rai::Ptree&)>& send_response)
-    : RpcHandler(rpc, body, ip, send_response), app_(app)
+    : RpcHandler(rpc, body, ip, send_response),
+      app_(app),
+      uid_(uid),
+      check_(check)
 {
 }
 
@@ -56,6 +59,21 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         error_code_ = rai::ErrorCode::RPC_UNKNOWN_ACTION;
     }
+}
+
+void rai::AppRpcHandler::ExtraCheck(const std::string& action)
+{
+    if (!check_)
+    {
+        return;
+    }
+
+    if (rai::Contain(app_.provider_actions_, action))
+    {
+        return;
+    }
+
+    error_code_ = rai::ErrorCode::RPC_ACTION_NOT_ALLOWED;
 }
 
 void rai::AppRpcHandler::AccountCount()

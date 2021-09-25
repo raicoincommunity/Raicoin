@@ -266,15 +266,20 @@ void rai::RpcHandler::Process()
         std::stringstream stream(body_);
         boost::property_tree::read_json(stream, request_);
         std::string action = request_.get<std::string>("action");
-        if (action == "stop")
-        {
-            if (!CheckLocal_())
-            {
-                Stop();
-            }
-        }
 
-        ProcessImpl();
+        ExtraCheck(action);
+        if (error_code_ == rai::ErrorCode::SUCCESS)
+        {
+            if (action == "stop")
+            {
+                if (!CheckLocal_())
+                {
+                    Stop();
+                }
+            }
+
+            ProcessImpl();
+        }
 
         response_.put("ack", action);
         auto request_id = request_.get_optional<std::string>("request_id");
@@ -287,6 +292,12 @@ void rai::RpcHandler::Process()
         if (client_id)
         {
             response_.put("client_id", *client_id);
+        }
+
+        auto service = request_.get_optional<std::string>("service");
+        if (service)
+        {
+            response_.put("service", *service);
         }
     }
     catch (const std::exception& e)
@@ -327,9 +338,18 @@ void rai::RpcHandler::Stop()
     rpc_.Stop();
 }
 
+void rai::RpcHandler::ExtraCheck(const std::string& action)
+{
+}
 
 bool rai::RpcHandler::CheckControl_()
 {
+    if (ip_ == boost::asio::ip::address_v4::any())
+    {
+        // from websocket
+        return true;
+    }
+    
     if (ip_ == boost::asio::ip::address_v4::loopback())
     {
         return false;
