@@ -15,6 +15,8 @@
 #include <rai/app/blockconfirm.hpp>
 #include <rai/app/config.hpp>
 #include <rai/app/subscribe.hpp>
+#include <rai/app/rpc.hpp>
+#include <rai/app/provider.hpp>
 
 namespace rai
 {
@@ -46,9 +48,10 @@ enum class AppActionPri : uint32_t
 class App : public std::enable_shared_from_this<rai::App>
 {
 public:
-    App(rai::ErrorCode&, rai::Alarm&, const boost::filesystem::path&,
-        const rai::AppConfig&, rai::AppSubscriptions&,
-        const std::vector<rai::BlockType>&);
+    App(rai::ErrorCode&, rai::Alarm&, boost::asio::io_service&,
+        const boost::filesystem::path&, const rai::AppConfig&,
+        rai::AppSubscriptions&, const std::vector<rai::BlockType>&,
+        const rai::Provider::Info&);
     virtual ~App() = default;
 
     virtual rai::ErrorCode PreBlockAppend(rai::Transaction&,
@@ -61,6 +64,9 @@ public:
         rai::Transaction&, const std::shared_ptr<rai::Block>) = 0;
     virtual rai::ErrorCode AfterBlockRollback(
         rai::Transaction&, const std::shared_ptr<rai::Block>) = 0;
+    virtual std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
+        const rai::UniqueId&, bool, const std::string&,
+        const std::function<void(const rai::Ptree&)>&) = 0;
 
     std::shared_ptr<rai::App> Shared();
     void Start();
@@ -88,6 +94,7 @@ public:
     void ReceiveBlockConfirmAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockRollbackNotify(const std::shared_ptr<rai::Ptree>&);
+    void SendToClient(const rai::Ptree&, const rai::UniqueId&);
     void SendToGateway(const rai::Ptree&);
     void Subscribe();
     void SubscribeBlockAppend();
@@ -98,6 +105,9 @@ public:
     void SyncAccountAsync(const rai::Account&);
     void SyncAccountAsync(const rai::Account&, uint64_t,
                           uint64_t = rai::App::BLOCKS_QUERY_COUNT);
+    void ReceiveWsMessage(const std::string&, const rai::UniqueId&);
+    void ProcessWsSession(const rai::UniqueId&, bool);
+    void NotifyProviderInfo(const rai::UniqueId&);
 
     template <typename T>
     void Background(T action)
@@ -110,20 +120,23 @@ public:
     static uint64_t constexpr BLOCKS_QUERY_COUNT = 100;
 
     rai::Alarm& alarm_;
+    boost::asio::io_service& service_;
     const rai::AppConfig& config_;
     rai::AppSubscriptions& subscribe_;
     rai::Store store_;
     rai::Ledger ledger_;
-    rai::Url gateway_url_;
     std::vector<rai::BlockType> account_types_;
-    boost::asio::io_service service_;
+    boost::asio::io_service service_gateway_;
     rai::OngoingServiceRunner service_runner_;
     std::shared_ptr<rai::WebsocketClient> gateway_ws_;
+    std::shared_ptr<rai::WebsocketServer> ws_server_;
     rai::AppTrace trace_;
     rai::AppObservers observers_;
     rai::BlockCache block_cache_;
     rai::AppBootstrap bootstrap_;
     rai::BlockConfirm block_confirm_;
+    rai::Provider::Info provider_info_;
+    std::vector<std::string> provider_actions_;
 
 protected:
     template <typename Derived>

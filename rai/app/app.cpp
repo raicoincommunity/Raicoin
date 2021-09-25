@@ -8,18 +8,22 @@ rai::AppTrace::AppTrace()
 }
 
 rai::App::App(rai::ErrorCode& error_code, rai::Alarm& alarm,
+              boost::asio::io_service& service,
               const boost::filesystem::path& data_path,
               const rai::AppConfig& config, rai::AppSubscriptions& subscribe,
-              const std::vector<rai::BlockType>& account_types)
+              const std::vector<rai::BlockType>& account_types,
+              const rai::Provider::Info& provider_info)
     : alarm_(alarm),
+      service_(service),
       config_(config),
       subscribe_(subscribe),
       store_(error_code, data_path / "app_data.ldb"),
       ledger_(error_code, store_, false),
       account_types_(account_types),
-      service_runner_(service_),
+      service_runner_(service_gateway_),
       bootstrap_(*this),
-      block_confirm_(*this)
+      block_confirm_(*this),
+      provider_info_(provider_info)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
@@ -30,9 +34,16 @@ rai::App::App(rai::ErrorCode& error_code, rai::Alarm& alarm,
         error_code = rai::ErrorCode::APP_INVALID_GATEWAY_URL;
         return;
     }
+
+    const rai::Url& gateway = config_.node_gateway_;
     gateway_ws_ = std::make_shared<rai::WebsocketClient>(
-        service_, gateway_url_.host_, gateway_url_.port_, gateway_url_.path_,
-        gateway_url_.protocol_ == "wss");
+        service_gateway_, gateway.host_, gateway.port_, gateway.path_,
+        gateway.protocol_ == "wss");
+
+    ws_server_ = std::make_shared<rai::WebsocketServer>(
+        service_, config_.ws_port_, config_.ws_port_);
+
+    provider_actions_ = rai::Provider::ToString(provider_info_.actions_);
 }
 
 std::shared_ptr<rai::App> rai::App::Shared()
@@ -49,6 +60,8 @@ void rai::App::Start()
     Ongoing(std::bind(&rai::AppBootstrap::Run, &bootstrap_),
             std::chrono::seconds(3));
     Ongoing(std::bind(&rai::App::Subscribe, this), std::chrono::seconds(300));
+    Ongoing(std::bind(&rai::AppSubscriptions::Cutoff, &subscribe_),
+            std::chrono::seconds(5));
 
     // todo:
 }
@@ -624,6 +637,11 @@ void rai::App::ReceiveBlockRollbackNotify(
     QueueBlockRollback(block);
 }
 
+void rai::App::SendToClient(const rai::Ptree& message, const rai::UniqueId& uid)
+{
+    ws_server_->Send(uid, message);
+}
+
 void rai::App::SendToGateway(const rai::Ptree& message)
 {
     gateway_ws_->Send(message);
@@ -722,6 +740,58 @@ void rai::App::SyncAccountAsync(const rai::Account& account, uint64_t height,
     });
 }
 
+void rai::App::ReceiveWsMessage(const std::string& message,
+                                const rai::UniqueId& uid)
+{
+    std::shared_ptr<rai::AppRpcHandler> handler = MakeRpcHandler(
+        uid, true, message, [this, uid](const rai::Ptree& response) {
+            ws_server_->Send(uid, response);
+        });
+    handler->Process();
+}
+
+void rai::App::ProcessWsSession(const rai::UniqueId& uid, bool add)
+{
+
+    if (add)
+    {
+        NotifyProviderInfo(uid);
+    }
+    else
+    {
+        subscribe_.Unsubscribe(uid);
+    }
+}
+
+void rai::App::NotifyProviderInfo(const rai::UniqueId& uid)
+{
+    using P = rai::Provider;
+    rai::Ptree ptree;
+
+    P::PutId(ptree, provider_info_.id_, "register");
+
+    rai::Ptree filters;
+    for (auto filter : provider_info_.filters_)
+    {
+        rai::Ptree entry;
+        entry.put("", P::ToString(filter));
+        filters.push_back(std::make_pair("", entry));
+    }
+    ptree.put_child("filters", filters);
+
+    rai::Ptree actions;
+    for (auto action : provider_info_.actions_)
+    {
+        rai::Ptree entry;
+        entry.put("", P::ToString(action));
+        actions.push_back(std::make_pair("", entry));
+    }
+    ptree.put_child("actions", actions);
+
+    SendToClient(ptree, uid);
+}
+
+
 void rai::App::RegisterObservers_()
 {
     std::weak_ptr<rai::App> app(Shared());
@@ -742,6 +812,19 @@ void rai::App::RegisterObservers_()
                 app_s->observers_.gateway_status_.Notify(status);
             }
         });
+    };
+
+    ws_server_->message_observer_ = [app](const std::string& message,
+                                          const rai::UniqueId& uid) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+        app_s->ReceiveWsMessage(message, uid);
+    };
+
+    ws_server_->session_observer_ = [app](const rai::UniqueId& uid, bool add) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+        app_s->ProcessWsSession(uid, add);
     };
 
     block_observer_ = [app](const std::shared_ptr<rai::Block>& block,

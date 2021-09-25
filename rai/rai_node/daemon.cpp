@@ -24,13 +24,19 @@ rai::ErrorCode rai::Daemon::Run(const boost::filesystem::path& data_path,
 
         if (config.node_.callback_url_)
         {
-            if ((config.node_.callback_url_.protocol_ == "wss"
-                || config.node_.callback_url_.protocol_ == "https")
+            if ((config.node_.callback_url_.Ssl())
                 && !boost::filesystem::exists("cacert.pem"))
             {
                 std::cout << "Error: the cacert.pem is missing, you can download "
                             "it from "
                             "https://github.com/raicoincommunity/Raicoin/releases"
+                        << std::endl;
+                return rai::ErrorCode::SUCCESS;
+            }
+
+            if (!config.rpc_.enable_)
+            {
+                std::cout << "Error: please enable rpc to make callback working"
                         << std::endl;
                 return rai::ErrorCode::SUCCESS;
             }

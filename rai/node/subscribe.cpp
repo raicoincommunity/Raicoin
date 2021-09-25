@@ -340,7 +340,7 @@ void rai::Subscriptions::Erase(rai::SubscriptionEvent event)
 void rai::Subscriptions::Erase(const rai::Block& block)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    ConfirmRequestKey key{block.Account() , block.Height()};
+    rai::AccountHeight key{block.Account() , block.Height()};
     auto it = confirm_requests_.find(key);
     if (it != confirm_requests_.end())
     {
@@ -363,7 +363,7 @@ bool rai::Subscriptions::Exists(rai::SubscriptionEvent event) const
 bool rai::Subscriptions::Exists(const rai::Block& block) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    ConfirmRequestKey key{block.Account() , block.Height()};
+    rai::AccountHeight key{block.Account() , block.Height()};
     return confirm_requests_.find(key) != confirm_requests_.end();
 }
 
@@ -493,7 +493,7 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Block& block)
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
-    ConfirmRequestKey key{block.Account(), block.Height()};
+    rai::AccountHeight key{block.Account(), block.Height()};
     auto it = confirm_requests_.find(key);
     if (it == confirm_requests_.end())
     {
@@ -592,8 +592,9 @@ bool rai::Subscriptions::NeedConfirm_(rai::Transaction& transaction,
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        ConfirmRequestKey key_low{account, 0};
-        ConfirmRequestKey key_up{account, std::numeric_limits<uint64_t>::max()};
+        rai::AccountHeight key_low{account, 0};
+        rai::AccountHeight key_up{account,
+                                  std::numeric_limits<uint64_t>::max()};
         if (confirm_requests_.lower_bound(key_low)
             != confirm_requests_.upper_bound(key_up))
         {

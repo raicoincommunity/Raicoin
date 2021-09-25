@@ -2,6 +2,7 @@
 
 #include <boost/property_tree/json_parser.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/stat.hpp>
 #include <rai/secure/plat.hpp>
 
 rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
@@ -555,5 +556,413 @@ void rai::WebsocketClient::Receive_()
 
                 client->OnReceive(session_id, ec, size);
             });
+    }
+}
+
+rai::WebsocketSession::WebsocketSession(
+    const std::shared_ptr<rai::WebsocketServer>& server,
+    const rai::UniqueId& id, boost::asio::ip::tcp::socket&& socket)
+    : server_(server),
+      id_(id),
+      stopped_(false),
+      closed_(false),
+      sending_(false),
+      connected_(false),
+      ws_(std::move(socket))
+{
+    using boost::beast::websocket::stream;
+    ws_.text(true);
+}
+
+rai::WebsocketSession::~WebsocketSession()
+{
+    server_->Erase(id_);
+}
+
+std::shared_ptr<rai::WebsocketSession> rai::WebsocketSession::Shared()
+{
+    return shared_from_this();
+}
+
+void rai::WebsocketSession::Start()
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (stopped_)
+    {
+        return;
+    }
+
+    std::shared_ptr<rai::WebsocketSession> session(Shared());
+    ws_.async_accept([session](const boost::system::error_code& ec) {
+        session->OnAccept(ec);
+    });
+}
+
+void rai::WebsocketSession::Stop()
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (stopped_)
+    {
+        return;
+    }
+    stopped_ = true;
+
+    Close_(lock);
+}
+
+void rai::WebsocketSession::OnAccept(const boost::system::error_code& ec)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (ec)
+    {
+        rai::Stats::Add(rai::ErrorCode::WEBSOCKET_ACCEPT,
+                        "WebsocketSession::OnAccept: ", ec.message());
+        return;
+    }
+
+    if (stopped_)
+    {
+        return;
+    }
+
+    connected_ = true;
+    Receive_(lock);
+    Send_(lock);
+}
+
+void rai::WebsocketSession::OnSend(const boost::system::error_code& ec,
+                                   size_t size)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    sending_ = false;
+    send_queue_.pop_front();
+
+    if (ec || size == 0)
+    {
+        if (ec == boost::beast::websocket::error::closed)
+        {
+            return;
+        }
+
+        Close_(lock);
+        rai::Stats::Add(rai::ErrorCode::WEBSOCKET_SEND,
+                        "WebsocketSession::OnSend: ", ec.message());
+        return;
+    }
+    
+    if (stopped_)
+    {
+        Close_(lock);
+        return;
+    }
+
+    Send_(lock);
+}
+
+void rai::WebsocketSession::OnReceive(const boost::system::error_code& ec,
+                                      size_t size)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (ec || size == 0)
+    {
+        if (ec == boost::beast::websocket::error::closed)
+        {
+            return;
+        }
+        rai::Stats::Add(rai::ErrorCode::WEBSOCKET_RECEIVE,
+                        "WebsocketSession::OnReceive: ", ec.message());
+        return;
+    }
+
+    if (stopped_)
+    {
+        return;
+    }
+
+    std::stringstream os;
+    os << boost::beast::buffers(receive_buffer_.data());
+    os.flush();
+    receive_buffer_.consume(receive_buffer_.size());
+
+    lock.unlock();
+
+    try
+    {
+        if (server_->message_observer_)
+        {
+            server_->message_observer_(os.str(), id_);
+        }
+    }
+    catch(const std::exception& e)
+    {
+        std::cout << "WebsocketSession::OnReceive: " << e.what() << '\n';
+        // log
+    }
+
+    lock.lock();
+
+    Receive_(lock);
+}
+
+void rai::WebsocketSession::Send(const std::string& message)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (stopped_ ||  closed_ || message.empty())
+    {
+        return;
+    }
+
+    if (send_queue_.size() >= rai::WebsocketSession::MAX_QUEUE_SIZE)
+    {
+        rai::Stats::Add(rai::ErrorCode::WEBSOCKET_QUEUE_OVERFLOW);
+        return;
+    }
+
+    send_queue_.push_back(message);
+    Send_(lock);
+}
+
+void rai::WebsocketSession::Send(const rai::Ptree& message)
+{
+    std::stringstream ostream;
+    boost::property_tree::write_json(ostream, message);
+    ostream.flush();
+    Send(ostream.str());
+}
+
+rai::UniqueId rai::WebsocketSession::Uid() const
+{
+    return id_;
+}
+
+void rai::WebsocketSession::Close_(std::unique_lock<std::mutex>& lock)
+{
+    if (closed_ || !connected_ || sending_)
+    {
+        return;
+    }
+
+    closed_ = true;
+
+    std::shared_ptr<rai::WebsocketSession> session(Shared());
+    boost::beast::websocket::close_reason reason;
+    reason.code = boost::beast::websocket::close_code::normal;
+    reason.reason = "Shutting down";
+    ws_.async_close(reason, [session](const boost::system::error_code ec) {
+        if (ec)
+        {
+            rai::Stats::Add(rai::ErrorCode::WEBSOCKET_CLOSE, ec.message());
+        }
+    });
+}
+
+void rai::WebsocketSession::Receive_(std::unique_lock<std::mutex>& lock)
+{
+    std::shared_ptr<rai::WebsocketSession> session(Shared());
+    ws_.async_read(receive_buffer_,
+                   [session](const boost::system::error_code& ec, size_t size) {
+                       session->OnReceive(ec, size);
+                   });
+}
+
+void rai::WebsocketSession::Send_(std::unique_lock<std::mutex>& lock)
+{
+    if (!connected_ || closed_ || sending_)
+    {
+        return;
+    }
+
+    if (send_queue_.empty())
+    {
+        return;
+    }
+
+    sending_ = true;
+
+    std::shared_ptr<rai::WebsocketSession> session(Shared());
+    ws_.async_write(boost::asio::buffer(send_queue_.front()),
+                    [session](const boost::system::error_code& ec,
+                              size_t size) { session->OnSend(ec, size); });
+}
+
+rai::WebsocketServer::WebsocketServer(boost::asio::io_service& service,
+                                      const rai::IP& ip, uint16_t port)
+    : service_(service), acceptor_(service), local_(ip, port), stopped_(false)
+{
+}
+
+std::shared_ptr<rai::WebsocketServer> rai::WebsocketServer::Shared()
+{
+    return shared_from_this();
+}
+
+void rai::WebsocketServer::Accept()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (stopped_)
+    {
+        return;
+    }
+
+    if (!acceptor_.is_open())
+    {
+        // todo: log
+        std::cout << "WebsocketServer::Accept: acceptor is not opened"
+                  << std::endl;
+        return;
+    }
+
+    std::shared_ptr<rai::WebsocketServer> server(Shared());
+    auto socket = std::make_shared<boost::asio::ip::tcp::socket>(service_);
+    acceptor_.async_accept(
+        *socket, [server, socket](const boost::system::error_code& ec) {
+            server->OnAccept(ec, socket);
+        });
+}
+
+void rai::WebsocketServer::OnAccept(
+    const boost::system::error_code& ec,
+    const std::shared_ptr<boost::asio::ip::tcp::socket>& socket)
+{
+    std::shared_ptr<rai::WebsocketSession> session(nullptr);
+    do
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopped_)
+        {
+            return;
+        }
+
+        if (ec)
+        {
+            // log
+            rai::Stats::Add(rai::ErrorCode::WEBSOCKET_ACCEPT, ec.message());
+            break;
+        }
+
+        if (sessions_.size() >= rai::WebsocketServer::MAX_SESSIONS)
+        {
+            break;
+        }
+
+        rai::UniqueId uid;
+        uid.Random();
+        session = std::make_shared<rai::WebsocketSession>(Shared(), uid,
+                                                          std::move(*socket));
+        sessions_[uid] = session;
+    } while (0);
+
+    if (session != nullptr)
+    {
+        session->Start();
+        if (session_observer_)
+        {
+            session_observer_(session->Uid(), true);
+        }
+    }
+
+    Accept();
+}
+
+void rai::WebsocketServer::Erase(const rai::UniqueId& uid)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = sessions_.find(uid);
+        if (it == sessions_.end())
+        {
+            return;
+        }
+        sessions_.erase(it);
+    }
+
+    if (session_observer_)
+    {
+        session_observer_(uid, false);
+    }
+}
+
+void rai::WebsocketServer::Start()
+{
+    acceptor_.open(local_.protocol());
+    acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+    boost::system::error_code ec;
+    acceptor_.bind(local_, ec);
+    if (ec)
+    {
+        // todo: log
+        std::cout << "[ERROR] WebsocketServer::Start: failed to bind ip:port = "
+                  << local_ << std::endl;
+        throw std::runtime_error(ec.message());
+    }
+
+    acceptor_.listen(static_cast<int>(rai::WebsocketServer::MAX_SESSIONS));
+    Accept();
+}
+
+void rai::WebsocketServer::Stop()
+{
+    std::unordered_map<rai::UniqueId, std::weak_ptr<rai::WebsocketSession>>
+        sessions;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopped_)
+        {
+            return;
+        }
+        stopped_ = true;
+        sessions.swap(sessions_);
+    }
+
+    boost::system::error_code ec;
+    acceptor_.close(ec);
+
+    for (auto& i : sessions)
+    {
+        auto session = i.second.lock();
+        if (session)
+        {
+            session->Stop();
+        }
+    }
+}
+
+std::shared_ptr<rai::WebsocketSession> rai::WebsocketServer::Session(
+    const rai::UniqueId& uid)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::shared_ptr<rai::WebsocketSession> session(nullptr);
+
+    if (stopped_)
+    {
+        return session;
+    }
+
+    auto it = sessions_.find(uid);
+    if (it != sessions_.end())
+    {
+        session = it->second.lock();
+    }
+
+    return session;
+}
+
+void rai::WebsocketServer::Send(const rai::UniqueId& uid,
+                                const std::string& message)
+{
+    auto session(Session(uid));
+    if (session)
+    {
+        session->Send(message);
+    }
+}
+
+void rai::WebsocketServer::Send(const rai::UniqueId& uid,
+                                const rai::Ptree& message)
+{
+    auto session(Session(uid));
+    if (session)
+    {
+        session->Send(message);
     }
 }

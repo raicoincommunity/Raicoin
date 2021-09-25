@@ -28,7 +28,10 @@ std::string DefaultNodeGateway()
 }
 }
 
-rai::AppConfig::AppConfig() : node_gateway_("wss")
+rai::AppConfig::AppConfig(uint16_t ws_port)
+    : node_gateway_("wss"),
+      ws_ip_(boost::asio::ip::address_v4::loopback()),
+      ws_port_(ws_port)
 {
     bool error = node_gateway_.Parse(DefaultNodeGateway());
     if (error)
@@ -59,14 +62,20 @@ rai::ErrorCode rai::AppConfig::DeserializeJson(bool& update,
             return error_code;
         }
 
-        error_code = rai::ErrorCode::JSON_CONFIG_CALLBACK_URL;
-        auto callback = ptree.get_optional<std::string>("callback_url");
-        if (callback && !callback->empty())
+        error_code = rai::ErrorCode::JSON_CONFIG_WS_ADDRESS;
+        std::string address = ptree.get<std::string>("websocket_address");
+        boost::system::error_code ec;
+        ws_ip_ = boost::asio::ip::make_address_v4(address, ec);
+        if (ec)
         {
-            if (callback_.Parse(*callback))
-            {
-                return error_code;
-            }
+            return error_code;
+        }
+
+        error_code = rai::ErrorCode::JSON_CONFIG_WS_PORT;
+        std::string ws_port_str = ptree.get<std::string>("websocket_port");
+        if (ws_port_str.empty() || rai::StringToUint(ws_port_str, ws_port_))
+        {
+            return error_code;
         }
     }
     catch (...)
@@ -80,7 +89,8 @@ void rai::AppConfig::SerializeJson(rai::Ptree& ptree) const
 {
     ptree.put("version", "1");
     ptree.put("node_gateway", node_gateway_.String());
-    ptree.put("callback_url", callback_.String());
+    ptree.put("websocket_address", ws_ip_.to_string());
+    ptree.put("websocket_port", std::to_string(ws_port_));
 }
 
 rai::ErrorCode rai::AppConfig::UpgradeJson(bool& update, uint32_t version,

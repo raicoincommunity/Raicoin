@@ -11,6 +11,8 @@ add_library (app
 	subscribe.hpp
 	config.cpp
 	config.hpp
+	provider.cpp
+	provider.hpp
 )
 
 target_link_libraries (app

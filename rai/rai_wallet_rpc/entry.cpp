@@ -163,8 +163,7 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm,
         {
             return rai::ErrorCode::JSON_CONFIG_CALLBACK_URL;
         }
-        if ((config.wallet_.server_.protocol_ == "wss"
-             || config.callback_url_.protocol_ == "https")
+        if (config.wallet_.server_.Ssl()
             && !boost::filesystem::exists("cacert.pem"))
         {
             std::cout << "Error: the cacert.pem is missing, you can download "

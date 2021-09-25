@@ -70,7 +70,7 @@ rai::Stats::GetAll<rai::ErrorCode>()
 void rai::Stats::Reset(rai::ErrorCode error_code)
 {
     error_.Reset(error_code);
- }
+}
 
 template <>
 void rai::Stats::ResetAll<rai::ErrorCode>()
