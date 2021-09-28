@@ -14,6 +14,9 @@ class AppSubscriptionData
 {
 public:
     AppSubscriptionData();
+    void Json(rai::Ptree&);
+    
+    virtual void SerializeJson(rai::Ptree&) = 0;
 
     bool synced_;
 };
@@ -73,6 +76,12 @@ public:
     void NotifyAccountSynced(const rai::Account&);
     rai::ErrorCode Subscribe(const rai::Account&, const rai::UniqueId&);
     void Unsubscribe(const rai::UniqueId&);
+    size_t Size() const;
+    size_t Size(const rai::UniqueId&) const;
+    size_t AccountSize() const;
+    void Json(rai::Ptree&) const;
+    void JsonByUid(const rai::UniqueId&, rai::Ptree&) const;
+    void JsonByAccount(const rai::Account&, rai::Ptree&) const;
 
     rai::App& app_;
 
@@ -80,6 +89,9 @@ public:
         std::chrono::seconds(900);
 
 private:
+    void Json_(std::unique_lock<std::mutex>&, const rai::Account&,
+               rai::Ptree&) const;
+
     mutable std::mutex mutex_;
     rai::AppSubscriptionContainer subscriptions_;
     std::unordered_map<rai::Account, std::shared_ptr<rai::AppSubscriptionData>>

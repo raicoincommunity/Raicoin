@@ -55,6 +55,26 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         BlockCount();
     }
+    else if (action == "clients")
+    {
+        Clients();
+    }
+    else if (action == "subscription")
+    {
+        Subscription();
+    }
+    else if (action == "subscription_count")
+    {
+        SubscriptionCount();
+    }
+    else if (action == "subscription_account_count")
+    {
+        SubscriptionAccountCount();
+    }
+    else if (action == "subscriptions")
+    {
+        Subscriptions();
+    }
     else
     {
         error_code_ = rai::ErrorCode::RPC_UNKNOWN_ACTION;
@@ -472,4 +492,60 @@ void rai::AppRpcHandler::BlockQueryByHeight()
 void rai::AppRpcHandler::BootstrapStatus()
 {
     app_.bootstrap_.Status(response_);
+}
+
+void rai::AppRpcHandler::Subscription()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+
+    app_.subscribe_.JsonByAccount(account, response_);
+}
+
+void rai::AppRpcHandler::Subscriptions()
+{
+    auto client_id_o = request_.get_optional<std::string>("client_id");
+    if (client_id_o)
+    {
+        rai::UniqueId client_id;
+        bool error = client_id.DecodeHex(*client_id_o);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CLIENT_ID;
+            return;
+        }
+
+        app_.subscribe_.JsonByUid(client_id, response_);
+    }
+    else
+    {
+        app_.subscribe_.Json(response_);
+    }
+}
+
+void rai::AppRpcHandler::SubscriptionCount()
+{
+    auto client_id_o = request_.get_optional<std::string>("client_id");
+    if (client_id_o)
+    {
+        rai::UniqueId client_id;
+        bool error = client_id.DecodeHex(*client_id_o);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CLIENT_ID;
+            return;
+        }
+
+        response_.put("count", std::to_string(app_.subscribe_.Size(client_id)));
+    }
+    else
+    {
+        response_.put("count", std::to_string(app_.subscribe_.Size()));
+    }
+}
+
+void rai::AppRpcHandler::SubscriptionAccountCount()
+{
+    response_.put("count", std::to_string(app_.subscribe_.AccountSize()));
 }

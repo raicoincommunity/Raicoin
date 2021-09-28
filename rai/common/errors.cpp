@@ -498,6 +498,26 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Unknow app config version";
         }
+        case rai::ErrorCode::WEBSOCKET_ACCEPT:
+        {
+            return "Websocket accept failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_CLOSE:
+        {
+            return "Websocket close failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_SEND:
+        {
+            return "Websocket send failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_RECEIVE:
+        {
+            return "Websocket receive failed";
+        }
+        case rai::ErrorCode::WEBSOCKET_QUEUE_OVERFLOW:
+        {
+            return "Websocket message queue overflow";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -750,39 +770,31 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::JSON_CONFIG_APP_VERSION:
         {
-            return "Failed to parse app version from config file";
+            return "Failed to parse app.version from config file";
         }
-        case rai::ErrorCode::WEBSOCKET_ACCEPT:
+        case rai::ErrorCode::JSON_CONFIG_APP_NODE_GATEWAY:
         {
-            return "Websocket accept failed";
+            return "Failed to parse app.node_gateway from config file";
         }
-        case rai::ErrorCode::WEBSOCKET_CLOSE:
+        case rai::ErrorCode::JSON_CONFIG_APP_WS_ADDRESS:
         {
-            return "Websocket close failed";
+            return "Failed to parse app.websocket.address from config file";
         }
-        case rai::ErrorCode::WEBSOCKET_SEND:
+        case rai::ErrorCode::JSON_CONFIG_APP_WS_PORT:
         {
-            return "Websocket send failed";
+            return "Failed to parse app.websocket.port from config file";
         }
-        case rai::ErrorCode::WEBSOCKET_RECEIVE:
+        case rai::ErrorCode::JSON_CONFIG_APP_WS:
         {
-            return "Websocket receive failed";
+            return "Failed to parse app.websocket from config file";
         }
-        case rai::ErrorCode::WEBSOCKET_QUEUE_OVERFLOW:
+        case rai::ErrorCode::JSON_CONFIG_APP_WS_ENABLE:
         {
-            return "Websocket message queue overflow";
+            return "Failed to parse app.websocket.enable from config file";
         }
-        case rai::ErrorCode::JSON_CONFIG_NODE_GATEWAY:
+        case rai::ErrorCode::JSON_CONFIG_APP:
         {
-            return "Failed to parse node_gateway from config file";
-        }
-        case rai::ErrorCode::JSON_CONFIG_WS_ADDRESS:
-        {
-            return "Failed to parse websocket address from config file";
-        }
-        case rai::ErrorCode::JSON_CONFIG_WS_PORT:
-        {
-            return "Failed to parse websocket port from config file";
+            return "Failed to parse app object from config file";
         }
         case rai::ErrorCode::RPC_GENERIC:
         {
@@ -931,6 +943,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_ACTION_NOT_ALLOWED:
         {
             return "[RPC] Action not allowed";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_CLIENT_ID:
+        {
+            return "[RPC] Invalid client_id field";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

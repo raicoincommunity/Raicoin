@@ -8,6 +8,12 @@ rai::AppSubscriptionData::AppSubscriptionData(): synced_(false)
 {
 }
 
+void rai::AppSubscriptionData::Json(rai::Ptree& ptree)
+{
+    ptree.put("synchronized", rai::BoolToString(synced_));
+    SerializeJson(ptree);
+}
+
 rai::AppSubscriptions::AppSubscriptions(rai::App& app) : app_(app)
 {
 }
@@ -207,4 +213,101 @@ void rai::AppSubscriptions::Unsubscribe(const rai::UniqueId& uid)
             lock.lock();
         }
     }
+}
+
+size_t rai::AppSubscriptions::Size() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return subscriptions_.size();
+}
+
+size_t rai::AppSubscriptions::Size(const rai::UniqueId& uid) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return subscriptions_.get<rai::AppSubscriptionByUid>().count(uid);
+}
+
+size_t rai::AppSubscriptions::AccountSize() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return accounts_.size();
+}
+
+void rai::AppSubscriptions::Json(rai::Ptree& ptree) const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    rai::Ptree subscriptions;
+    for (auto i = accounts_.begin(), n = accounts_.end(); i != n; ++i)
+    {
+        rai::Ptree entry;
+        Json_(lock, i->first, entry);
+        if (entry.empty())
+        {
+            continue;
+        }
+        subscriptions.push_back(std::make_pair("", entry));
+    }
+    ptree.put_child("subscriptions", subscriptions);
+}
+
+void rai::AppSubscriptions::JsonByUid(const rai::UniqueId& uid,
+                                      rai::Ptree& ptree) const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    rai::Ptree subscriptions;
+    auto begin = subscriptions_.get<rai::AppSubscriptionByUid>().lower_bound(uid);
+    auto end = subscriptions_.get<rai::AppSubscriptionByUid>().upper_bound(uid);
+    for (auto& i = begin; i != end; ++i)
+    {
+        rai::Ptree entry;
+        Json_(lock, i->account_, entry);
+        if (entry.empty())
+        {
+            continue;
+        }
+        subscriptions.push_back(std::make_pair("", entry));
+    }
+    ptree.put_child("subscriptions", subscriptions);
+}
+
+void rai::AppSubscriptions::JsonByAccount(const rai::Account& account,
+                                          rai::Ptree& ptree) const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    Json_(lock, account, ptree);
+}
+
+void rai::AppSubscriptions::Json_(std::unique_lock<std::mutex>& lock,
+                                  const rai::Account& account,
+                                  rai::Ptree& ptree) const
+{
+    auto it = accounts_.find(account);
+    if (it == accounts_.end())
+    {
+        return;
+    }
+    
+    ptree.put("account", it->first.StringAccount());
+
+    rai::Ptree data;
+    it->second->Json(data);
+    ptree.put_child("data", data);
+
+    rai::Ptree clients;
+    auto now = std::chrono::steady_clock::now();
+    std::pair<rai::AppSubscriptionContainer::iterator,
+              rai::AppSubscriptionContainer::iterator>
+        it_pair = subscriptions_.equal_range(boost::make_tuple(account));
+    for (auto& i = it_pair.first; i != it_pair.second; ++i)
+    {
+        rai::Ptree entry;
+        entry.put("uid", i->uid_.StringHex());
+        auto subscribe_at =
+            std::chrono::duration_cast<std::chrono::seconds>(now - i->time_)
+                .count();
+        entry.put("subscribe_at",
+                  std::to_string(subscribe_at) + " seconds ago");
+        clients.push_back(std::make_pair("", entry));
+    }
+    ptree.put_child("clients", clients);
 }

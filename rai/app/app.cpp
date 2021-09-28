@@ -7,17 +7,16 @@ rai::AppTrace::AppTrace()
 {
 }
 
-rai::App::App(rai::ErrorCode& error_code, rai::Alarm& alarm,
-              boost::asio::io_service& service,
-              const boost::filesystem::path& data_path,
+rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
+              const boost::filesystem::path& db_path, rai::Alarm& alarm,
               const rai::AppConfig& config, rai::AppSubscriptions& subscribe,
               const std::vector<rai::BlockType>& account_types,
               const rai::Provider::Info& provider_info)
-    : alarm_(alarm),
-      service_(service),
+    : service_(service),
+      alarm_(alarm),
       config_(config),
       subscribe_(subscribe),
-      store_(error_code, data_path / "app_data.ldb"),
+      store_(error_code, db_path),
       ledger_(error_code, store_, false),
       account_types_(account_types),
       service_runner_(service_gateway_),
