@@ -42,9 +42,11 @@ void rai::Rpc::Stop()
     {
         return;
     }
-    acceptor_.close();
+    if (acceptor_.is_open())
+    {
+        acceptor_.close();
+    }
 }
-
 
 void rai::Rpc::Accept()
 {

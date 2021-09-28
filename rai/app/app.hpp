@@ -48,8 +48,8 @@ enum class AppActionPri : uint32_t
 class App : public std::enable_shared_from_this<rai::App>
 {
 public:
-    App(rai::ErrorCode&, rai::Alarm&, boost::asio::io_service&,
-        const boost::filesystem::path&, const rai::AppConfig&,
+    App(rai::ErrorCode&, boost::asio::io_service&,
+        const boost::filesystem::path&, rai::Alarm&, const rai::AppConfig&,
         rai::AppSubscriptions&, const std::vector<rai::BlockType>&,
         const rai::Provider::Info&);
     virtual ~App() = default;
@@ -119,8 +119,8 @@ public:
     static size_t constexpr MAX_BLOCK_CACHE_SIZE = 100 * 1024;
     static uint64_t constexpr BLOCKS_QUERY_COUNT = 100;
 
-    rai::Alarm& alarm_;
     boost::asio::io_service& service_;
+    rai::Alarm& alarm_;
     const rai::AppConfig& config_;
     rai::AppSubscriptions& subscribe_;
     rai::Store store_;

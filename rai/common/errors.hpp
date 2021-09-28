@@ -202,9 +202,12 @@ enum class ErrorCode : int
     JSON_CONFIG_ENABLE_RICH_LIST         = 288,
     JSON_CONFIG_ENABLE_DELEGATOR_LIST    = 289,
     JSON_CONFIG_APP_VERSION              = 290,
-    JSON_CONFIG_NODE_GATEWAY             = 291,
-    JSON_CONFIG_WS_ADDRESS               = 292,
-    JSON_CONFIG_WS_PORT                  = 293,
+    JSON_CONFIG_APP_NODE_GATEWAY         = 291,
+    JSON_CONFIG_APP_WS_ADDRESS           = 292,
+    JSON_CONFIG_APP_WS_PORT              = 293,
+    JSON_CONFIG_APP_WS                   = 294,
+    JSON_CONFIG_APP_WS_ENABLE            = 295,
+    JSON_CONFIG_APP                      = 296,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                     = 300,
@@ -244,6 +247,7 @@ enum class ErrorCode : int
     RPC_MISS_FIELD_ACCOUNT_TYPES    = 334,
     RPC_INVALID_FIELD_ACCOUNT_TYPES = 335,
     RPC_ACTION_NOT_ALLOWED          = 336,
+    RPC_INVALID_FIELD_CLIENT_ID     = 337,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

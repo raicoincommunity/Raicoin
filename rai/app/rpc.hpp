@@ -34,6 +34,11 @@ public:
     void BlockQueryByHash();
     void BlockQueryByHeight();
     void BootstrapStatus();
+    void Clients();
+    void Subscription();
+    void Subscriptions();
+    void SubscriptionCount();
+    void SubscriptionAccountCount();
 
     rai::App& app_;
     rai::UniqueId uid_;

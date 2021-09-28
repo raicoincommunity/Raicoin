@@ -1,5 +1,6 @@
 #include <rai/common/runner.hpp>
 
+#include <iostream>
 #include <rai/common/log.hpp>
 
 rai::ServiceRunner::ServiceRunner(boost::asio::io_service& service, size_t count)

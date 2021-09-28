@@ -149,4 +149,3 @@ rai::ErrorCode rai::DaemonConfig::UpgradeJson(bool& upgraded, uint32_t version,
     return rai::ErrorCode::SUCCESS;
 }
 
-
