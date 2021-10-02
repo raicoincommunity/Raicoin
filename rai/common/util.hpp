@@ -327,6 +327,9 @@ public:
 
 };
 
+bool CheckUtf8(const std::vector<uint8_t>&, bool&);
+bool CheckUtf8(const std::string&, bool&);
+
 }  // namespace rai
 
 #define IF_ERROR_RETURN(error, ret) \

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bitset>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@ enum class ExtensionType : uint16_t
     INVALID     = 0,
     SUB_ACCOUNT = 1, // UTF-8 encode string
     NOTE        = 2, // UTF-8 encode string
+    ALIAS       = 3,
 
     RESERVED_MAX = 1023,
 };
@@ -74,6 +76,30 @@ public:
     rai::ErrorCode FromJson(const rai::Ptree&) override;
     rai::Ptree Json() const override;
     rai::ErrorCode FromExtension(const rai::Extension&) override;
+};
+
+class ExtensionAlias : public Extension
+{
+public:
+    enum class Op : uint8_t 
+    {
+        INVALID         = 0,
+        NAME            = 1,
+        DNS             = 2,
+        MAX
+    };
+    static std::string OpToString();
+    static Op StringToOp();
+
+    ExtensionAlias();
+    ExtensionAlias(Op, const std::string&);
+    virtual ~ExtensionAlias() = default;
+    rai::ErrorCode FromJson(const rai::Ptree&) override;
+    rai::Ptree Json() const override;
+    rai::ErrorCode FromExtension(const rai::Extension&) override;
+
+    Op op_;
+    std::vector<uint8_t> op_value_;
 };
 
 rai::ErrorCode ParseExtension(const rai::Extension&,
