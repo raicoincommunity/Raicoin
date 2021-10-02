@@ -8,6 +8,7 @@ add_executable (core_test
 	numbers.cpp
 	test_util.cpp
 	invite.cpp
+	common_util.cpp
 )
 
 #target_compile_definitions(core_test

@@ -2,7 +2,13 @@
 
 rai::Alias::Alias(rai::ErrorCode& error_code, boost::asio::io_service& service,
                   const boost::filesystem::path& data_path, rai::Alarm& alarm,
-                  const rai::AliasConfig& config): App(error_code, service, data_path / "alias_data.ldb", alarm, config.app_, subscribe_, rai::Alias::BlockTypes(), rai::Alias::Provide()), service_(service), alarm_(alarm), config_(config), subscribe_(*this)
+                  const rai::AliasConfig& config)
+    : App(error_code, service, data_path / "alias_data.ldb", alarm, config.app_,
+          subscribe_, rai::Alias::BlockTypes(), rai::Alias::Provide()),
+      service_(service),
+      alarm_(alarm),
+      config_(config),
+      subscribe_(*this)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 }

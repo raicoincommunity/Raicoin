@@ -11,27 +11,25 @@ std::string rai::ExtensionTypeToString(rai::ExtensionType type)
     {
         case rai::ExtensionType::INVALID:
         {
-            result = "invalid";
-            break;
+            return "invalid";
         }
         case rai::ExtensionType::SUB_ACCOUNT:
         {
-            result = "sub_account";
-            break;
+            return "sub_account";
         }
         case rai::ExtensionType::NOTE:
         {
-            result = "note";
-            break;
+            return "note";
+        }
+        case rai::ExtensionType::ALIAS:
+        {
+            return "alias";
         }
         default:
         {
-            result = std::to_string(static_cast<uint16_t>(type));
-            break;
+            return std::to_string(static_cast<uint16_t>(type));
         }
     }
-
-    return result;
 }
 
 rai::ExtensionType rai::StringToExtensionType(const std::string& str)
@@ -50,6 +48,10 @@ rai::ExtensionType rai::StringToExtensionType(const std::string& str)
     else if ("note" == str)
     {
         return rai::ExtensionType::NOTE;
+    }
+    else if ("alias" == str)
+    {
+        return rai::ExtensionType::ALIAS;
     }
     else
     {
@@ -414,6 +416,70 @@ rai::ErrorCode rai::ExtensionNote::FromExtension(const rai::Extension& extension
     return rai::ErrorCode::SUCCESS;
 
 }
+
+rai::ExtensionAlias::ExtensionAlias()
+    : Extension{rai::ExtensionType::ALIAS}
+{
+}
+
+rai::ExtensionAlias::ExtensionAlias(rai::ExtensionAlias::Op op,
+                                   const std::string& str)
+    : Extension{rai::ExtensionType::ALIAS}
+{
+    if (str.size() > std::numeric_limits<uint8_t>::max())
+    {
+        type_ = rai::ExtensionType::INVALID;
+        return;
+    }
+
+    if (op == rai::ExtensionAlias::Op::NAME
+        || op == rai::ExtensionAlias::Op::DNS)
+    {
+        op_ = op;
+        op_value_ = std::vector<uint8_t>(str.begin(), str.end());
+
+        std::vector<uint8_t> bytes;
+        rai::VectorStream stream(bytes);
+        {
+            rai::Write(stream, op_);
+            uint8_t length = static_cast<uint8_t>(op_value_.size());
+            rai::Write(stream, length);
+            rai::Write(stream, op_value_);
+        }
+        value_ = std::move(bytes);
+    }
+    else
+    {
+        type_ = rai::ExtensionType::INVALID;
+    }
+}
+
+rai::ErrorCode rai::ExtensionAlias::FromJson(const rai::Ptree& ptree)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::UNEXPECTED;
+    try
+    {
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TYPE;
+        std::string type_str = ptree.get<std::string>("type");
+        rai::ExtensionType type = rai::StringToExtensionType(type_str);
+        IF_ERROR_RETURN(type != type_, error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE;
+        rai::Ptree value = ptree.get_child("value");
+        
+    }
+    catch (...)
+    {
+        return error_code;
+    }
+
+    rai::ErrorCode::SUCCESS;
+
+}
+
+rai::Ptree Json() const override;
+rai::ErrorCode FromExtension(const rai::Extension&) override;
+
 
 rai::ErrorCode rai::ParseExtension(const rai::Extension& in,
                                    std::shared_ptr<rai::Extension>& out)

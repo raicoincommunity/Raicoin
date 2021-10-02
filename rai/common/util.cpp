@@ -289,3 +289,71 @@ bool rai::Url::Ssl() const
     return protocol_ == "https" || protocol_ == "wss";
 }
 
+bool rai::CheckUtf8(const std::vector<uint8_t>& bytes, bool& ctrl)
+{
+    ctrl = false;
+
+    uint8_t byte = 0;
+    uint32_t units = 0;
+    uint32_t code_point = 0;
+
+    for (auto i = bytes.begin(), n = bytes.end(); i != n; ++i)
+    {
+        byte = *i;
+        if ((byte & 0x80) == 0x00)
+        {
+            units = 1;
+            code_point = byte & 0x7F;
+        }
+        else if ((byte & 0xE0) == 0xC0)
+        {
+            units = 2;
+            code_point = byte & 0x1F;
+        }
+        else if ((byte & 0xF0) == 0xE0)
+        {
+            units = 3;
+            code_point = byte & 0x0F;
+        }
+        else if ((byte & 0xF8) == 0xF0)
+        {
+            units = 4;
+            code_point = byte & 0x07;
+        }
+        else
+        {
+            return true;
+        }
+        
+        for (uint32_t j = 1; j < units; ++j)
+        {
+            if (++i == n) return true;
+            byte = *i;
+            if ((byte & 0xC0) != 0x80) return true;
+            code_point = (code_point << 6) | (byte & 0x3F);
+        }
+
+        if ((code_point > 0x10FFFF)
+            || (code_point >= 0xD800 && code_point <= 0xDFFF)
+            || (code_point <= 0x007F && units != 1)
+            || (code_point >= 0x0080 && code_point <= 0x07FF && units != 2)
+            || (code_point >= 0x0800 && code_point <= 0xFFFF && units != 3)
+            || (code_point >= 0x10000 && units != 4))
+        {
+            return true;
+        }
+
+        if (code_point < 0x20 || (code_point >= 0x7F && code_point <= 0x9F))
+        {
+            ctrl = true;
+        }
+    }
+
+    return false;
+}
+
+bool rai::CheckUtf8(const std::string& str, bool& ctrl)
+{
+    std::vector<uint8_t> bytes(str.begin(), str.end());
+    return rai::CheckUtf8(bytes, ctrl);
+}
