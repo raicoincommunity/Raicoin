@@ -5,8 +5,6 @@
 
 std::string rai::ExtensionTypeToString(rai::ExtensionType type)
 {
-    std::string result;
-
     switch (type)
     {
         case rai::ExtensionType::INVALID:
@@ -173,7 +171,7 @@ rai::ErrorCode rai::Extensions::FromBytes(const std::vector<uint8_t>& bytes)
         return rai::ErrorCode::SUCCESS;
     }
 
-    if (bytes.size() > MAX_EXTENSIONS_SIZE)
+    if (bytes.size() > rai::MAX_EXTENSIONS_SIZE)
     {
         return rai::ErrorCode::EXTENSIONS_LENGTH;
     }
@@ -244,7 +242,7 @@ rai::ErrorCode rai::Extensions::FromJson(const rai::Ptree& ptree)
         for (const auto& i : ptree)
         {
             std::shared_ptr<rai::Extension> extension(nullptr);
-            error_code = rai::ParseExtensionJson(i, extension);
+            error_code = rai::ParseExtensionJson(i.second, extension);
             IF_NOT_SUCCESS_RETURN(error_code);
             error_code = Append(*extension);
             IF_NOT_SUCCESS_RETURN(error_code);
@@ -282,7 +280,7 @@ rai::Ptree rai::Extensions::Json() const
         {
             entry = i.Json();
         }
-        entry.put("type_raw", std::to_string(static_cast<uint16_t>(i.type_)));
+        entry.put("type", rai::ExtensionTypeToString(i.type_));
         entry.put("value_raw",
                   rai::BytesToHex(i.value_.data(), i.value_.size()));
         result.push_back(std::make_pair("", entry));
@@ -328,6 +326,10 @@ rai::ErrorCode rai::ExtensionSubAccount::FromJson(const rai::Ptree& ptree)
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE;
         std::string value = ptree.get<std::string>("value");
         value_ = std::vector<uint8_t>(value.begin(), value.end());
+
+        bool ctrl;
+        bool error = rai::CheckUtf8(value_, ctrl);
+        IF_ERROR_RETURN(error, rai::ErrorCode::UTF8_CHECK);
     }
     catch (...)
     {
@@ -342,8 +344,23 @@ rai::Ptree rai::ExtensionSubAccount::Json() const
     rai::Ptree ptree;
     ptree.put("type", rai::ExtensionTypeToString(type_));
     ptree.put("length", std::to_string(value_.size()));
-    ptree.put("value", std::string(reinterpret_cast<const char*>(value_.data()),
-                                   value_.size()));
+    ptree.put("value_raw", rai::BytesToHex(value_.data(), value_.size()));
+
+    bool ctrl;
+    bool error = rai::CheckUtf8(value_, ctrl);
+    if (error)
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::UTF8_CHECK;
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+    }
+    else
+    {
+        ptree.put("value",
+                  std::string(reinterpret_cast<const char*>(value_.data()),
+                              value_.size()));
+    }
+
     return ptree;
 }
 
@@ -384,6 +401,10 @@ rai::ErrorCode rai::ExtensionNote::FromJson(const rai::Ptree& ptree)
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE;
         std::string value = ptree.get<std::string>("value");
         value_ = std::vector<uint8_t>(value.begin(), value.end());
+
+        bool ctrl;
+        bool error = rai::CheckUtf8(value_, ctrl);
+        IF_ERROR_RETURN(error, rai::ErrorCode::UTF8_CHECK);
     }
     catch (...)
     {
@@ -399,12 +420,28 @@ rai::Ptree rai::ExtensionNote::Json() const
     rai::Ptree ptree;
     ptree.put("type", rai::ExtensionTypeToString(type_));
     ptree.put("length", std::to_string(value_.size()));
-    ptree.put("value", std::string(reinterpret_cast<const char*>(value_.data()),
-                                   value_.size()));
+    ptree.put("value_raw", rai::BytesToHex(value_.data(), value_.size()));
+
+    bool ctrl;
+    bool error = rai::CheckUtf8(value_, ctrl);
+    if (error)
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::UTF8_CHECK;
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+    }
+    else
+    {
+        ptree.put("value",
+                  std::string(reinterpret_cast<const char*>(value_.data()),
+                              value_.size()));
+    }
+
     return ptree;
 }
 
-rai::ErrorCode rai::ExtensionNote::FromExtension(const rai::Extension& extension)
+rai::ErrorCode rai::ExtensionNote::FromExtension(
+    const rai::Extension& extension)
 {
     if (extension.type_ != type_)
     {
@@ -414,7 +451,54 @@ rai::ErrorCode rai::ExtensionNote::FromExtension(const rai::Extension& extension
     value_ = extension.value_;
 
     return rai::ErrorCode::SUCCESS;
+}
 
+std::string rai::ExtensionAlias::OpToString(rai::ExtensionAlias::Op op)
+{
+    using Op  = rai::ExtensionAlias::Op;
+    switch (op)
+    {
+        case Op::INVALID:
+        {
+            return "invalid";
+        }
+        case Op::NAME:
+        {
+            return "name";
+        }
+        case Op::DNS:
+        {
+            return "dns";
+        }
+        default:
+        {
+            return std::to_string(static_cast<uint8_t>(op));
+        }
+    }
+}
+
+rai::ExtensionAlias::Op rai::ExtensionAlias::StringToOp(const std::string& str)
+{
+    using Op = rai::ExtensionAlias::Op;
+    uint8_t type = 0;
+    bool error = rai::StringToUint(str, type);
+    if (!error)
+    {
+        return static_cast<Op>(type);
+    }
+
+    if ("name" == str)
+    {
+        return Op::NAME;
+    }
+    else if ("dns" == str)
+    {
+        return Op::DNS;
+    }
+    else
+    {
+        return Op::INVALID;
+    }
 }
 
 rai::ExtensionAlias::ExtensionAlias()
@@ -426,32 +510,9 @@ rai::ExtensionAlias::ExtensionAlias(rai::ExtensionAlias::Op op,
                                    const std::string& str)
     : Extension{rai::ExtensionType::ALIAS}
 {
-    if (str.size() > std::numeric_limits<uint8_t>::max())
-    {
-        type_ = rai::ExtensionType::INVALID;
-        return;
-    }
-
-    if (op == rai::ExtensionAlias::Op::NAME
-        || op == rai::ExtensionAlias::Op::DNS)
-    {
-        op_ = op;
-        op_value_ = std::vector<uint8_t>(str.begin(), str.end());
-
-        std::vector<uint8_t> bytes;
-        rai::VectorStream stream(bytes);
-        {
-            rai::Write(stream, op_);
-            uint8_t length = static_cast<uint8_t>(op_value_.size());
-            rai::Write(stream, length);
-            rai::Write(stream, op_value_);
-        }
-        value_ = std::move(bytes);
-    }
-    else
-    {
-        type_ = rai::ExtensionType::INVALID;
-    }
+    op_ = op;
+    op_value_ = std::vector<uint8_t>(str.begin(), str.end());
+    UpdateExtensionValue();
 }
 
 rai::ErrorCode rai::ExtensionAlias::FromJson(const rai::Ptree& ptree)
@@ -466,7 +527,19 @@ rai::ErrorCode rai::ExtensionAlias::FromJson(const rai::Ptree& ptree)
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE;
         rai::Ptree value = ptree.get_child("value");
-        
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_ALIAS_OP;
+        std::string op = value.get<std::string>("op");
+        op_ = rai::ExtensionAlias::StringToOp(op);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_ALIAS_OP_VALUE;
+        std::string op_value = value.get<std::string>("op_value");
+        op_value_ = std::vector<uint8_t>(op_value.begin(), op_value.end());
+
+        error_code = CheckData();
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        UpdateExtensionValue();
     }
     catch (...)
     {
@@ -477,9 +550,114 @@ rai::ErrorCode rai::ExtensionAlias::FromJson(const rai::Ptree& ptree)
 
 }
 
-rai::Ptree Json() const override;
-rai::ErrorCode FromExtension(const rai::Extension&) override;
+rai::Ptree rai::ExtensionAlias::Json() const
+{
+    rai::Ptree ptree;
+    ptree.put("type", rai::ExtensionTypeToString(type_));
+    ptree.put("length", std::to_string(value_.size()));
+    ptree.put("value_raw", rai::BytesToHex(value_.data(), value_.size()));
 
+    rai::ErrorCode error_code = CheckData();
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+    }
+    else
+    {
+        rai::Ptree value;
+        value.put("op", rai::ExtensionAlias::OpToString(op_));
+        ptree.put("op_value",
+                  std::string(reinterpret_cast<const char*>(op_value_.data()),
+                              op_value_.size()));
+        ptree.put_child("value", value);
+    }
+
+    return ptree;
+}
+
+rai::ErrorCode rai::ExtensionAlias::FromExtension(
+    const rai::Extension& extension)
+{
+    if (extension.type_ != type_)
+    {
+        return rai::ErrorCode::EXTENSION_TYPE;
+    }
+
+    value_ = extension.value_;
+
+    op_ = rai::ExtensionAlias::Op::INVALID;
+    op_value_ = std::vector<uint8_t>();
+
+    if (value_.size() > 0)
+    {
+        op_ = static_cast<rai::ExtensionAlias::Op>(value_[0]);
+    }
+
+    if (value_.size() > 1)
+    {
+        auto begin = value_.begin();
+        ++begin;
+        op_value_ = std::vector<uint8_t>(begin, value_.end());
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+void rai::ExtensionAlias::UpdateExtensionValue()
+{
+    std::vector<uint8_t> bytes;
+    rai::VectorStream stream(bytes);
+    {
+        rai::Write(stream, op_);
+        rai::Write(stream, op_value_);
+    }
+    value_ = std::move(bytes);
+}
+
+rai::ErrorCode rai::ExtensionAlias::CheckData() const
+{
+    if (op_ == Op::INVALID)
+    {
+        return rai::ErrorCode::ALIAS_OP_INVALID;
+    }
+    else if (op_ == Op::NAME)
+    {
+        bool ctrl;
+        bool error = rai::CheckUtf8(op_value_, ctrl);
+        IF_ERROR_RETURN(error, rai::ErrorCode::UTF8_CHECK);
+        IF_ERROR_RETURN(ctrl, rai::ErrorCode::UTF8_CONTROL_CHARACTER);
+
+        if (rai::Contain(op_value_, static_cast<uint8_t>('@')))
+        {
+            return rai::ErrorCode::ALIAS_RESERVED_CHARACTOR_AT;
+        }
+
+    }
+    else if (op_ == Op::DNS)
+    {
+        bool ctrl;
+        bool error = rai::CheckUtf8(op_value_, ctrl);
+        IF_ERROR_RETURN(error, rai::ErrorCode::UTF8_CHECK);
+        IF_ERROR_RETURN(ctrl, rai::ErrorCode::UTF8_CONTROL_CHARACTER);
+
+        if (rai::Contain(op_value_, static_cast<uint8_t>('@')))
+        {
+            return rai::ErrorCode::ALIAS_RESERVED_CHARACTOR_AT;
+        }
+
+        if (rai::Contain(op_value_, static_cast<uint8_t>('_')))
+        {
+            return rai::ErrorCode::ALIAS_RESERVED_CHARACTOR_UNDERSCORE;
+        }
+    }
+    else
+    {
+        return rai::ErrorCode::ALIAS_OP_UNKNOWN;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
 
 rai::ErrorCode rai::ParseExtension(const rai::Extension& in,
                                    std::shared_ptr<rai::Extension>& out)

@@ -1,9 +1,14 @@
-add_executable (rai_app_alias
+add_executable (rai_alias
 	alias.cpp
 	alias.hpp
 	config.cpp
 	config.hpp
-	entry.cpp)
+	entry.cpp
+	rpc.cpp
+	rpc.hpp
+	subscribe.cpp
+	subscribe.hpp
+)
 
 target_link_libraries (rai_node
 	rai_common

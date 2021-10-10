@@ -518,6 +518,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Websocket message queue overflow";
         }
+        case rai::ErrorCode::UTF8_CHECK:
+        {
+            return "Not utf-8 encoding";
+        }
+        case rai::ErrorCode::UTF8_CONTROL_CHARACTER:
+        {
+            return "Control character not allowed";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -605,6 +613,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_FORMAT:
         {
             return "Invalid block extensions format in json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_ALIAS_OP:
+        {
+            return "Failed to parse alias extension op from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_ALIAS_OP_VALUE:
+        {
+            return "Failed to parse alias extension op_value from json";
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
@@ -948,6 +964,38 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid client_id field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_SERVICE:
+        {
+            return "[RPC] The service field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_SERVICE:
+        {
+            return "[RPC] Invalid service field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_FILTERS:
+        {
+            return "[RPC] The filters field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_FILTERS:
+        {
+            return "[RPC] Invalid filters field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_NAME:
+        {
+            return "[RPC] The name field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_NAME:
+        {
+            return "[RPC] Invalid name field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_DNS:
+        {
+            return "[RPC] The dns field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_DNS:
+        {
+            return "[RPC] Invalid dns field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";
@@ -1264,6 +1312,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to delete account from ledger";
         }
+        case rai::ErrorCode::APP_PROCESS_CONFIRM_REQUIRED:
+        {
+            return "Block should be confirmed";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_PUT:
+        {
+            return "Failed to put app data to ledger";
+        }
+        case rai::ErrorCode::APP_PROCESS_LEDGER_DEL:
+        {
+            return "Failed to delete app data from ledger";
+        }
+        case rai::ErrorCode::APP_PROCESS_HALT:
+        {
+            return "The app encounters fatal error and is halted";
+        }
         case rai::ErrorCode::APP_RPC_MISS_FIELD_TRACE:
         {
             return "The trace field is missing";
@@ -1271,6 +1335,34 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::APP_RPC_INVALID_FIELD_TRACE:
         {
             return "Invalid trace field";
+        }
+        case rai::ErrorCode::ALIAS_GENERIC:
+        {
+            return "Alias generic error";
+        }
+        case rai::ErrorCode::ALIAS_RESERVED_CHARACTOR_AT:
+        {
+            return "Contain reserved charactor '@'";
+        }
+        case rai::ErrorCode::ALIAS_RESERVED_CHARACTOR_UNDERSCORE:
+        {
+            return "Contain reserved charactor '_'";
+        }
+        case rai::ErrorCode::ALIAS_OP_INVALID:
+        {
+            return "Invalid alias operation";
+        }
+        case rai::ErrorCode::ALIAS_OP_UNKNOWN:
+        {
+            return "Unknown alias operation";
+        }
+        case rai::ErrorCode::ALIAS_MULTI_EXTENSIONS:
+        {
+            return "One block can contain only one alias extension";
+        }
+        case rai::ErrorCode::ALIAS_LEDGER_GET:
+        {
+            return "Failed to get data from ledger";
         }
         default:
         {

@@ -760,6 +760,11 @@ rai::uint512_union::uint512_union()
     *this = rai::uint512_t(0);
 }
 
+rai::uint512_union::uint512_union(uint64_t value)
+{
+    *this = rai::uint512_t(value);
+}
+
 rai::uint512_union::uint512_union(const rai::uint512_t& value)
 {
     rai::uint512_t value_l(value);
@@ -771,6 +776,49 @@ rai::uint512_union::uint512_union(const rai::uint512_t& value)
     }
 }
 
+rai::uint512_union::uint512_union(const std::vector<uint8_t>& vec)
+{
+    Clear();
+
+    auto i = bytes.begin();
+    auto j = vec.begin();
+    for (; i != bytes.end() && j != vec.end(); ++i, ++j)
+    {
+        *i = *j;
+    }
+}
+
+rai::uint512_union::uint512_union(uint8_t byte, size_t offset)
+{
+    Clear();
+    if (offset < 0)
+    {
+        offset = 0;
+    }
+    else if (offset >= bytes.size())
+    {
+        offset = bytes.size() - 1;
+    }
+    bytes[offset] = byte;
+}
+
+rai::uint512_union::uint512_union(const std::string& str, bool to_lower)
+{
+    Clear();
+
+    auto i = bytes.begin();
+    auto j = str.begin();
+    for (; i != bytes.end() && j != str.end(); ++i, ++j)
+    {
+        *i = *j;
+    }
+
+    if (to_lower)
+    {
+        ToLower();
+    }
+}
+
 bool rai::uint512_union::operator==(const rai::uint512_union& other) const
 {
     return qwords == other.qwords;
@@ -779,6 +827,19 @@ bool rai::uint512_union::operator==(const rai::uint512_union& other) const
 bool rai::uint512_union::operator!=(const rai::uint512_union& other) const
 {
     return !(*this == other);
+}
+
+rai::uint512_union rai::uint512_union::operator+(
+    const rai::uint512_union& other) const
+{
+    return rai::uint512_union(Number() + other.Number());
+}
+
+rai::uint512_union& rai::uint512_union::operator+=(
+    const rai::uint512_union& other)
+{
+    *this = *this + other;
+    return *this;
 }
 
 rai::uint512_t rai::uint512_union::Number() const
@@ -838,6 +899,17 @@ bool rai::uint512_union::DecodeHex(const std::string& text)
     catch (std::runtime_error&)
     {
         return true;
+    }
+}
+
+void rai::uint512_union::ToLower()
+{
+    for (auto i = bytes.begin(), n = bytes.end(); i != n; ++i)
+    {
+        if (*i >= 'A' && *i <= 'Z')
+        {
+            *i += 32;
+        }
     }
 }
 

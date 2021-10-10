@@ -121,6 +121,8 @@ typename std::enable_if<is_bytes<T>::value>::type Write(rai::Stream& stream,
 }
 
 bool Read(rai::Stream& stream, size_t size, std::vector<uint8_t>& data);
+void Write(rai::Stream& stream, size_t size, const std::vector<uint8_t>& data);
+
 
 bool StreamEnd(rai::Stream&);
 

@@ -148,6 +148,118 @@ bool rai::AccountInfo::Restricted() const
     return forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp());
 }
 
+rai::AliasInfo::AliasInfo()
+    : head_(rai::Block::INVALID_HEIGHT),
+      name_valid_(rai::Block::INVALID_HEIGHT),
+      dns_valid_(rai::Block::INVALID_HEIGHT)
+{
+}
+
+void rai::AliasInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, head_);
+    rai::Write(stream, name_valid_);
+    rai::Write(stream, dns_valid_);
+    uint16_t size = static_cast<uint16_t>(name_.size());
+    rai::Write(stream, size);
+    rai::Write(stream, size, name_);
+    size = static_cast<uint16_t>(dns_.size());
+    rai::Write(stream, size);
+    rai::Write(stream, size, dns_);
+}
+
+bool rai::AliasInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, head_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, name_valid_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, dns_valid_);
+    IF_ERROR_RETURN(error, true);
+    uint16_t size = 0;
+    error = rai::Read(stream, size);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, size, name_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, size);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, size, dns_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::AliasBlock::AliasBlock()
+    : previous_(rai::Block::INVALID_HEIGHT), hash_(0), status_(0), op_(0)
+{
+}
+
+rai::AliasBlock::AliasBlock(uint64_t previous, const rai::BlockHash& hash,
+                            int32_t status)
+    : previous_(previous_), hash_(hash), status_(status), op_(0)
+{
+}
+
+rai::AliasBlock::AliasBlock(uint64_t previous, const rai::BlockHash& hash,
+                            int32_t status, uint8_t op,
+                            const std::vector<uint8_t>& value)
+    : previous_(previous_), hash_(hash), status_(status), op_(op), value_(value)
+{
+}
+
+void rai::AliasBlock::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, previous_);
+    rai::Write(stream, hash_.bytes);
+    rai::Write(stream, status_);
+    rai::Write(stream, op_);
+    uint16_t size = static_cast<uint16_t>(value_.size());
+    rai::Write(stream, size);
+    rai::Write(stream, size, value_);
+}
+
+bool rai::AliasBlock::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, previous_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, hash_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, status_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, op_);
+    IF_ERROR_RETURN(error, true);
+    uint16_t size = 0;
+    error = rai::Read(stream, size);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, size, value_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::AliasIndex::AliasIndex(const rai::Prefix& prefix,
+                            const rai::Account& account)
+    : prefix_(prefix), account_(account)
+{
+    prefix_.ToLower();
+}
+
+void rai::AliasIndex::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, prefix_.bytes);
+    rai::Write(stream, account_.bytes);
+}
+
+bool rai::AliasIndex::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, prefix_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
 rai::ReceivableInfo::ReceivableInfo(const rai::Account& source,
                                     const rai::Amount& amount,
                                     uint64_t timestamp)
@@ -408,6 +520,373 @@ bool rai::Ledger::NextAccountInfo(rai::Transaction& transaction,
     }
     rai::BufferStream stream(data, size);
     return info.Deserialize(stream);
+}
+
+bool rai::Ledger::AliasInfoPut(rai::Transaction& transaction,
+                               const rai::Account& account,
+                               const rai::AliasInfo& info)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        info.Serialize(stream);
+    }
+    rai::MdbVal key(account);
+    rai::MdbVal value(bytes.size(), bytes.data());
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.alias_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AliasInfoGet(rai::Transaction& transaction,
+                               const rai::Account& account,
+                               rai::AliasInfo& info) const
+{
+    rai::MdbVal key(account);
+    rai::MdbVal value;
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.alias_, key, value);
+    if (error)
+    {
+        return true;
+    }
+    rai::BufferStream stream(value.Data(), value.Size());
+    return info.Deserialize(stream);
+}
+
+
+bool rai::Ledger::AliasBlockPut(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                const rai::AliasBlock& block)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        block.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_, store_.alias_block_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AliasBlockGet(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                rai::AliasBlock& block) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_, store_.alias_block_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    return block.Deserialize(stream);
+}
+
+bool rai::Ledger::AliasIndexPut(rai::Transaction& transaction,
+                                const rai::AliasIndex& index)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    uint8_t ignore = 0;
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(sizeof(ignore), &ignore);
+    bool error = store_.Put(transaction.mdb_transaction_, store_.alias_index_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AliasIndexDel(rai::Transaction& transaction,
+                                const rai::AliasIndex& index)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    return store_.Del(transaction.mdb_transaction_, store_.alias_index_, key,
+                      nullptr);
+}
+
+bool rai::Ledger::AliasIndexGet(rai::Transaction& transaction,
+                                rai::AliasIndex& index) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_, store_.alias_index_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AliasIndexGet(const rai::Iterator& it,
+                                rai::AliasIndex& index) const
+{
+    if (it.store_it_->first.Data() == nullptr
+        || it.store_it_->first.Size() == 0)
+    {
+        return true;
+    }
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    rai::BufferStream stream(data, size);
+    return index.Deserialize(stream);
+}
+
+rai::Iterator rai::Ledger::AliasIndexLowerBound(rai::Transaction& transaction,
+                                                const rai::AliasIndex& index)
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.alias_index_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::AliasIndexUpperBound(rai::Transaction& transaction,
+                                                const rai::AliasIndex& index)
+{
+    rai::AliasIndex index_l(index);
+    index_l.account_ += 1;
+    if (index_l.account_.IsZero())
+    {
+        index_l.prefix_ += 1;
+        if (index_l.prefix_.IsZero())
+        {
+            return rai::Iterator(rai::StoreIterator(nullptr));
+        }
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index_l.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.alias_index_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::AliasIndexLowerBound(rai::Transaction& transaction,
+                                                const rai::Prefix& prefix)
+{
+    rai::AliasIndex index{prefix, rai::Account(0)};
+    return AliasIndexLowerBound(transaction, index);
+}
+
+rai::Iterator rai::Ledger::AliasIndexUpperBound(rai::Transaction& transaction,
+                                                const rai::Prefix& prefix,
+                                                size_t size)
+{
+    if (size <= 0)
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+
+    rai::AliasIndex index{prefix, rai::Account(0)};
+    rai::Prefix offset(static_cast<uint8_t>(1), size - 1);
+    index.prefix_ += offset;
+    if (index.prefix_.IsZero())
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+    return AliasIndexLowerBound(transaction, index);  // lower bound !
+}
+
+bool rai::Ledger::AliasDnsIndexPut(rai::Transaction& transaction,
+                                   const rai::AliasIndex& index)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    uint8_t ignore = 0;
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(sizeof(ignore), &ignore);
+    bool error = store_.Put(transaction.mdb_transaction_,
+                            store_.alias_dns_index_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AliasDnsIndexDel(rai::Transaction& transaction,
+                                   const rai::AliasIndex& index)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    return store_.Del(transaction.mdb_transaction_, store_.alias_dns_index_,
+                      key, nullptr);
+}
+
+bool rai::Ledger::AliasDnsIndexGet(rai::Transaction& transaction,
+                                   rai::AliasIndex& index) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.alias_dns_index_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AliasDnsIndexGet(const rai::Iterator& it,
+                                   rai::AliasIndex& index) const
+{
+    if (it.store_it_->first.Data() == nullptr
+        || it.store_it_->first.Size() == 0)
+    {
+        return true;
+    }
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    rai::BufferStream stream(data, size);
+    return index.Deserialize(stream);
+}
+
+rai::Iterator rai::Ledger::AliasDnsIndexLowerBound(
+    rai::Transaction& transaction, const rai::AliasIndex& index)
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.alias_dns_index_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::AliasDnsIndexUpperBound(
+    rai::Transaction& transaction, const rai::AliasIndex& index)
+{
+    rai::AliasIndex index_l(index);
+    index_l.account_ += 1;
+    if (index_l.account_.IsZero())
+    {
+        index_l.prefix_ += 1;
+        if (index_l.prefix_.IsZero())
+        {
+            return rai::Iterator(rai::StoreIterator(nullptr));
+        }
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index_l.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.alias_dns_index_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::AliasDnsIndexLowerBound(
+    rai::Transaction& transaction, const rai::Prefix& prefix)
+{
+    rai::AliasIndex index{prefix, rai::Account(0)};
+    return AliasDnsIndexLowerBound(transaction, index);
+}
+
+rai::Iterator rai::Ledger::AliasDnsIndexUpperBound(
+    rai::Transaction& transaction, const rai::Prefix& prefix, size_t size)
+{
+    if (size <= 0)
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+
+    rai::AliasIndex index{prefix, rai::Account(0)};
+    rai::Prefix offset(static_cast<uint8_t>(1), size - 1);
+    index.prefix_ += offset;
+    if (index.prefix_.IsZero())
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+    return AliasDnsIndexLowerBound(transaction, index);  // lower bound !
 }
 
 bool rai::Ledger::BlockPut(rai::Transaction& transaction,

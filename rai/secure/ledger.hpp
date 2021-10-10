@@ -84,6 +84,49 @@ public:
     rai::BlockHash tail_;
 };
 
+class AliasInfo
+{
+public:
+    AliasInfo();
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint64_t head_;
+    uint64_t name_valid_;
+    uint64_t dns_valid_;
+    std::vector<uint8_t> name_;
+    std::vector<uint8_t> dns_;
+};
+
+class AliasBlock
+{
+public:
+    AliasBlock();
+    AliasBlock(uint64_t, const rai::BlockHash&, int32_t);
+    AliasBlock(uint64_t, const rai::BlockHash&, int32_t, uint8_t,
+               const std::vector<uint8_t>&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint64_t previous_;
+    rai::BlockHash hash_;
+    int32_t status_; // rai::ErrorCode
+    uint8_t op_;
+    std::vector<uint8_t> value_;
+};
+
+class AliasIndex
+{
+public:
+    AliasIndex() = default;
+    AliasIndex(const rai::Prefix&, const rai::Account&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Prefix prefix_;
+    rai::Account account_;
+};
+
 class ReceivableInfo
 {
 public:
@@ -216,6 +259,37 @@ public:
     bool AccountCount(rai::Transaction&, size_t&) const;
     bool NextAccountInfo(rai::Transaction&, rai::Account&,
                          rai::AccountInfo&) const;
+    bool AliasInfoPut(rai::Transaction&, const rai::Account&,
+                      const rai::AliasInfo&);
+    bool AliasInfoGet(rai::Transaction&, const rai::Account&,
+                      rai::AliasInfo&) const;
+    bool AliasBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
+                       const rai::AliasBlock&);
+    bool AliasBlockGet(rai::Transaction&, const rai::Account&, uint64_t,
+                       rai::AliasBlock&) const;
+    bool AliasIndexPut(rai::Transaction&, const rai::AliasIndex&);
+    bool AliasIndexDel(rai::Transaction&, const rai::AliasIndex&);
+    bool AliasIndexGet(rai::Transaction&, rai::AliasIndex&) const;
+    bool AliasIndexGet(const rai::Iterator&, rai::AliasIndex&) const;
+    rai::Iterator AliasIndexLowerBound(rai::Transaction&,
+                                       const rai::AliasIndex&);
+    rai::Iterator AliasIndexUpperBound(rai::Transaction&,
+                                       const rai::AliasIndex&);
+    rai::Iterator AliasIndexLowerBound(rai::Transaction&, const rai::Prefix&);
+    rai::Iterator AliasIndexUpperBound(rai::Transaction&, const rai::Prefix&,
+                                       size_t = 64);
+    bool AliasDnsIndexPut(rai::Transaction&, const rai::AliasIndex&);
+    bool AliasDnsIndexDel(rai::Transaction&, const rai::AliasIndex&);
+    bool AliasDnsIndexGet(rai::Transaction&, rai::AliasIndex&) const;
+    bool AliasDnsIndexGet(const rai::Iterator&, rai::AliasIndex&) const;
+    rai::Iterator AliasDnsIndexLowerBound(rai::Transaction&,
+                                          const rai::AliasIndex&);
+    rai::Iterator AliasDnsIndexUpperBound(rai::Transaction&,
+                                          const rai::AliasIndex&);
+    rai::Iterator AliasDnsIndexLowerBound(rai::Transaction&,
+                                          const rai::Prefix&);
+    rai::Iterator AliasDnsIndexUpperBound(rai::Transaction&, const rai::Prefix&,
+                                          size_t = 64);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);
@@ -357,6 +431,5 @@ private:
     bool enable_delegator_list_;
     mutable std::mutex delegator_list_mutex_;
     rai::DelegatorList delegator_list_;
-
 };
 }  // namespace rai

@@ -55,22 +55,22 @@ public:
     virtual ~App() = default;
 
     virtual rai::ErrorCode PreBlockAppend(rai::Transaction&,
-                                          const std::shared_ptr<rai::Block>,
+                                          const std::shared_ptr<rai::Block>&,
                                           bool) = 0;
     virtual rai::ErrorCode AfterBlockAppend(rai::Transaction&,
-                                            const std::shared_ptr<rai::Block>,
+                                            const std::shared_ptr<rai::Block>&,
                                             bool) = 0;
     virtual rai::ErrorCode PreBlockRollback(
-        rai::Transaction&, const std::shared_ptr<rai::Block>) = 0;
+        rai::Transaction&, const std::shared_ptr<rai::Block>&) = 0;
     virtual rai::ErrorCode AfterBlockRollback(
-        rai::Transaction&, const std::shared_ptr<rai::Block>) = 0;
+        rai::Transaction&, const std::shared_ptr<rai::Block>&) = 0;
     virtual std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
         const rai::UniqueId&, bool, const std::string&,
         const std::function<void(const rai::Ptree&)>&) = 0;
 
     std::shared_ptr<rai::App> Shared();
-    void Start();
-    void Stop();
+    virtual void Start();
+    virtual void Stop();
     void Run();
     bool Busy() const;
     void Ongoing(const std::function<void()>&, const std::chrono::seconds&);

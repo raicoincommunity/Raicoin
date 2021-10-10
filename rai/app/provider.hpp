@@ -3,30 +3,6 @@
 #include <vector>
 #include <rai/common/util.hpp>
 
-namespace
-{
-template <typename T>
-struct is_filter : std::false_type
-{
-};
-
-template <>
-struct is_filter<rai::Provider::Filter> : std::true_type
-{
-};
-
-template <typename T>
-struct is_action : std::false_type
-{
-};
-
-template <>
-struct is_action<rai::Provider::Action> : std::true_type
-{
-};
-
-}  // namespace
-
 namespace rai
 {
 class Provider
@@ -56,6 +32,26 @@ public:
         APP_ACCOUNT_SYNC    = 1,
     };
     static std::string ToString(Action);
+
+    template <typename T>
+    struct is_filter : std::false_type
+    {
+    };
+
+    template <>
+    struct is_filter<rai::Provider::Filter> : std::true_type
+    {
+    };
+
+    template <typename T>
+    struct is_action : std::false_type
+    {
+    };
+
+    template <>
+    struct is_action<rai::Provider::Action> : std::true_type
+    {
+    };
 
     template <typename T,
               typename std::enable_if<

@@ -600,3 +600,20 @@ TEST(AccountParser, parse)
         "Rai_3e3j5tkog48pnny9dmfzj1r16pg8t1e76dz5tmac6iq689wyjfpiij4txtd0");
     ASSERT_EQ(true, parser6.Error());
 }
+
+TEST(Prefix, ToLower)
+{
+    bool ret;
+    rai::uint512_union value;
+
+    ret = value.DecodeHex(
+        "4041FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5A5B");
+    ASSERT_EQ(false, ret);
+    value.ToLower();
+
+    std::string expect =
+        "4061FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7A5B";
+    ASSERT_EQ(expect, value.StringHex());
+}

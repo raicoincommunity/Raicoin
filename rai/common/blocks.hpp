@@ -69,6 +69,7 @@ public:
     virtual rai::uint256_union Link() const                   = 0;
     virtual rai::Account Representative() const               = 0;
     virtual bool HasRepresentative() const                    = 0;
+    virtual std::vector<uint8_t> Extensions() const           = 0;
 
     static uint64_t constexpr INVALID_HEIGHT =
         std::numeric_limits<uint64_t>::max();
@@ -119,7 +120,7 @@ public:
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
 
-    std::vector<uint8_t> Extensions() const;
+    std::vector<uint8_t> Extensions() const override;
 
     static bool CheckOpcode(rai::BlockOpcode);
     static bool CheckExtensionsLength(uint32_t);
@@ -178,6 +179,7 @@ public:
     rai::uint256_union Link() const override;
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
+    std::vector<uint8_t> Extensions() const override;
 
     static bool CheckOpcode(rai::BlockOpcode);
 
@@ -230,6 +232,7 @@ public:
     rai::uint256_union Link() const override;
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
+    std::vector<uint8_t> Extensions() const override;
 
     static bool CheckOpcode(rai::BlockOpcode);
 
