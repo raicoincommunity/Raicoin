@@ -135,30 +135,34 @@ enum class ErrorCode : int
     WEBSOCKET_SEND                       = 125,
     WEBSOCKET_RECEIVE                    = 126,
     WEBSOCKET_QUEUE_OVERFLOW             = 127,
+    UTF8_CHECK                           = 128,
+    UTF8_CONTROL_CHARACTER               = 129,
 
     // json parsing errors: 200 ~ 299
-    JSON_GENERIC                 = 200,
-    JSON_BLOCK_TYPE              = 201,
-    JSON_BLOCK_OPCODE            = 202,
-    JSON_BLOCK_CREDIT            = 203,
-    JSON_BLOCK_COUNTER           = 204,
-    JSON_BLOCK_TIMESTAMP         = 205,
-    JSON_BLOCK_HEIGHT            = 206,
-    JSON_BLOCK_ACCOUNT           = 207,
-    JSON_BLOCK_PREVIOUS          = 208,
-    JSON_BLOCK_REPRESENTATIVE    = 209,
-    JSON_BLOCK_BALANCE           = 210,
-    JSON_BLOCK_LINK              = 211,
-    JSON_BLOCK_EXTENSIONS_LENGTH = 212,
-    JSON_BLOCK_EXTENSIONS_EMPTY  = 213,
-    JSON_BLOCK_EXTENSION_TYPE    = 214,
-    JSON_BLOCK_EXTENSION_VALUE   = 215,
-    JSON_BLOCK_SIGNATURE         = 216,
-    JSON_BLOCK_PRICE             = 217,
-    JSON_BLOCK_BEGIN_TIME        = 218,
-    JSON_BLOCK_END_TIME          = 219,
-    JSON_BLOCK_EXTENSIONS_RAW    = 220,
-    JSON_BLOCK_EXTENSION_FORMAT  = 221,
+    JSON_GENERIC                        = 200,
+    JSON_BLOCK_TYPE                     = 201,
+    JSON_BLOCK_OPCODE                   = 202,
+    JSON_BLOCK_CREDIT                   = 203,
+    JSON_BLOCK_COUNTER                  = 204,
+    JSON_BLOCK_TIMESTAMP                = 205,
+    JSON_BLOCK_HEIGHT                   = 206,
+    JSON_BLOCK_ACCOUNT                  = 207,
+    JSON_BLOCK_PREVIOUS                 = 208,
+    JSON_BLOCK_REPRESENTATIVE           = 209,
+    JSON_BLOCK_BALANCE                  = 210,
+    JSON_BLOCK_LINK                     = 211,
+    JSON_BLOCK_EXTENSIONS_LENGTH        = 212,
+    JSON_BLOCK_EXTENSIONS_EMPTY         = 213,
+    JSON_BLOCK_EXTENSION_TYPE           = 214,
+    JSON_BLOCK_EXTENSION_VALUE          = 215,
+    JSON_BLOCK_SIGNATURE                = 216,
+    JSON_BLOCK_PRICE                    = 217,
+    JSON_BLOCK_BEGIN_TIME               = 218,
+    JSON_BLOCK_END_TIME                 = 219,
+    JSON_BLOCK_EXTENSIONS_RAW           = 220,
+    JSON_BLOCK_EXTENSION_FORMAT         = 221,
+    JSON_BLOCK_EXTENSION_ALIAS_OP       = 222,
+    JSON_BLOCK_EXTENSION_ALIAS_OP_VALUE = 223,
 
 
     JSON_CONFIG_VERSION                  = 250,
@@ -248,6 +252,14 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_ACCOUNT_TYPES = 335,
     RPC_ACTION_NOT_ALLOWED          = 336,
     RPC_INVALID_FIELD_CLIENT_ID     = 337,
+    RPC_MISS_FIELD_SERVICE          = 338,
+    RPC_INVALID_FIELD_SERVICE       = 339,
+    RPC_MISS_FIELD_FILTERS          = 340,
+    RPC_INVALID_FIELD_FILTERS       = 341,
+    RPC_MISS_FIELD_NAME             = 342,
+    RPC_INVALID_FIELD_NAME          = 343,
+    RPC_MISS_FIELD_DNS              = 344,
+    RPC_INVALID_FIELD_DNS           = 345,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,
@@ -334,11 +346,24 @@ enum class ErrorCode : int
     APP_PROCESS_ROLLBACK_BLOCK_PUT      = 615,
     APP_PROCESS_LEDGER_BLOCK_DEL        = 616,
     APP_PROCESS_LEDGER_ACCOUNT_DEL      = 617,
+    APP_PROCESS_CONFIRM_REQUIRED        = 618,
+    APP_PROCESS_LEDGER_PUT              = 619,
+    APP_PROCESS_LEDGER_DEL              = 620,
+    APP_PROCESS_HALT                    = 621,
 
     APP_RPC_MISS_FIELD_TRACE            = 650,
     APP_RPC_INVALID_FIELD_TRACE         = 651,
 
-    MAX = 700
+
+    ALIAS_GENERIC                       = 700,
+    ALIAS_RESERVED_CHARACTOR_AT         = 701,
+    ALIAS_RESERVED_CHARACTOR_UNDERSCORE = 702,
+    ALIAS_OP_INVALID                    = 703,
+    ALIAS_OP_UNKNOWN                    = 704,
+    ALIAS_MULTI_EXTENSIONS              = 705,
+    ALIAS_LEDGER_GET                    = 706,
+
+    MAX = 800
 };
 
 std::string ErrorString(rai::ErrorCode);
@@ -356,3 +381,10 @@ std::string ErrorString(rai::ErrorCode);
     {                                          \
         return;                                \
     }
+
+#define IF_NOT_SUCCESS_BREAK(error_code)       \
+    if (error_code != rai::ErrorCode::SUCCESS) \
+    {                                          \
+        break;                                 \
+    }
+

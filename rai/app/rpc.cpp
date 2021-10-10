@@ -59,6 +59,10 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         Clients();
     }
+    else if (action == "service_subscribe")
+    {
+        ServiceSubscribe();
+    }
     else if (action == "subscription")
     {
         Subscription();
@@ -494,6 +498,43 @@ void rai::AppRpcHandler::BootstrapStatus()
     app_.bootstrap_.Status(response_);
 }
 
+void rai::AppRpcHandler::ServiceSubscribe()
+{
+    std::string service;
+    bool error = GetService_(service);
+    IF_ERROR_RETURN_VOID(error);
+
+    std::vector<std::pair<std::string, std::string>> filters;
+    error = GetFilters_(filters);
+    IF_ERROR_RETURN_VOID(error);
+
+    if (filters.size() != 1)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+        return;
+    }
+    
+    using P = rai::Provider;
+    if (filters[0].first != P::ToString(P::Filter::APP_ACCOUNT))
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+        return;
+    }
+
+    rai::Account account;
+    error = account.DecodeAccount(filters[0].second);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+        return;
+    }
+
+    error_code_ = app_.subscribe_.Subscribe(account, uid_);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    response_.put("success", "");
+}
+
 void rai::AppRpcHandler::Subscription()
 {
     rai::Account account;
@@ -548,4 +589,60 @@ void rai::AppRpcHandler::SubscriptionCount()
 void rai::AppRpcHandler::SubscriptionAccountCount()
 {
     response_.put("count", std::to_string(app_.subscribe_.AccountSize()));
+}
+
+bool rai::AppRpcHandler::GetService_(std::string& service)
+{
+    auto service_o = request_.get_optional<std::string>("service");
+    if (!service_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_SERVICE;
+        return true;
+    }
+
+    if (service_o->empty())
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_SERVICE;
+        return true;
+    }
+
+    service = *service_o;
+    return false;
+}
+
+bool rai::AppRpcHandler::GetFilters_(
+    std::vector<std::pair<std::string, std::string>>& filters)
+{
+    auto filters_o = request_.get_child_optional("filters");
+    if (!filters_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_FILTERS;
+        return true;
+    }
+
+    for (const auto& i : *filters_o)
+    {
+        auto key_o = i.second.get_optional<std::string>("key");
+        if (!key_o)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+            return true;
+        }
+
+        auto value_o = i.second.get_optional<std::string>("value");
+        if (!value_o)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+            return true;
+        }
+        filters.emplace_back(*key_o, *value_o);
+    }
+
+    if (filters.size() == 0)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+        return true;
+    }
+
+    return false;
 }

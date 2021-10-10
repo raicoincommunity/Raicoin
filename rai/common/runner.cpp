@@ -53,8 +53,11 @@ void rai::ServiceRunner::Join()
 }
 
 rai::OngoingServiceRunner::OngoingServiceRunner(
-    boost::asio::io_service& service)
-    : service_(service), stopped_(false), thread_([this]() { this->Run(); })
+    boost::asio::io_service& service, int interval)
+    : service_(service),
+      interval_(interval),
+      stopped_(false),
+      thread_([this]() { this->Run(); })
 {
 }
 
@@ -73,8 +76,8 @@ void rai::OngoingServiceRunner::Run()
     std::unique_lock<std::mutex> lock(mutex_);
     while (!stopped_)
     {
-        condition_.wait_until(
-            lock, std::chrono::steady_clock::now() + std::chrono::seconds(3));
+        condition_.wait_until(lock, std::chrono::steady_clock::now()
+                                        + std::chrono::seconds(interval_));
         if (stopped_)
         {
             break;
@@ -90,12 +93,11 @@ void rai::OngoingServiceRunner::Run()
         {
             service_.run();
         }
-        catch(const std::exception& e)
+        catch (const std::exception& e)
         {
-            // log
             std::cout << "service exception: " << e.what() << std::endl;
         }
-        
+
         lock.lock();
     }
 }
@@ -118,7 +120,7 @@ void rai::OngoingServiceRunner::Stop()
 
 void rai::OngoingServiceRunner::Join()
 {
-    if (thread_.joinable())
+    if (thread_.joinable() && thread_.get_id() != std::this_thread::get_id())
     {
         thread_.join();
     }

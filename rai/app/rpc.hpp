@@ -35,6 +35,7 @@ public:
     void BlockQueryByHeight();
     void BootstrapStatus();
     void Clients();
+    void ServiceSubscribe();
     void Subscription();
     void Subscriptions();
     void SubscriptionCount();
@@ -43,6 +44,11 @@ public:
     rai::App& app_;
     rai::UniqueId uid_;
     bool check_;
+
+protected:
+    bool GetService_(std::string&);
+    bool GetFilters_(std::vector<std::pair<std::string, std::string>>&);
+
 };
 
 }  // namespace rai

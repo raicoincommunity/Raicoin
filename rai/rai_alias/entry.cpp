@@ -6,6 +6,7 @@
 #include <rai/secure/util.hpp>
 #include <rai/common/alarm.hpp>
 #include <rai/rai_alias/config.hpp>
+#include <rai/rai_alias/alias.hpp>
 
 namespace
 {
@@ -43,8 +44,42 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm,
         rai::Log::Init(data_path, config.log_);
         boost::asio::io_service service;
         rai::Alarm alarm(service);
+        auto alias = std::make_shared<rai::Alias>(error_code, service, data_path,
+                                                alarm, config);
+        IF_NOT_SUCCESS_RETURN(error_code);
+        alias->Start();
 
-        // todo:
+        std::shared_ptr<rai::Rpc> rpc;
+        if (config.rpc_enable_ || config.app_.ws_enable_)
+        {
+            rpc = rai::MakeRpc(service, config.rpc_, alias->RpcHandlerMaker());
+            if (rpc == nullptr)
+            {
+                std::cout << "Error: failed to contruct rpc" << std::endl;
+                return rai::ErrorCode::SUCCESS;
+            }
+        }
+        alias->rpc_ = rpc;
+
+        if (config.rpc_enable_)
+        {
+            rpc->Start();
+        }
+
+        if (rpc)
+        {
+            rai::ServiceRunner runner(
+                service,
+                std::max<size_t>(4, std::thread::hardware_concurrency()));
+            runner.Join();
+        }
+        else
+        {
+            auto runner =
+                std::make_shared<rai::OngoingServiceRunner>(service, 1);
+            alias->runner_ = runner;
+            runner->Join();
+        }
     }
     catch(const std::exception& e)
     {

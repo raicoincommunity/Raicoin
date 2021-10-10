@@ -19,7 +19,7 @@ private:
 class OngoingServiceRunner
 {
 public:
-    OngoingServiceRunner(boost::asio::io_service&);
+    OngoingServiceRunner(boost::asio::io_service&, int = 3);
     ~OngoingServiceRunner();
     void Notify();
     void Run();
@@ -28,6 +28,7 @@ public:
 
 private:
     boost::asio::io_service& service_;
+    int interval_;
     std::condition_variable condition_;
     mutable std::mutex mutex_;
     bool stopped_;

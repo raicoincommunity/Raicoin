@@ -20,6 +20,20 @@ bool rai::Read(rai::Stream& stream, size_t size, std::vector<uint8_t>& data)
     return false;
 }
 
+void rai::Write(rai::Stream& stream, size_t size,
+                const std::vector<uint8_t>& data)
+{
+    if (data.size() < size)
+    {
+        size = data.size();
+    }
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        rai::Write(stream, data[i]);
+    }
+}
+
 bool rai::StreamEnd(rai::Stream& stream)
 {
     uint8_t junk;

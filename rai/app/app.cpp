@@ -1,6 +1,7 @@
 #include <rai/app/app.hpp>
 
 #include <rai/common/stat.hpp>
+#include <rai/common/log.hpp>
 
 rai::AppTrace::AppTrace()
     : message_from_gateway_(false), message_to_gateway_(false)
@@ -195,10 +196,14 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT:
             case rai::ErrorCode::APP_PROCESS_LEDGER_BLOCK_PUT:
             case rai::ErrorCode::APP_PROCESS_LEDGER_SUCCESSOR_SET:
+            case rai::ErrorCode::APP_PROCESS_LEDGER_PUT:
+            case rai::ErrorCode::APP_PROCESS_LEDGER_DEL:
             {
-                // log
-                std::cout << "App::ProcessBlock: ledger operation error code "
-                          << static_cast<uint32_t>(error_code) << std::endl;
+                std::string error_info = rai::ToString(
+                    "App::ProcessBlock: ledger operation error code ",
+                    static_cast<uint32_t>(error_code));
+                rai::Log::Error(error_info);
+                std::cout << error_info << std::endl;
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_GAP_PREVIOUS:
@@ -208,7 +213,6 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             }
             case rai::ErrorCode::APP_PROCESS_PRUNED:
             {
-                // log
                 rai::Stats::AddDetail(
                     error_code, "account=", block->Account().StringAccount(),
                     ", height=", block->Height(),
@@ -233,11 +237,12 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
                     bool error = GetHeadBlock_(transaction, block->Account(), head);
                     if (error)
                     {
-                        // log
-                        std::cout << "App::ProcessBlock: failed to get head "
-                                     "block, account="
-                                  << block->Account().StringAccount()
-                                  << std::endl;
+                        std::string error_info = rai::ToString(
+                            "App::ProcessBlock: failed to get head block, "
+                            "account=",
+                            block->Account().StringAccount());
+                        rai::Log::Error(error_info);
+                        std::cout << error_info << std::endl;
                     }
                     else
                     {
@@ -256,6 +261,21 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             case rai::ErrorCode::APP_PROCESS_CONFIRMED:
             {
                 break;
+            }
+            case rai::ErrorCode::APP_PROCESS_CONFIRM_REQUIRED:
+            {
+                block_confirm_.Add(block);
+                break;
+            }
+            case rai::ErrorCode::APP_PROCESS_HALT:
+            {
+                std::string error_info = rai::ToString(
+                    "App::ProcessBlock: fatal error, the app processor is "
+                    "halted, block hash=",
+                    block->Hash().StringHex());
+                rai::Log::Error(error_info);
+                std::cout << error_info << std::endl;
+                Background([this](){Stop();});
             }
             default:
             {
@@ -296,7 +316,7 @@ void rai::App::ProcessBlockRollback(const std::shared_ptr<rai::Block>& block)
         rai::Transaction transaction(error_code, ledger_, true);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
-            // log
+            rai::Log::Error("App::ProcessBlockRollback: construct transaction");
             rai::Stats::Add(error_code, "App::ProcessBlockRollback");
             return;
         }
@@ -320,17 +340,20 @@ void rai::App::ProcessBlockRollback(const std::shared_ptr<rai::Block>& block)
             case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_DEL:
             case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT:
             {
-                // log
-                std::cout
-                    << "App::ProcessBlockRollback: ledger operation error code "
-                    << static_cast<uint32_t>(error_code) << std::endl;
+                std::string error_info = rai::ToString(
+                    "App::ProcessBlockRollback: ledger operation error code ",
+                    static_cast<uint32_t>(error_code));
+                rai::Log::Error(error_info);
+                std::cout << error_info << std::endl;
                 break;
             }
             default:
             {
-                // log
-                std::cout << "App::ProcessBlockRollback: unknown error code "
-                          << static_cast<uint32_t>(error_code) << std::endl;
+                std::string error_info = rai::ToString(
+                    "App::ProcessBlockRollback: unknown error code ",
+                    static_cast<uint32_t>(error_code));
+                rai::Log::Error(error_info);
+                std::cout << error_info << std::endl;
             }
         }
 
@@ -411,7 +434,6 @@ void rai::App::QueueBlockRollback(const std::shared_ptr<rai::Block>& block)
         }
     });
 }
-
 
 void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
 {
@@ -746,7 +768,10 @@ void rai::App::ReceiveWsMessage(const std::string& message,
         uid, true, message, [this, uid](const rai::Ptree& response) {
             ws_server_->Send(uid, response);
         });
-    handler->Process();
+    if (handler)
+    {
+        handler->Process();
+    }
 }
 
 void rai::App::ProcessWsSession(const rai::UniqueId& uid, bool add)
@@ -789,7 +814,6 @@ void rai::App::NotifyProviderInfo(const rai::UniqueId& uid)
 
     SendToClient(ptree, uid);
 }
-
 
 void rai::App::RegisterObservers_()
 {

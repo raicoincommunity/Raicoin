@@ -1017,6 +1017,11 @@ bool rai::RepBlock::HasRepresentative() const
     return false;
 }
 
+std::vector<uint8_t> rai::RepBlock::Extensions() const
+{
+    return std::vector<uint8_t>();
+}
+
 bool rai::RepBlock::CheckOpcode(rai::BlockOpcode opcode)
 {
     std::vector<rai::BlockOpcode> opcodes = {
@@ -1361,6 +1366,11 @@ rai::Account rai::AdBlock::Representative() const
 bool rai::AdBlock::HasRepresentative() const
 {
     return true;
+}
+
+std::vector<uint8_t> rai::AdBlock::Extensions() const
+{
+    return std::vector<uint8_t>();
 }
 
 bool rai::AdBlock::CheckOpcode(rai::BlockOpcode opcode)

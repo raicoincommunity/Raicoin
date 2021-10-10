@@ -1,10 +1,10 @@
 #pragma once
 
-#include <bitset>
 #include <string>
 #include <vector>
 
 #include <rai/common/errors.hpp>
+#include <rai/common/util.hpp>
 
 namespace rai
 {
@@ -12,8 +12,8 @@ namespace rai
 enum class ExtensionType : uint16_t
 {
     INVALID     = 0,
-    SUB_ACCOUNT = 1, // UTF-8 encode string
-    NOTE        = 2, // UTF-8 encode string
+    SUB_ACCOUNT = 1, // UTF-8 encoding string
+    NOTE        = 2, // UTF-8 encoding string
     ALIAS       = 3,
 
     RESERVED_MAX = 1023,
@@ -88,8 +88,8 @@ public:
         DNS             = 2,
         MAX
     };
-    static std::string OpToString();
-    static Op StringToOp();
+    static std::string OpToString(Op);
+    static Op StringToOp(const std::string&);
 
     ExtensionAlias();
     ExtensionAlias(Op, const std::string&);
@@ -97,6 +97,9 @@ public:
     rai::ErrorCode FromJson(const rai::Ptree&) override;
     rai::Ptree Json() const override;
     rai::ErrorCode FromExtension(const rai::Extension&) override;
+
+    void UpdateExtensionValue();
+    rai::ErrorCode CheckData() const;
 
     Op op_;
     std::vector<uint8_t> op_value_;

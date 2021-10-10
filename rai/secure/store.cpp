@@ -12,7 +12,11 @@ rai::Store::Store(rai::ErrorCode& error_code,
       rollbacks_(0),
       forks_(0),
       wallets_(0),
-      sources_(0)
+      sources_(0),
+      alias_(0),
+      alias_block_(0),
+      alias_index_(0),
+      alias_dns_index_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -89,6 +93,35 @@ rai::Store::Store(rai::ErrorCode& error_code,
     }
 
     ret = mdb_dbi_open(transaction, "sources", MDB_CREATE, &sources_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "alias", MDB_CREATE, &alias_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "alias_block", MDB_CREATE, &alias_block_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "alias_index", MDB_CREATE, &alias_index_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "alias_dns_index", MDB_CREATE,
+                       &alias_dns_index_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;
