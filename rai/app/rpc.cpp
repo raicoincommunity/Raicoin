@@ -498,6 +498,22 @@ void rai::AppRpcHandler::BootstrapStatus()
     app_.bootstrap_.Status(response_);
 }
 
+void rai::AppRpcHandler::Clients()
+{
+    rai::Ptree clients;
+    if (app_.ws_server_)
+    {
+        std::vector<rai::UniqueId> uids = app_.ws_server_->Clients();
+        for (const auto& uid : uids)
+        {
+            rai::Ptree entry;
+            entry.put("", uid.StringHex());
+            clients.push_back(std::make_pair("", entry));
+        }
+    }
+    response_.put_child("clients", clients);
+}
+
 void rai::AppRpcHandler::ServiceSubscribe()
 {
     std::string service;

@@ -41,7 +41,7 @@ rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
         gateway.protocol_ == "wss");
 
     ws_server_ = std::make_shared<rai::WebsocketServer>(
-        service_, config_.ws_port_, config_.ws_port_);
+        service_, config_.ws_ip_, config_.ws_port_);
 
     provider_actions_ = rai::Provider::ToString(provider_info_.actions_);
 }

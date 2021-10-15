@@ -1125,7 +1125,7 @@ TEST(TxBlock, deserialize_json_extensions)
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
     rai::TxBlock block2(error_code, ptree);
-    ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSIONS_LENGTH, error_code);
+    ASSERT_EQ(rai::ErrorCode::EXTENSIONS_LENGTH, error_code);
 
     str    = R"%%%({
     "type": "transaction",

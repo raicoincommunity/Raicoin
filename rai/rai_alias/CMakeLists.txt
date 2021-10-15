@@ -10,9 +10,9 @@ add_executable (rai_alias
 	subscribe.hpp
 )
 
-target_link_libraries (rai_node
+target_link_libraries (rai_alias
 	rai_common
-	node
+	app
 	secure
 	${Boost_LIBRARIES}
 )

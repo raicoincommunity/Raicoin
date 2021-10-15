@@ -202,7 +202,7 @@ async def forward_to_node(r: web.Request, request_json : dict, uid):
     try:
         await node['ws'].send_str(json.dumps(request_json))
     except Exception as e:
-        log.server_logger.error('rpc error;%s;%s', str(e), ip)
+        log.server_logger.error('rpc error;%s;%s', str(e), node['ip'])
 
 async def forward_to_service_provider(r: web.Request, request_json : dict, uid):
     action  = request_json['action']

@@ -108,7 +108,7 @@ rai::ErrorCode rai::Extension::FromJson(const rai::Ptree& ptree)
         return error_code;
     }
 
-    rai::ErrorCode::SUCCESS;
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::Ptree rai::Extension::Json() const
@@ -336,7 +336,7 @@ rai::ErrorCode rai::ExtensionSubAccount::FromJson(const rai::Ptree& ptree)
         return error_code;
     }
 
-    rai::ErrorCode::SUCCESS;
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::Ptree rai::ExtensionSubAccount::Json() const
@@ -411,8 +411,7 @@ rai::ErrorCode rai::ExtensionNote::FromJson(const rai::Ptree& ptree)
         return error_code;
     }
 
-    rai::ErrorCode::SUCCESS;
-
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::Ptree rai::ExtensionNote::Json() const
@@ -546,7 +545,7 @@ rai::ErrorCode rai::ExtensionAlias::FromJson(const rai::Ptree& ptree)
         return error_code;
     }
 
-    rai::ErrorCode::SUCCESS;
+    return rai::ErrorCode::SUCCESS;
 
 }
 
@@ -747,10 +746,10 @@ rai::ErrorCode rai::ParseExtensionJson(const rai::Ptree& in,
         return rai::ErrorCode::UNEXPECTED;
     }
 
-    rai::ErrorCode error_code = out->FromJson(in);
+    error_code = out->FromJson(in);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    rai::ErrorCode::SUCCESS;
+    return rai::ErrorCode::SUCCESS;
 }
 
 bool rai::ExtensionAppend(const rai::Extension& extension,

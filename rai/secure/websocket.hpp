@@ -138,6 +138,7 @@ public:
     std::shared_ptr<rai::WebsocketSession> Session(const rai::UniqueId&);
     void Send(const rai::UniqueId&, const std::string&);
     void Send(const rai::UniqueId&, const rai::Ptree&);
+    std::vector<rai::UniqueId> Clients() const;
 
     std::function<void(const std::string&, const rai::UniqueId&)>
         message_observer_;

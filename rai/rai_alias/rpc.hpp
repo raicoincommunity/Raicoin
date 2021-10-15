@@ -2,6 +2,7 @@
 
 #include <map>
 #include <vector>
+#include <rai/secure/ledger.hpp>
 #include <rai/app/rpc.hpp>
 
 namespace rai
@@ -24,16 +25,17 @@ public:
     void AliasQuery();
     void AliasSearch();
 
-    rai::Alias& alias_;
-
-
 
 private:
+    rai::Alias& alias_;
+
     class SearchEntry
     {
     public:
+        SearchEntry() = default;
         SearchEntry(const rai::Account&, const std::vector<uint8_t>&,
                     const std::vector<uint8_t>&);
+        rai::Ptree Json() const;
 
         rai::Account account_;
         std::string name_;
@@ -45,8 +47,11 @@ private:
 
     static size_t constexpr MAX_SEARCHS_PER_QUERY = 1000;
 
+
     void AliasSearchByDns_(const std::string&, const std::string&, uint64_t);
     void AliasSearchByName_(const std::string&, uint64_t);
+    bool GetSearchEntry_(rai::Transaction&, const rai::Account&, uint16_t&,
+                         SearchEntry&);
 };
 
 }  // namespace rai

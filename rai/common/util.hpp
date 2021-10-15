@@ -227,6 +227,15 @@ inline uint64_t DayEnd(uint64_t ts)
     return ts - ts % 86400 + 86400;
 }
 
+inline char ToLower(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+    {
+        return c + 32;
+    }
+    return c;
+}
+
 inline bool StringContain(const std::string& str, char c)
 {
     return str.find(c) != std::string::npos;
@@ -244,6 +253,8 @@ inline size_t StringCount(const std::string& str, char c)
     }
     return count;
 }
+
+bool StringStartsWith(const std::string&, const std::string&, bool);
 
 inline std::string BoolToString(bool b)
 {
