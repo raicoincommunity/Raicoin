@@ -110,6 +110,31 @@ void rai::DumpBytes(const uint8_t* data, size_t size)
     }
 }
 
+bool rai::StringStartsWith(const std::string& str, const std::string& sub,
+                           bool case_insensitive)
+{
+    if (str.size() < sub.size())
+    {
+        return false;
+    }
+
+    auto i = str.begin();
+    auto j = sub.begin();
+    for (; i != str.end() && j != sub.end(); ++i, ++j)
+    {
+        if (*i == *j) continue;
+
+        if (case_insensitive)
+        {
+            if (rai::ToLower(*i) == rai::ToLower(*j)) continue;
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
 void rai::StringLeftTrim(std::string& str, const std::string& trim)
 {
     while (true)

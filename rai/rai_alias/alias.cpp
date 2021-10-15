@@ -127,6 +127,20 @@ rai::RpcHandlerMaker rai::Alias::RpcHandlerMaker()
 
 void rai::Alias::Start()
 {
+    std::weak_ptr<rai::Alias> alias(Shared());
+    alias_observer_ = [alias](const rai::Account& account,
+                              const std::string& name, const std::string& dns) {
+        auto alias_s = alias.lock();
+        if (alias_s == nullptr) return;
+
+        alias_s->Background([alias, account, name, dns]() {
+            if (auto alias_s = alias.lock())
+            {
+                alias_s->observers_.alias_.Notify(account, name, dns);
+            }
+        });
+    };
+
     App::Start();
     // todo:
 }

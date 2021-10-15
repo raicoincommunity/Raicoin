@@ -61,8 +61,8 @@ void rai::AliasRpcHandler::AliasQuery()
         return;
     }
 
-    response_.put("name", info.name_);
-    response_.put("dns", info.dns_);
+    response_.put("name", std::string(info.name_.begin(), info.name_.end()));
+    response_.put("dns", std::string(info.dns_.begin(), info.dns_.end()));
 }
 
 void rai::AliasRpcHandler::AliasSearch()
@@ -132,71 +132,285 @@ rai::AliasRpcHandler::SearchEntry::SearchEntry(const rai::Account& account,
 {
 }
 
+rai::Ptree rai::AliasRpcHandler::SearchEntry::Json() const
+{
+    rai::Ptree ptree;
+    ptree.put("account", account_.StringAccount());
+    ptree.put("name", name_);
+    ptree.put("dns", dns_);
+    return ptree;
+}
+
 void rai::AliasRpcHandler::AliasSearchByDns_(const std::string& dns,
                                              const std::string& name,
                                              uint64_t count)
 {
     rai::AliasRpcHandler::SearchResult exact_result;
     rai::AliasRpcHandler::SearchResult prefix_result;
+    std::unordered_map<rai::Account, int32_t> account_count;
+    rai::Prefix prefix(dns);
 
-    do
+    rai::Transaction transaction(error_code_, alias_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    if (dns.size() < sizeof(rai::Prefix))
     {
-        rai::Transaction transaction(error_code_, alias_.ledger_, false);
-        IF_NOT_SUCCESS_RETURN_VOID(error_code_);
-
-        if (dns.size() < sizeof(rai::Prefix))
+        rai::Iterator i =
+            alias_.ledger_.AliasDnsIndexLowerBound(transaction, prefix);
+        rai::Iterator n =
+            alias_.ledger_.AliasDnsIndexUpperBound(transaction, prefix);
+        for (; i != n; ++i)
         {
-            rai::Prefix prefix(dns);
-            rai::Iterator i =
-                alias_.ledger_.AliasDnsIndexLowerBound(transaction, prefix);
-            rai::Iterator n =
-                alias_.ledger_.AliasDnsIndexUpperBound(transaction, prefix);
-            for (; i != n; ++i)
+            rai::AliasIndex index;
+            bool error = alias_.ledger_.AliasDnsIndexGet(i, index);
+            if (error)
             {
-                rai::AliasIndex index;
-                bool error = alias_.ledger_.AliasDnsIndexGet(i, index);
-                if (error)
-                {
-                    std::string error_info = rai::ToString(
-                        "AliasRpcHandler::AliasSearchByDns_: AliasDnsIndexGet "
-                        "failed, dns=",
-                        dns);
-                    rai::Log::Error(error_info);
-                    error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
-                    rai::Stats::Add(error_code_, error_info);
-                    return;
-                }
+                std::string error_info = rai::ToString(
+                    "AliasRpcHandler::AliasSearchByDns_: AliasDnsIndexGet "
+                    "failed, dns=",
+                    dns);
+                error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+                rai::Log::Error(error_info);
+                rai::Stats::Add(error_code_, error_info);
+                return;
+            }
 
-                rai::AliasInfo info;
-                error = alias_.ledger_.AliasInfoGet(transaction, index.account_,
-                                                    info);
-                if (error)
-                {
-                    std::string error_info = rai::ToString(
-                        "AliasRpcHandler::AliasSearchByDns_: AliasInfoGet "
-                        "failed, account=",
-                        index.account_.StringAccount());
-                    rai::Log::Error(error_info);
-                    error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
-                    rai::Stats::Add(error_code_, error_info);
-                    return;
-                }
+            uint16_t credit;
+            SearchEntry entry;
+            error = GetSearchEntry_(transaction, index.account_, credit, entry);
+            IF_ERROR_RETURN_VOID(error);
+            if (!rai::StringStartsWith(entry.name_, name, true)) continue;
 
-                rai::AccountInfo account_info;
-                error = alias_.ledger_.AccountInfoGet(
-                    transaction, index.account_, account_info);
-                // todo:
-                rai::AliasRpcHandler::SearchEntry entry(index.account_,
-                                                        info.name_, info.dns_);
+            exact_result.emplace(credit, entry);
+            if (account_count.find(index.account_) == account_count.end())
+            {
+                account_count[index.account_] = 0;
+            }
+            account_count[index.account_] += 1;
+
+            if (exact_result.size() > count)
+            {
+                auto it = exact_result.erase(std::prev(exact_result.end()));
+                account_count[it->second.account_] -= 1;
             }
         }
+    }
 
-    } while (0);
+    if (exact_result.size() < count)
+    {
+        uint64_t left = count - exact_result.size();
+        size_t searchs = 0;
+        rai::Iterator i =
+            alias_.ledger_.AliasDnsIndexLowerBound(transaction, prefix);
+        rai::Iterator n = alias_.ledger_.AliasDnsIndexUpperBound(
+            transaction, prefix, dns.size());
+        for (; i != n; ++i)
+        {
+            ++searchs;
+            if (searchs > rai::AliasRpcHandler::MAX_SEARCHS_PER_QUERY) break;
 
+            rai::AliasIndex index;
+            bool error = alias_.ledger_.AliasDnsIndexGet(i, index);
+            if (error)
+            {
+                std::string error_info = rai::ToString(
+                    "AliasRpcHandler::AliasSearchByDns_: AliasDnsIndexGet "
+                    "failed, dns=",
+                    dns);
+                error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+                rai::Log::Error(error_info);
+                rai::Stats::Add(error_code_, error_info);
+                return;
+            }
 
+            if (account_count[index.account_] > 0) continue;
+
+            uint16_t credit;
+            SearchEntry entry;
+            error = GetSearchEntry_(transaction, index.account_, credit, entry);
+            IF_ERROR_RETURN_VOID(error);
+            if (!rai::StringStartsWith(entry.name_, name, true)) continue;
+
+            prefix_result.emplace(credit, entry);
+            if (prefix_result.size() > left)
+            {
+                prefix_result.erase(std::prev(prefix_result.end()));
+            }
+        }
+    }
+
+    rai::Ptree alias;
+    for (const auto& i : exact_result)
+    {
+        alias.push_back(std::make_pair("", i.second.Json()));
+    }
+    for (const auto& i : prefix_result)
+    {
+        alias.push_back(std::make_pair("", i.second.Json()));
+    }
+    response_.put_child("alias", alias);
 }
 
 void rai::AliasRpcHandler::AliasSearchByName_(const std::string& name,
                                               uint64_t count)
 {
+    rai::AliasRpcHandler::SearchResult exact_result;
+    rai::AliasRpcHandler::SearchResult prefix_result;
+    std::unordered_map<rai::Account, int32_t> account_count;
+    rai::Prefix prefix(name);
+
+    rai::Transaction transaction(error_code_, alias_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    if (name.size() < sizeof(rai::Prefix))
+    {
+        rai::Iterator i =
+            alias_.ledger_.AliasIndexLowerBound(transaction, prefix);
+        rai::Iterator n =
+            alias_.ledger_.AliasIndexUpperBound(transaction, prefix);
+        for (; i != n; ++i)
+        {
+            rai::AliasIndex index;
+            bool error = alias_.ledger_.AliasIndexGet(i, index);
+            if (error)
+            {
+                std::string error_info = rai::ToString(
+                    "AliasRpcHandler::AliasSearchByName_: AliasIndexGet "
+                    "failed, name=",
+                    name);
+                error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+                rai::Log::Error(error_info);
+                rai::Stats::Add(error_code_, error_info);
+                return;
+            }
+
+            uint16_t credit;
+            SearchEntry entry;
+            error = GetSearchEntry_(transaction, index.account_, credit, entry);
+            IF_ERROR_RETURN_VOID(error);
+
+            exact_result.emplace(credit, entry);
+            if (account_count.find(index.account_) == account_count.end())
+            {
+                account_count[index.account_] = 0;
+            }
+            account_count[index.account_] += 1;
+
+            if (exact_result.size() > count)
+            {
+                auto it = exact_result.erase(std::prev(exact_result.end()));
+                account_count[it->second.account_] -= 1;
+            }
+        }
+    }
+
+    if (exact_result.size() < count)
+    {
+        uint64_t left = count - exact_result.size();
+        size_t searchs = 0;
+        rai::Iterator i =
+            alias_.ledger_.AliasIndexLowerBound(transaction, prefix);
+        rai::Iterator n = alias_.ledger_.AliasIndexUpperBound(
+            transaction, prefix, name.size());
+        for (; i != n; ++i)
+        {
+            ++searchs;
+            if (searchs > rai::AliasRpcHandler::MAX_SEARCHS_PER_QUERY) break;
+
+            rai::AliasIndex index;
+            bool error = alias_.ledger_.AliasDnsIndexGet(i, index);
+            if (error)
+            {
+                std::string error_info = rai::ToString(
+                    "AliasRpcHandler::AliasSearchByName_: AliasIndexGet "
+                    "failed, name=",
+                    name);
+                error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+                rai::Log::Error(error_info);
+                rai::Stats::Add(error_code_, error_info);
+                return;
+            }
+
+            if (account_count[index.account_] > 0) continue;
+
+            uint16_t credit;
+            SearchEntry entry;
+            error = GetSearchEntry_(transaction, index.account_, credit, entry);
+            IF_ERROR_RETURN_VOID(error);
+
+            prefix_result.emplace(credit, entry);
+            if (prefix_result.size() > left)
+            {
+                prefix_result.erase(std::prev(prefix_result.end()));
+            }
+        }
+    }
+
+    rai::Ptree alias;
+    for (const auto& i : exact_result)
+    {
+        alias.push_back(std::make_pair("", i.second.Json()));
+    }
+    for (const auto& i : prefix_result)
+    {
+        alias.push_back(std::make_pair("", i.second.Json()));
+    }
+    response_.put_child("alias", alias);
+}
+
+bool rai::AliasRpcHandler::GetSearchEntry_(rai::Transaction& transaction,
+                                           const rai::Account& account,
+                                           uint16_t& credit, SearchEntry& entry)
+{
+    std::string error_info;
+    do
+    {
+        rai::AliasInfo info;
+        bool error = alias_.ledger_.AliasInfoGet(transaction, account, info);
+        if (error)
+        {
+            error_info = rai::ToString("AliasInfoGet failed, account=",
+                                       account.StringAccount());
+            error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+            break;
+        }
+
+        rai::AccountInfo account_info;
+        error =
+            alias_.ledger_.AccountInfoGet(transaction, account, account_info);
+        if (error || !account_info.Valid())
+        {
+            error_info = rai::ToString("AccountInfoGet failed, account=",
+                                       account.StringAccount());
+            error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+            break;
+        }
+
+        std::shared_ptr<rai::Block> block(nullptr);
+        error = alias_.ledger_.BlockGet(transaction, account_info.head_,
+                                        block);
+        if (error || block == nullptr)
+        {
+            error_info = rai::ToString("BlockGet failed, hash=",
+                                        account_info.head_.StringHex());
+            error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+            break;
+        }
+
+        credit = block->Credit();
+        entry = SearchEntry(account, info.name_, info.dns_);
+    } while (0);
+
+    if (error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        if (!error_info.empty())
+        {
+            error_info = "AliasRpcHandler::GetSearchEntry_: " + error_info;
+            rai::Log::Error(error_info);
+            rai::Stats::Add(error_code_, error_info);
+        }
+        return true;
+    }
+
+    return false;
 }

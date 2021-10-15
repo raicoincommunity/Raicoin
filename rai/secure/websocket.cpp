@@ -966,3 +966,15 @@ void rai::WebsocketServer::Send(const rai::UniqueId& uid,
         session->Send(message);
     }
 }
+
+std::vector<rai::UniqueId> rai::WebsocketServer::Clients() const
+{
+    std::vector<rai::UniqueId> result;
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    for (const auto& i : sessions_)
+    {
+        result.push_back(i.first);
+    }
+    return result;
+}

@@ -16,7 +16,7 @@ public:
     AppSubscriptionData();
     void Json(rai::Ptree&);
     
-    virtual void SerializeJson(rai::Ptree&) = 0;
+    virtual void SerializeJson(rai::Ptree&);
 
     bool synced_;
 };

@@ -33,29 +33,10 @@ public:
     };
     static std::string ToString(Action);
 
-    template <typename T>
-    struct is_filter : std::false_type
-    {
-    };
-
-    template <>
-    struct is_filter<rai::Provider::Filter> : std::true_type
-    {
-    };
-
-    template <typename T>
-    struct is_action : std::false_type
-    {
-    };
-
-    template <>
-    struct is_action<rai::Provider::Action> : std::true_type
-    {
-    };
-
     template <typename T,
-              typename std::enable_if<
-                  is_filter<T>::value || is_action<T>::value, int>::type = 0>
+              typename std::enable_if<std::is_same<T, Filter>::value
+                                          || std::is_same<T, Action>::value,
+                                      int>::type = 0>
     static std::vector<std::string> ToString(const std::vector<T>& v)
     {
         std::vector<std::string> result;
@@ -66,7 +47,7 @@ public:
             {
                 return std::vector<std::string>();
             }
-            
+
             if (rai::Contain(result, str))
             {
                 continue;

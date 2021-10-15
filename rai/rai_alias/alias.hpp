@@ -10,6 +10,14 @@
 
 namespace rai
 {
+class AliasObservers
+{
+public:
+    rai::ObserverContainer<const rai::Account&, const std::string&,
+                           const std::string&>
+        alias_;
+};
+
 class Alias : public rai::App
 {
 public:
@@ -49,5 +57,11 @@ public:
     std::shared_ptr<rai::Rpc> rpc_;
     std::shared_ptr<rai::OngoingServiceRunner> runner_;
     rai::AliasSubscriptions subscribe_;
+    rai::AliasObservers observers_;
+
+private:
+    std::function<void(const rai::Account&, const std::string&,
+                       const std::string&)>
+        alias_observer_;
 };
 }

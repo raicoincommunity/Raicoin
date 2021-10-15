@@ -678,8 +678,11 @@ rai::ErrorCode rai::WalletRpcHandler::ParseExtensions(
                 bool error = rai::StringToUint(type_str, type);
                 IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
                 auto value = i.second.get<std::string>("value");
-                error = rai::ExtensionAppend(
-                    static_cast<rai::ExtensionType>(type), value, extensions);
+                std::shared_ptr<rai::Extension> extension;
+                rai::ErrorCode error_code =
+                    rai::ParseExtensionJson(i.second, extension);
+                IF_NOT_SUCCESS_RETURN(error_code);
+                error = rai::ExtensionAppend(*extension, extensions);
                 IF_ERROR_RETURN(error, rai::ErrorCode::EXTENSION_APPEND);
             }
         }

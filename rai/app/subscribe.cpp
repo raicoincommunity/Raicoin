@@ -14,6 +14,10 @@ void rai::AppSubscriptionData::Json(rai::Ptree& ptree)
     SerializeJson(ptree);
 }
 
+void rai::AppSubscriptionData::SerializeJson(rai::Ptree& ptree)
+{
+}
+
 rai::AppSubscriptions::AppSubscriptions(rai::App& app) : app_(app)
 {
 }

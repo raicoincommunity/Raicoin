@@ -702,7 +702,7 @@ void rai::NodeRpcHandler::BlockConfirm()
     }
 
     bool fork = false;
-    bool error = node_.ledger_.BlockGet(transaction, hash, block);
+    error = node_.ledger_.BlockGet(transaction, hash, block);
     if (error)
     {
         fork = true;
