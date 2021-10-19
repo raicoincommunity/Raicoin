@@ -94,6 +94,11 @@ if not BSC_FAUCET_URL.startswith('wss://'):
     print("Error found in .env: invalid BSC_FAUCET_URL")
     sys.exit(0)
 
+ALIAS_URL = os.getenv('ALIAS_URL', 'wss://alias.raicoin.org/')
+if not ALIAS_URL.startswith('wss://'):
+    print("Error found in .env: invalid ALIAS_URL")
+    sys.exit(0)
+
 SRV_PROVIDERS = 'service_providers'
 SRV_SUBS = 'service_subscriptions'
 MAX_FILTERS_PER_SUBSCRIPTION = 4
@@ -106,17 +111,18 @@ TASKS = [
     {
         'desc': 'BSC bridge',
         'url': BSC_BRIDGE_URL,
-        'active': False
     },
     {
         'desc': 'Pancakeswap LP rewarder',
         'url': PANCAKESWAP_LP_REWARDER_URL,
-        'active': False
     },
     {
         'desc': 'BSC faucet',
         'url': BSC_FAUCET_URL,
-        'active': False
+    },
+    {
+        'desc': 'RAI alias',
+        'url': ALIAS_URL,
     },
 ]
 GS['tasks'] = TASKS
@@ -694,7 +700,7 @@ async def destroy_service_provider(app, ws_id):
 
 async def connect_to_service_provider(task):
     global APP
-    if task['active']:
+    if 'active' in task and task['active']:
         return
     task['active'] = True
     desc = task['desc']

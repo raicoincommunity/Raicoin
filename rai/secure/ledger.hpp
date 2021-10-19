@@ -241,10 +241,18 @@ typedef boost::multi_index_container<
                                        &rai::DelegatorListEntry::rep_>>>>
     DelegatorList;
 
+enum class LedgerType : uint32_t
+{
+    INVALID = 0,
+    NODE    = 1,
+    WALLET  = 2,
+    APP     = 3,
+};
+
 class Ledger
 {
 public:
-    Ledger(rai::ErrorCode&, rai::Store&, bool = true, bool = false,
+    Ledger(rai::ErrorCode&, rai::Store&, rai::LedgerType, bool = false,
            bool = false);
 
     bool AccountInfoPut(rai::Transaction&, const rai::Account&,

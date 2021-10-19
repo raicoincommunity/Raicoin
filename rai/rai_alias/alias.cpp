@@ -289,7 +289,10 @@ rai::Provider::Info rai::Alias::Provide()
 
     info.filters_.push_back(P::Filter::APP_ACCOUNT);
 
+    info.actions_.push_back(P::Action::APP_SERVICE_SUBSCRIBE);
     info.actions_.push_back(P::Action::APP_ACCOUNT_SYNC);
+    info.actions_.push_back(P::Action::ALIAS_QUERY);
+    info.actions_.push_back(P::Action::ALIAS_SEARCH);
 
     return info;
 }

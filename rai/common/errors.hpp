@@ -137,6 +137,7 @@ enum class ErrorCode : int
     WEBSOCKET_QUEUE_OVERFLOW             = 127,
     UTF8_CHECK                           = 128,
     UTF8_CONTROL_CHARACTER               = 129,
+    HANDSHAKE_TIMESTAMP                  = 130,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                        = 200,

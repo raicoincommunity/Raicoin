@@ -82,6 +82,7 @@ public:
     void Json(rai::Ptree&) const;
     void JsonByUid(const rai::UniqueId&, rai::Ptree&) const;
     void JsonByAccount(const rai::Account&, rai::Ptree&) const;
+    bool IsSynced(const rai::Account&) const;
 
     rai::App& app_;
 

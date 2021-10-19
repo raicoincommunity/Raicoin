@@ -526,6 +526,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Control character not allowed";
         }
+        case rai::ErrorCode::HANDSHAKE_TIMESTAMP:
+        {
+            return "Invalid handshake timestamp";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";

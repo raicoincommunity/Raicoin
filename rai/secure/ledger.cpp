@@ -373,8 +373,9 @@ bool rai::WalletAccountInfo::Deserialize(rai::Stream& stream)
     return false;
 }
 
-rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node,
-                    bool enable_rich_list, bool enable_delegator_list)
+rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store,
+                    rai::LedgerType type, bool enable_rich_list,
+                    bool enable_delegator_list)
     : store_(store),
       total_rep_weight_(0),
       enable_rich_list_(enable_rich_list),
@@ -383,13 +384,16 @@ rai::Ledger::Ledger(rai::ErrorCode& error_code, rai::Store& store, bool is_node,
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     rai::Transaction transaction(error_code, *this, true);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
-    if (is_node)
+    if (type == rai::LedgerType::NODE)
     {
         InitMemoryTables_(transaction);
     }
-    else
+    else if (type == rai::LedgerType::WALLET)
     {
         error_code = UpgradeWallet(transaction);
+    }
+    else
+    {
     }
 
     if (error_code != rai::ErrorCode::SUCCESS)

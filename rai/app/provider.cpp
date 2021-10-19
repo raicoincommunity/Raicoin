@@ -46,9 +46,21 @@ std::string rai::Provider::ToString(Action action)
         {
             return "invalid";
         }
+        case rai::Provider::Action::APP_SERVICE_SUBSCRIBE:
+        {
+            return "service_subscribe";
+        }
         case rai::Provider::Action::APP_ACCOUNT_SYNC:
         {
             return "account_synchronize";
+        }
+        case rai::Provider::Action::ALIAS_QUERY:
+        {
+            return "alias_query";
+        }
+        case rai::Provider::Action::ALIAS_SEARCH:
+        {
+            return "alias_search";
         }
         default:
         {
@@ -72,7 +84,8 @@ void rai::Provider::AppendFilter(rai::Ptree& ptree, Filter filter,
         ptree.put_child(path, rai::Ptree());
     }
     rai::Ptree entry;
-    entry.put(rai::Provider::ToString(filter), value);
+    entry.put("key", rai::Provider::ToString(filter));
+    entry.put("value", value);
     rai::Ptree& filters = ptree.get_child(path);
     filters.push_back(std::make_pair("", entry));
 }

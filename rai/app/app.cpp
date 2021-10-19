@@ -18,12 +18,13 @@ rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
       config_(config),
       subscribe_(subscribe),
       store_(error_code, db_path),
-      ledger_(error_code, store_, false),
+      ledger_(error_code, store_, rai::LedgerType::APP),
       account_types_(account_types),
       service_runner_(service_gateway_),
       bootstrap_(*this),
       block_confirm_(*this),
-      provider_info_(provider_info)
+      provider_info_(provider_info),
+      thread_([this]() { Run(); })
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
@@ -40,8 +41,11 @@ rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
         service_gateway_, gateway.host_, gateway.port_, gateway.path_,
         gateway.protocol_ == "wss");
 
-    ws_server_ = std::make_shared<rai::WebsocketServer>(
-        service_, config_.ws_ip_, config_.ws_port_);
+    if (config_.ws_enable_)
+    {
+        ws_server_ = std::make_shared<rai::WebsocketServer>(
+            service_, config_.ws_ip_, config_.ws_port_);
+    }
 
     provider_actions_ = rai::Provider::ToString(provider_info_.actions_);
 }
@@ -62,7 +66,13 @@ void rai::App::Start()
     Ongoing(std::bind(&rai::App::Subscribe, this), std::chrono::seconds(300));
     Ongoing(std::bind(&rai::AppSubscriptions::Cutoff, &subscribe_),
             std::chrono::seconds(5));
+    Ongoing(std::bind(&rai::BlockCache::Age, &block_cache_, 300),
+            std::chrono::seconds(5));
 
+    if (ws_server_)
+    {
+        ws_server_->Start();
+    }
     // todo:
 }
 
@@ -83,9 +93,14 @@ void rai::App::Stop()
         thread_.join();
     }
 
+    if (ws_server_)
+    {
+        ws_server_->Stop();
+    }
+
     alarm_.Stop();
     gateway_ws_->Close();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     service_runner_.Stop();
 }
 
@@ -665,6 +680,16 @@ void rai::App::SendToClient(const rai::Ptree& message, const rai::UniqueId& uid)
 
 void rai::App::SendToGateway(const rai::Ptree& message)
 {
+    if (trace_.message_to_gateway_)
+    {
+        std::cout << "send message to gateway=====>>:\n";
+        std::stringstream ostream;
+        boost::property_tree::write_json(ostream, message);
+        ostream.flush();
+        std::string body = ostream.str();
+        std::cout << body << std::endl;
+    }
+
     gateway_ws_->Send(message);
 }
 

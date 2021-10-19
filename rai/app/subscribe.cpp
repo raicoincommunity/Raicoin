@@ -133,6 +133,7 @@ void rai::AppSubscriptions::NotifyAccountSynced(const rai::Account& account)
     P::PutAction(ptree, P::Action::APP_ACCOUNT_SYNC);
     P::PutId(ptree, app_.provider_info_.id_);
     P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+    ptree.put("synchronized", "true");
     Notify(account, ptree);
 }
 
@@ -279,6 +280,18 @@ void rai::AppSubscriptions::JsonByAccount(const rai::Account& account,
 {
     std::unique_lock<std::mutex> lock(mutex_);
     Json_(lock, account, ptree);
+}
+
+bool rai::AppSubscriptions::IsSynced(const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = accounts_.find(account);
+    if (it == accounts_.end())
+    {
+        return false;
+    }
+
+    return it->second->synced_;
 }
 
 void rai::AppSubscriptions::Json_(std::unique_lock<std::mutex>& lock,
