@@ -914,8 +914,11 @@ void rai::WebsocketServer::Stop()
         sessions.swap(sessions_);
     }
 
-    boost::system::error_code ec;
-    acceptor_.close(ec);
+    if (acceptor_.is_open())
+    {
+        boost::system::error_code ec;
+        acceptor_.close(ec);
+    }
 
     for (auto& i : sessions)
     {

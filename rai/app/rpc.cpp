@@ -1,5 +1,6 @@
 #include <rai/app/rpc.hpp>
 
+#include <rai/common/stat.hpp>
 #include <rai/app/app.hpp>
 
 rai::AppRpcHandler::AppRpcHandler(
@@ -24,6 +25,14 @@ void rai::AppRpcHandler::ProcessImpl()
     else if (action == "account_info")
     {
         AccountInfo();
+    }
+    else if (action == "account_synchronize")
+    {
+        AccountSync();
+    }
+    else if (action == "app_action_count")
+    {
+        AppActionCount();
     }
     else if (action == "app_trace_on")
     {
@@ -62,6 +71,21 @@ void rai::AppRpcHandler::ProcessImpl()
     else if (action == "service_subscribe")
     {
         ServiceSubscribe();
+    }
+    else if (action == "stats")
+    {
+        Stats();
+    }
+    else if (action == "stats_verbose")
+    {
+        StatsVerbose();
+    }
+    else if (action == "stats_clear")
+    {
+        if (!CheckControl_())
+        {
+            StatsClear();
+        }
     }
     else if (action == "subscription")
     {
@@ -192,6 +216,21 @@ void rai::AppRpcHandler::AccountInfo()
         rai::Ptree confirmed_ptree;
         confirmed_block->SerializeJson(confirmed_ptree);
         response_.add_child("confirmed_block", confirmed_ptree);
+    }
+}
+
+void rai::AppRpcHandler::AccountSync()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+
+    bool synced = app_.subscribe_.IsSynced(account);
+    response_.put("synchronized", rai::BoolToString(synced));
+
+    if (!synced)
+    {
+        app_.SyncAccountAsync(account);
     }
 }
 
@@ -551,6 +590,109 @@ void rai::AppRpcHandler::ServiceSubscribe()
     response_.put("success", "");
 }
 
+
+void rai::AppRpcHandler::Stats()
+{
+    boost::optional<std::string> type_o =
+        request_.get_optional<std::string>("type");
+    if (!type_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TYPE;
+        return;
+    }
+
+    rai::Ptree stats_ptree;
+    if (*type_o == "error")
+    {
+        auto stats = rai::Stats::GetAll<rai::ErrorCode>();
+        for (const auto& stat : stats)
+        {
+            rai::Ptree stat_ptree;
+            stat_ptree.put("code", static_cast<uint32_t>(stat.index_));
+            stat_ptree.put("description", rai::ErrorString(stat.index_));
+            stat_ptree.put("count", stat.count_);
+            stats_ptree.push_back(std::make_pair("", stat_ptree));
+        }
+    }
+    else
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE;
+        return;
+    }
+
+    response_.put("type", "error");
+    response_.put_child("stats", stats_ptree);
+}
+
+void rai::AppRpcHandler::StatsVerbose()
+{
+    boost::optional<std::string> type_o =
+        request_.get_optional<std::string>("type");
+    if (!type_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TYPE;
+        return;
+    }
+
+    rai::Ptree stats_ptree;
+    if (*type_o == "error")
+    {
+        auto stats = rai::Stats::GetAll<rai::ErrorCode>();
+        for (const auto& stat : stats)
+        {
+            rai::Ptree stat_ptree;
+            stat_ptree.put("code", static_cast<uint32_t>(stat.index_));
+            stat_ptree.put("description", rai::ErrorString(stat.index_));
+            stat_ptree.put("count", stat.count_);
+            if (!stat.details_.empty())
+            {
+                rai::Ptree desc_ptree;
+                for (const auto& desc : stat.details_)
+                {
+                    rai::Ptree entry;
+                    entry.put("", desc);
+                    desc_ptree.push_back(std::make_pair("", entry));
+                }
+                stat_ptree.put_child("details", desc_ptree);
+            }
+            else
+            {
+                stat_ptree.put("details", "");
+            }
+
+            stats_ptree.push_back(std::make_pair("", stat_ptree));
+        }
+    }
+    else
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE;
+        return;
+    }
+
+    response_.put("type", "error");
+    response_.put_child("stats", stats_ptree);
+}
+
+void rai::AppRpcHandler::StatsClear()
+{
+    boost::optional<std::string> type_o =
+        request_.get_optional<std::string>("type");
+    if (!type_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TYPE;
+        return;
+    }
+
+    if (*type_o == "error")
+    {
+        rai::Stats::ResetAll<rai::ErrorCode>();
+    }
+    else
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TYPE;
+    }
+}
+
 void rai::AppRpcHandler::Subscription()
 {
     rai::Account account;
@@ -562,18 +704,18 @@ void rai::AppRpcHandler::Subscription()
 
 void rai::AppRpcHandler::Subscriptions()
 {
-    auto client_id_o = request_.get_optional<std::string>("client_id");
-    if (client_id_o)
+    auto uid_o = request_.get_optional<std::string>("uid");
+    if (uid_o)
     {
-        rai::UniqueId client_id;
-        bool error = client_id.DecodeHex(*client_id_o);
+        rai::UniqueId uid;
+        bool error = uid.DecodeHex(*uid_o);
         if (error)
         {
             error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CLIENT_ID;
             return;
         }
 
-        app_.subscribe_.JsonByUid(client_id, response_);
+        app_.subscribe_.JsonByUid(uid, response_);
     }
     else
     {

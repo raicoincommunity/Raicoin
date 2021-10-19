@@ -73,7 +73,7 @@ DEBUG_MODE = True if int(os.getenv('DEBUG', 0)) != 0 else False
 
 CALLBACK_TOKEN = os.getenv("CALLBACK_TOKEN", '')
 if len(CALLBACK_TOKEN) != 43:
-    print("Error found in .env: CALLBACK_TOKEN is missing or invalid, you can use 'python3 rai_wallet_server.py -t' to generate a secure token")
+    print("Error found in .env: CALLBACK_TOKEN is missing or invalid, you can use 'python3 rai_node_gateway.py -t' to generate a secure token")
     sys.exit(0)
 
 CHECK_CF_CONNECTING_IP = True if int(os.getenv('USE_CLOUDFLARE', 0)) == 1 else False
@@ -319,7 +319,7 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
         elif 'ack' in request_json:
             client_id = request_json['client_id']
             del request_json['client_id']
-            await send_to_client(message, client_id)
+            await send_to_client(json.dumps(request_json), client_id)
         else:
             log.server_logger.error('unexpected node message;%s;%s;%s', message, ip, node_id)
     except Exception as e:

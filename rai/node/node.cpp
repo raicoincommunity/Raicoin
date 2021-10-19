@@ -506,8 +506,8 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       alarm_(alarm),
       key_(key),
       store_(error_code, data_path / "data.ldb"),
-      ledger_(error_code, store_, true, config.enable_rich_list_,
-              config.enable_delegator_list_),
+      ledger_(error_code, store_, rai::LedgerType::NODE,
+              config.enable_rich_list_, config.enable_delegator_list_),
       network_(*this, config.port_),
       peers_(*this),
       stopped_(ATOMIC_FLAG_INIT),
@@ -732,9 +732,9 @@ public:
             uint64_t diff = now > timestamp ? now - timestamp : timestamp - now;
             if (diff > rai::Peers::MAX_TIMESTAMP_DIFF)
             {
-                std::cout << "Invalid handshake timestamp " << timestamp
-                          << std::endl;
-                // TODO: stat
+                rai::Stats::Add(
+                    rai::ErrorCode::HANDSHAKE_TIMESTAMP, "peer=", peer_endpoint,
+                    " local timestamp=", now, " peer timestamp=", timestamp);
                 return;
             }
 

@@ -41,6 +41,7 @@ void rai::AliasRpcHandler::ProcessImpl()
 void rai::AliasRpcHandler::Stop()
 {
     alias_.Stop();
+    response_.put("success", "");
 }
 
 void rai::AliasRpcHandler::AliasQuery()

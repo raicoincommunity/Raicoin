@@ -22,6 +22,7 @@ public:
 
     void AccountCount();
     void AccountInfo();
+    void AccountSync();
     void AppActionCount();
     void AppTraceOn();
     void AppTraceOff();
@@ -36,6 +37,9 @@ public:
     void BootstrapStatus();
     void Clients();
     void ServiceSubscribe();
+    void Stats();
+    void StatsVerbose();
+    void StatsClear();
     void Subscription();
     void Subscriptions();
     void SubscriptionCount();

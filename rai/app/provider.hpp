@@ -28,8 +28,12 @@ public:
 
     enum class Action
     {
-        INVALID             = 0,
-        APP_ACCOUNT_SYNC    = 1,
+        INVALID                 = 0,
+        APP_SERVICE_SUBSCRIBE   = 1,
+        APP_ACCOUNT_SYNC        = 2,
+
+        ALIAS_QUERY             = 100,
+        ALIAS_SEARCH            = 101,
     };
     static std::string ToString(Action);
 

@@ -307,7 +307,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     }
     else if (action == "stats_clear")
     {
-        StatsClear();
+        if (!CheckControl_())
+        {
+            StatsClear();
+        }
     }
     else if (action == "stop")
     {
