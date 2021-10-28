@@ -213,10 +213,10 @@ rai::ErrorCode rai::Alias::Process(rai::Transaction& transaction,
             error = ledger_.AliasIndexDel(transaction, index);
             if (error)
             {
-                rai::Log::Error(rai::ToString(
-                    "Alias::Process: alias index del, account=",
-                    account.StringAccount(), ", name=",
-                    std::string(info.name_.begin(), info.name_.end())));
+                rai::Log::Error(
+                    rai::ToString("Alias::Process: alias index del, account=",
+                                  account.StringAccount(),
+                                  ", name=", rai::BytesToString(info.name_)));
                 return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
             }
         }
@@ -227,10 +227,41 @@ rai::ErrorCode rai::Alias::Process(rai::Transaction& transaction,
             error = ledger_.AliasIndexPut(transaction, index);
             if (error)
             {
+                rai::Log::Error(
+                    rai::ToString("Alias::Process: alias index put, account=",
+                                  account.StringAccount(),
+                                  ", name=", rai::BytesToString(value)));
+                return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+            }
+        }
+    }
+
+    if (rai::ErrorCode::SUCCESS == error_code && op == Op::DNS)
+    {
+        if (!info.dns_.empty())
+        {
+            rai::AliasIndex index{rai::Prefix(info.dns_), account};
+            error = ledger_.AliasDnsIndexDel(transaction, index);
+            if (error)
+            {
                 rai::Log::Error(rai::ToString(
-                    "Alias::Process: alias index put, account=",
+                    "Alias::Process: alias dns index del, account=",
                     account.StringAccount(),
-                    ", name=", std::string(value.begin(), value.end())));
+                    ", dns=", rai::BytesToString(info.dns_)));
+                return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
+            }
+        }
+
+        if (!value.empty())
+        {
+            rai::AliasIndex index{rai::Prefix(value), account};
+            error = ledger_.AliasDnsIndexPut(transaction, index);
+            if (error)
+            {
+                rai::Log::Error(rai::ToString(
+                    "Alias::Process: alias dns index put, account=",
+                    account.StringAccount(),
+                    ", dns=", rai::BytesToString(value)));
                 return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
             }
         }
@@ -269,6 +300,12 @@ rai::ErrorCode rai::Alias::Process(rai::Transaction& transaction,
             rai::ToString("Alias::Process: alias info put, hash=",
                             block->Hash().StringHex()));
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+
+    if (alias_observer_)
+    {
+        alias_observer_(account, rai::BytesToString(info.name_),
+                        rai::BytesToString(info.dns_));
     }
 
     return rai::ErrorCode::SUCCESS;

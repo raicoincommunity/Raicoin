@@ -54,10 +54,10 @@ public:
     boost::asio::io_service& service_;
     rai::Alarm& alarm_;
     const rai::AliasConfig& config_;
+    rai::AliasObservers observers_;
     std::shared_ptr<rai::Rpc> rpc_;
     std::shared_ptr<rai::OngoingServiceRunner> runner_;
     rai::AliasSubscriptions subscribe_;
-    rai::AliasObservers observers_;
 
 private:
     std::function<void(const rai::Account&, const std::string&,

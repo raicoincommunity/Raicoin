@@ -62,6 +62,10 @@ std::string rai::Provider::ToString(Action action)
         {
             return "alias_search";
         }
+        case rai::Provider::Action::ALIAS_CHANGE:
+        {
+            return "alias_change";
+        }
         default:
         {
             return "";

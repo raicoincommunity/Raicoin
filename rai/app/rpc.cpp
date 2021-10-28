@@ -247,14 +247,23 @@ void rai::AppRpcHandler::AppTraceOn()
         error_code_ = rai::ErrorCode::APP_RPC_MISS_FIELD_TRACE;
         return;
     }
+    std::string trace = *trace_o;
 
-    if (*trace_o == "message_from_gateway")
+    if (trace == "message_from_gateway")
     {
         app_.trace_.message_from_gateway_ = true;
     }
-    else if (*trace_o == "message_to_gateway")
+    else if (trace == "message_to_gateway")
     {
         app_.trace_.message_to_gateway_ = true;
+    }
+    else if (trace == "message_from_client")
+    {
+        app_.trace_.message_from_client_ = true;
+    }
+    else if (trace == "message_to_client")
+    {
+        app_.trace_.message_to_client_ = true;
     }
     else
     {
@@ -273,14 +282,23 @@ void rai::AppRpcHandler::AppTraceOff()
         error_code_ = rai::ErrorCode::APP_RPC_MISS_FIELD_TRACE;
         return;
     }
+    std::string trace = *trace_o;
 
-    if (*trace_o == "message_from_gateway")
+    if (trace == "message_from_gateway")
     {
         app_.trace_.message_from_gateway_ = false;
     }
-    else if (*trace_o == "message_to_gateway")
+    else if (trace == "message_to_gateway")
     {
         app_.trace_.message_to_gateway_ = false;
+    }
+    else if (trace == "message_from_client")
+    {
+        app_.trace_.message_from_client_ = false;
+    }
+    else if (trace == "message_to_client")
+    {
+        app_.trace_.message_to_client_ = false;
     }
     else
     {
@@ -295,9 +313,13 @@ void rai::AppRpcHandler::AppTraceStatus()
 {
     rai::Ptree trace;
     trace.put("message_from_gateway",
-              app_.trace_.message_from_gateway_ ? "true" : "false");
+              rai::BoolToString(app_.trace_.message_from_gateway_));
     trace.put("message_to_gateway",
-              app_.trace_.message_to_gateway_ ? "true" : "false");
+              rai::BoolToString(app_.trace_.message_to_gateway_));
+    trace.put("message_from_client",
+              rai::BoolToString(app_.trace_.message_from_client_));
+    trace.put("message_to_client",
+              rai::BoolToString(app_.trace_.message_to_client_));
     response_.put_child("trace", trace);
 }
 
@@ -563,13 +585,19 @@ void rai::AppRpcHandler::ServiceSubscribe()
     error = GetFilters_(filters);
     IF_ERROR_RETURN_VOID(error);
 
+    using P = rai::Provider;
+    if (service != P::ToString(app_.provider_info_.id_))
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_SERVICE;
+        return;
+    }
+
     if (filters.size() != 1)
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
         return;
     }
-    
-    using P = rai::Provider;
+
     if (filters[0].first != P::ToString(P::Filter::APP_ACCOUNT))
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;

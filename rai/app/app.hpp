@@ -35,6 +35,8 @@ public:
     AppTrace();
     std::atomic<bool> message_from_gateway_;
     std::atomic<bool> message_to_gateway_;
+    std::atomic<bool> message_from_client_;
+    std::atomic<bool> message_to_client_;
 };
 
 enum class AppActionPri : uint32_t
@@ -125,13 +127,13 @@ public:
     rai::AppSubscriptions& subscribe_;
     rai::Store store_;
     rai::Ledger ledger_;
+    rai::AppObservers observers_;
     std::vector<rai::BlockType> account_types_;
     boost::asio::io_service service_gateway_;
     rai::OngoingServiceRunner service_runner_;
     std::shared_ptr<rai::WebsocketClient> gateway_ws_;
     std::shared_ptr<rai::WebsocketServer> ws_server_;
     rai::AppTrace trace_;
-    rai::AppObservers observers_;
     rai::BlockCache block_cache_;
     rai::AppBootstrap bootstrap_;
     rai::BlockConfirm block_confirm_;

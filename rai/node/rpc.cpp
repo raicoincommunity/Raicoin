@@ -728,14 +728,19 @@ void rai::NodeRpcHandler::BlockConfirm()
     {
         return;
     }
-    
-    node_.elections_.Add(block);
 
     auto notify_o = request_.get_optional<std::string>("notify");
     if (notify_o && *notify_o == "true")
     {
         error_code_ = node_.subscriptions_.Subscribe(*block);
+        if (error_code_ != rai::ErrorCode::SUCCESS)
+        {
+            response_.clear();
+            return;
+        }
     }
+
+    node_.elections_.Add(block);
 }
 
 void rai::NodeRpcHandler::BlockCount()
@@ -1790,7 +1795,19 @@ void rai::NodeRpcHandler::AppendBlockAmount_(rai::Transaction& transaction,
             node_.ledger_.BlockGet(transaction, block.Previous(), previous);
         if (!error)
         {
-            error = block.Amount(*previous, amount);
+            if (previous != nullptr)
+            {
+                error = block.Amount(*previous, amount);
+            }
+            else
+            {
+                std::string log = rai::ToString(
+                    "NodeRpcHandler::AppendBlockAmount_: BlockGet failed, "
+                    "hash=",
+                    block.Previous().StringHex());
+                rai::Log::Error(log);
+                error = true;
+            }
         }
     }
     if (!error)

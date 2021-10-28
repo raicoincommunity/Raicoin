@@ -34,6 +34,7 @@ public:
 
         ALIAS_QUERY             = 100,
         ALIAS_SEARCH            = 101,
+        ALIAS_CHANGE            = 102,
     };
     static std::string ToString(Action);
 

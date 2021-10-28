@@ -57,6 +57,38 @@ rai::ExtensionType rai::StringToExtensionType(const std::string& str)
     }
 }
 
+std::shared_ptr<rai::Extension> rai::MakeExtension(rai::ExtensionType type)
+{
+    switch (type)
+    {
+        case rai::ExtensionType::SUB_ACCOUNT:
+        {
+            return std::make_shared<rai::ExtensionSubAccount>();
+        }
+        case rai::ExtensionType::NOTE:
+        {
+            return std::make_shared<rai::ExtensionNote>();
+        }
+        case rai::ExtensionType::ALIAS:
+        {
+            return std::make_shared<rai::ExtensionAlias>();
+        }
+        default:
+        {
+            if (type > rai::ExtensionType::RESERVED_MAX)
+            {
+                return std::make_shared<rai::Extension>();
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 rai::Extension::Extension() : type_(rai::ExtensionType::INVALID)
 {
 }
@@ -566,7 +598,7 @@ rai::Ptree rai::ExtensionAlias::Json() const
     {
         rai::Ptree value;
         value.put("op", rai::ExtensionAlias::OpToString(op_));
-        ptree.put("op_value",
+        value.put("op_value",
                   std::string(reinterpret_cast<const char*>(op_value_.data()),
                               op_value_.size()));
         ptree.put_child("value", value);
@@ -606,8 +638,8 @@ rai::ErrorCode rai::ExtensionAlias::FromExtension(
 void rai::ExtensionAlias::UpdateExtensionValue()
 {
     std::vector<uint8_t> bytes;
-    rai::VectorStream stream(bytes);
     {
+        rai::VectorStream stream(bytes);
         rai::Write(stream, op_);
         rai::Write(stream, op_value_);
     }
@@ -661,34 +693,10 @@ rai::ErrorCode rai::ExtensionAlias::CheckData() const
 rai::ErrorCode rai::ParseExtension(const rai::Extension& in,
                                    std::shared_ptr<rai::Extension>& out)
 {
-    switch (in.type_)
-    {
-        case rai::ExtensionType::SUB_ACCOUNT:
-        {
-            out = std::make_shared<rai::ExtensionSubAccount>();
-            break;
-        }
-        case rai::ExtensionType::NOTE:
-        {
-            out = std::make_shared<rai::ExtensionNote>();
-            break;
-        }
-        default:
-        {
-            if (in.type_ > rai::ExtensionType::RESERVED_MAX)
-            {
-                out = std::make_shared<rai::Extension>();
-            }
-            else
-            {
-                return rai::ErrorCode::EXTENSION_PARSE_UNKNOWN;
-            }
-        }
-    }
-
+    out = rai::MakeExtension(in.type_);
     if (out == nullptr)
     {
-        return rai::ErrorCode::UNEXPECTED;
+        return rai::ErrorCode::EXTENSION_PARSE_UNKNOWN;
     }
 
     rai::ErrorCode error_code = out->FromExtension(in);
@@ -711,29 +719,10 @@ rai::ErrorCode rai::ParseExtensionJson(const rai::Ptree& in,
             return error_code;
         }
 
-        switch (type)
+        out = rai::MakeExtension(type);
+        if (out == nullptr)
         {
-            case rai::ExtensionType::SUB_ACCOUNT:
-            {
-                out = std::make_shared<rai::ExtensionSubAccount>();
-                break;
-            }
-            case rai::ExtensionType::NOTE:
-            {
-                out = std::make_shared<rai::ExtensionNote>();
-                break;
-            }
-            default:
-            {
-                if (type > rai::ExtensionType::RESERVED_MAX)
-                {
-                    out = std::make_shared<rai::Extension>();
-                }
-                else
-                {
-                    return rai::ErrorCode::EXTENSION_PARSE_UNKNOWN;
-                }
-            }
+            return rai::ErrorCode::EXTENSION_PARSE_UNKNOWN;
         }
     }
     catch (...)

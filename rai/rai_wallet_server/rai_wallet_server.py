@@ -16,14 +16,17 @@ import uvloop
 import secrets
 import random
 import traceback
+import dns.resolver
+import dns.rrset
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
 from functools import partial
+from dns.asyncresolver import Resolver
 
 # whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
 ALLOWED_RPC_ACTIONS = [
-    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables', 'current_timestamp', 'service_subscribe'
+    'account_info', 'account_subscribe', 'account_unsubscribe', 'account_forks', 'block_publish', 'block_query', 'receivables', 'current_timestamp', 'service_subscribe', 'dns_verify'
 ]
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -103,6 +106,7 @@ SRV_PROVIDERS = 'service_providers'
 SRV_SUBS = 'service_subscriptions'
 MAX_FILTERS_PER_SUBSCRIPTION = 4
 MAX_FILTER_VALUE_SIZE = 256
+DNS_VERIFICATION_PREFIX = '_raicoin-verification'
 
 
 GS = {} # Global States
@@ -152,8 +156,66 @@ class Util:
             return host
         return None
 
+    async def json_post(self, url: str, request : dict = None, headers : dict = None, timeout : int = 10) -> dict:
+        try:
+            async with ClientSession() as session:
+                async with session.post(url, json=request, headers=headers, timeout=timeout) as resp:
+                    return await resp.json(content_type=None)
+        except Exception:
+            log.server_logger.exception()
+            return None
+
+    async def json_get(self, url: str, params : dict = None, headers : dict = None, timeout : int = 10) -> dict:
+        try:
+            async with ClientSession() as session:
+                async with session.get(url, params=params, headers=headers, timeout=timeout) as resp:
+                    return await resp.json(content_type=None)
+        except Exception:
+            log.server_logger.exception()
+            return None
+
 UTIL = Util(CHECK_CF_CONNECTING_IP)
-    
+
+async def dns_query(domain: str, rtype: str = 'TXT', **kwargs):
+    try:
+        resolver = Resolver()
+        response = await resolver.resolve(domain, rdtype=rtype, **kwargs)
+        return response.rrset
+    except:
+        return None
+
+async def dns_query_from_cloudflare(domain: str, rtype: str = 'TXT'):
+    url = 'https://cloudflare-dns.com/dns-query'
+    headers = {'Accept': 'application/dns-json'}
+    params = {'name': domain, 'type': rtype}
+    return await UTIL.json_get(url, params, headers)
+
+async def dns_verify(domain: str, account: str):
+    try:
+        if not domain.startswith('.'):
+            domain = '.' + domain
+        domain = DNS_VERIFICATION_PREFIX + domain
+        res = await asyncio.gather(dns_query_from_cloudflare(domain), dns_query(domain))
+
+        count = 0
+        for i in res[0]['Answer']:
+            if i['data'].replace('"', '') == account:
+                count += 1
+                break
+
+        for i in res[1]:
+            if i.to_text().replace('"', '') == account:
+                count += 1
+                break
+
+        if count < 2:
+            return True
+
+        return False
+    except Exception as e:
+        log.server_logger.error('dns_verify error;%s;%s', domain, str(e))
+        return True
+
 def websocket_rate_limit(r : web.Request, ws : web.WebSocketResponse):
     if LIMIT == 0:
         return False
@@ -350,6 +412,21 @@ def handle_client_service_subscribe(r : web.Request, uid, service, filters):
         return True, 'wallet server: failed to subscribe service'
     return False, None
 
+async def handle_client_dns_verify(r : web.Request, request, response):
+    if len(request['items']) > 10:
+        response['error'] = 'too many items'
+        return
+    coros = [dns_verify(i['dns'], i['account']) for i in request['items']]
+    result = await asyncio.gather(*coros)
+    items = []
+    for i, fail in enumerate(result):
+        item = {}
+        item['account'] = request['items'][i]['account']
+        item['dns'] = request['items'][i]['dns']
+        item['valid'] = 'false' if fail else 'true'
+        items.append(item)
+    response['items'] = items
+
 # Primary handler for all client websocket connections
 async def handle_client_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by client"""
@@ -383,6 +460,9 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
                 if error:
                     res.update({'error': info})
                     return res
+            elif action == 'dns_verify':
+                await handle_client_dns_verify(r, request_json, res)
+                return res
             return await forward_to_service_provider(r, request_json, uid)
 
         if request_json['action'] not in ALLOWED_RPC_ACTIONS:

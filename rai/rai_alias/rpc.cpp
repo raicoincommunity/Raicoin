@@ -70,8 +70,8 @@ void rai::AliasRpcHandler::AliasSearch()
 {
     std::string dns;
     std::string name;
-    auto dns_o = request_.get_optional<std::string>("dns_");
-    auto name_o = request_.get_optional<std::string>("name_");
+    auto dns_o = request_.get_optional<std::string>("dns");
+    auto name_o = request_.get_optional<std::string>("name");
     if (!dns_o && !name_o)
     {
         error_code_ = rai::ErrorCode::RPC_MISS_FIELD_NAME;
@@ -121,6 +121,12 @@ void rai::AliasRpcHandler::AliasSearch()
     else
     {
         AliasSearchByDns_(dns, name, count);
+    }
+
+    if (error_code_ == rai::ErrorCode::SUCCESS)
+    {
+        response_.put("name", name);
+        response_.put("dns", dns);
     }
 }
 

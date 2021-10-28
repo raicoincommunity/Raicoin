@@ -4,7 +4,10 @@
 #include <rai/common/log.hpp>
 
 rai::AppTrace::AppTrace()
-    : message_from_gateway_(false), message_to_gateway_(false)
+    : message_from_gateway_(false),
+      message_to_gateway_(false),
+      message_from_client_(false),
+      message_to_client_(false)
 {
 }
 
@@ -675,6 +678,17 @@ void rai::App::ReceiveBlockRollbackNotify(
 
 void rai::App::SendToClient(const rai::Ptree& message, const rai::UniqueId& uid)
 {
+    if (trace_.message_to_client_)
+    {
+        std::cout << "send message to client " << uid.StringHex()
+                  << "=====>>:\n";
+        std::stringstream ostream;
+        boost::property_tree::write_json(ostream, message);
+        ostream.flush();
+        std::string body = ostream.str();
+        std::cout << body << std::endl;
+    }
+
     ws_server_->Send(uid, message);
 }
 
@@ -789,6 +803,13 @@ void rai::App::SyncAccountAsync(const rai::Account& account, uint64_t height,
 void rai::App::ReceiveWsMessage(const std::string& message,
                                 const rai::UniqueId& uid)
 {
+    if (trace_.message_from_client_)
+    {
+        std::cout << "receive message from client " << uid.StringHex()
+                  << "<<=====:\n";
+        std::cout << message << std::endl;
+    }
+
     std::shared_ptr<rai::AppRpcHandler> handler = MakeRpcHandler(
         uid, true, message, [this, uid](const rai::Ptree& response) {
             ws_server_->Send(uid, response);
