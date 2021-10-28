@@ -40,6 +40,8 @@ public:
     std::vector<uint8_t> value_;
 };
 
+std::shared_ptr<rai::Extension> MakeExtension(rai::ExtensionType);
+
 class Extensions
 {
 public:

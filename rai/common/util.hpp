@@ -261,6 +261,12 @@ inline std::string BoolToString(bool b)
     return b ? "true" : "false";
 }
 
+inline std::string BytesToString(const std::vector<uint8_t>& bytes)
+{
+    return std::string(reinterpret_cast<const char*>(bytes.data()),
+                       bytes.size());
+}
+
 void StringLeftTrim(std::string&, const std::string&);
 void StringRightTrim(std::string&, const std::string&);
 void StringTrim(std::string&, const std::string&);

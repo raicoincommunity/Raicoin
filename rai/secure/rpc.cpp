@@ -283,6 +283,16 @@ void rai::RpcHandler::Process()
             ProcessImpl();
         }
 
+        if (error_code_ > rai::ErrorCode::MAX)
+        {
+            std::string error_info = rai::ToString(
+                "RpcHandler::Response: invalid error_code=",
+                static_cast<uint32_t>(error_code_), ", action=", action);
+            rai::Log::Error(error_info);
+            std::cout << "[Error] " << error_info << std::endl;
+            error_code_ = rai::ErrorCode::MAX;
+        }
+
         response_.put("ack", action);
         auto request_id = request_.get_optional<std::string>("request_id");
         if (request_id)

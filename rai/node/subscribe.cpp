@@ -505,8 +505,9 @@ rai::ErrorCode rai::Subscriptions::Subscribe(const rai::Block& block)
             data.time_ =  std::chrono::steady_clock::now();
         });
     }
-}
 
+    return rai::ErrorCode::SUCCESS;
+}
 
 void rai::Subscriptions::Unsubscribe(const rai::Account& account)
 {
