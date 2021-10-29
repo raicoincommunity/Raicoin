@@ -13,6 +13,7 @@ rai::Alias::Alias(rai::ErrorCode& error_code, boost::asio::io_service& service,
       subscribe_(*this)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
+    error_code = InitLedger_();
 }
 
 rai::ErrorCode rai::Alias::PreBlockAppend(
@@ -142,7 +143,6 @@ void rai::Alias::Start()
     };
 
     App::Start();
-    // todo:
 }
 
 void rai::Alias::Stop()
@@ -157,7 +157,6 @@ void rai::Alias::Stop()
         runner_->Stop();
     }
 
-    // todo:
     App::Stop();
 }
 
@@ -332,4 +331,29 @@ rai::Provider::Info rai::Alias::Provide()
     info.actions_.push_back(P::Action::ALIAS_SEARCH);
 
     return info;
+}
+
+rai::ErrorCode rai::Alias::InitLedger_()
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, true);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    uint32_t version = 0;
+    bool error = ledger_.VersionGet(transaction, version);
+    if (error)
+    {
+        error =
+            ledger_.VersionPut(transaction, rai::Alias::CURRENT_LEDGER_VERSION);
+        IF_ERROR_RETURN(error, rai::ErrorCode::ALIAS_LEDGER_PUT);
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    if (version > rai::Alias::CURRENT_LEDGER_VERSION)
+    {
+        std::cout << "[Error] Ledger version=" << version << std::endl;
+        return rai::ErrorCode::LEDGER_VERSION;
+    }
+
+    return rai::ErrorCode::SUCCESS;
 }

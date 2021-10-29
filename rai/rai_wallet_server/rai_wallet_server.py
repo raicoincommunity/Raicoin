@@ -104,7 +104,7 @@ if not ALIAS_URL.startswith('wss://'):
 
 SRV_PROVIDERS = 'service_providers'
 SRV_SUBS = 'service_subscriptions'
-MAX_FILTERS_PER_SUBSCRIPTION = 4
+MAX_FILTERS_PER_SUBSCRIPTION = 1024
 MAX_FILTER_VALUE_SIZE = 256
 DNS_VERIFICATION_PREFIX = '_raicoin-verification'
 

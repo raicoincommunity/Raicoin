@@ -60,6 +60,9 @@ public:
     rai::AliasSubscriptions subscribe_;
 
 private:
+    static uint32_t constexpr CURRENT_LEDGER_VERSION = 1;
+    rai::ErrorCode InitLedger_();
+
     std::function<void(const rai::Account&, const std::string&,
                        const std::string&)>
         alias_observer_;

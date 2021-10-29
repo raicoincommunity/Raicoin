@@ -16,7 +16,6 @@ void rai::AliasRpcHandler::ProcessImpl()
 {
     std::string action = request_.get<std::string>("action");
 
-    // todo:
     if (action == "alias_query")
     {
         AliasQuery();
@@ -24,6 +23,10 @@ void rai::AliasRpcHandler::ProcessImpl()
     else if (action == "alias_search")
     {
         AliasSearch();
+    }
+    else if (action == "ledger_version")
+    {
+        LedgerVersion();
     }
     else if (action == "stop")
     {
@@ -129,6 +132,23 @@ void rai::AliasRpcHandler::AliasSearch()
         response_.put("dns", dns);
     }
 }
+
+void rai::AliasRpcHandler::LedgerVersion()
+{
+    rai::Transaction transaction(error_code_, alias_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint32_t version = 0;
+    bool error = alias_.ledger_.VersionGet(transaction, version);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::ALIAS_LEDGER_GET;
+        return;
+    }
+
+    response_.put("verison", std::to_string(version));
+}
+
 
 rai::AliasRpcHandler::SearchEntry::SearchEntry(const rai::Account& account,
                                                const std::vector<uint8_t>& name,

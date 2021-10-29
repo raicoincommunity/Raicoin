@@ -806,7 +806,6 @@ void rai::WebsocketServer::Accept()
 
     if (!acceptor_.is_open())
     {
-        // todo: log
         std::cout << "WebsocketServer::Accept: acceptor is not opened"
                   << std::endl;
         return;
@@ -890,7 +889,6 @@ void rai::WebsocketServer::Start()
     acceptor_.bind(local_, ec);
     if (ec)
     {
-        // todo: log
         std::cout << "[ERROR] WebsocketServer::Start: failed to bind ip:port = "
                   << local_ << std::endl;
         throw std::runtime_error(ec.message());

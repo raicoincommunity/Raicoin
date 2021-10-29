@@ -76,7 +76,6 @@ void rai::App::Start()
     {
         ws_server_->Start();
     }
-    // todo:
 }
 
 void rai::App::Stop()

@@ -138,6 +138,7 @@ enum class ErrorCode : int
     UTF8_CHECK                           = 128,
     UTF8_CONTROL_CHARACTER               = 129,
     HANDSHAKE_TIMESTAMP                  = 130,
+    LEDGER_VERSION                       = 131,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                        = 200,
@@ -363,6 +364,7 @@ enum class ErrorCode : int
     ALIAS_OP_UNKNOWN                    = 704,
     ALIAS_MULTI_EXTENSIONS              = 705,
     ALIAS_LEDGER_GET                    = 706,
+    ALIAS_LEDGER_PUT                    = 707,
 
     MAX = 800
 };
