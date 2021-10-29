@@ -21,10 +21,9 @@ public:
 
     void Stop() override;
 
-    // todo:
     void AliasQuery();
     void AliasSearch();
-
+    void LedgerVersion();
 
 private:
     rai::Alias& alias_;

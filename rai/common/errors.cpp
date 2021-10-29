@@ -530,6 +530,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid handshake timestamp";
         }
+        case rai::ErrorCode::LEDGER_VERSION:
+        {
+            return "Invalid ledger version";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -1367,6 +1371,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::ALIAS_LEDGER_GET:
         {
             return "Failed to get data from ledger";
+        }
+        case rai::ErrorCode::ALIAS_LEDGER_PUT:
+        {
+            return "Failed to put data to ledger";
         }
         default:
         {
