@@ -155,6 +155,7 @@ rai::Ptree rai::Extension::Json() const
 rai::ErrorCode rai::Extension::FromExtension(const rai::Extension& extension)
 {
     *this = extension;
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::ErrorCode rai::Extensions::Append(const rai::Extension& extension)
