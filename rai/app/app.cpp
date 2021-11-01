@@ -27,6 +27,7 @@ rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
       bootstrap_(*this),
       block_confirm_(*this),
       provider_info_(provider_info),
+      stopped_(false),
       thread_([this]() { Run(); })
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);

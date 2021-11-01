@@ -550,7 +550,6 @@ rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
             }
         }
 
-
         extensions_length_ = static_cast<uint32_t>(extensions_.size());
         error = rai::TxBlock::CheckExtensionsLength(extensions_length_);
         IF_ERROR_RETURN(error, rai::ErrorCode::JSON_BLOCK_EXTENSIONS_LENGTH);

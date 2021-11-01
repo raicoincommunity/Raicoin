@@ -996,7 +996,7 @@ void rai::Peers::Keeplive_(rai::PeerContainer& peers, size_t max_peers)
 
         if (it->lost_acks_ >= rai::Peers::MAX_LOST_ACKS)
         {
-            Remove_(it->account_);
+            Remove_(account);
             continue;
         }
 
