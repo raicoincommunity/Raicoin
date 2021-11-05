@@ -196,14 +196,14 @@ rai::AliasBlock::AliasBlock()
 
 rai::AliasBlock::AliasBlock(uint64_t previous, const rai::BlockHash& hash,
                             int32_t status)
-    : previous_(previous_), hash_(hash), status_(status), op_(0)
+    : previous_(previous), hash_(hash), status_(status), op_(0)
 {
 }
 
 rai::AliasBlock::AliasBlock(uint64_t previous, const rai::BlockHash& hash,
                             int32_t status, uint8_t op,
                             const std::vector<uint8_t>& value)
-    : previous_(previous_), hash_(hash), status_(status), op_(op), value_(value)
+    : previous_(previous), hash_(hash), status_(status), op_(op), value_(value)
 {
 }
 

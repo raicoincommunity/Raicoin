@@ -85,7 +85,7 @@ rai::ErrorCode ProcessConfigCreate(
     if (error)
     {
         std::cout << "Error: invalid 'callback_url' parameter" << std::endl;
-        rai::ErrorCode::SUCCESS;
+        return rai::ErrorCode::SUCCESS;
     }
 
     if (!vm.count("representative"))

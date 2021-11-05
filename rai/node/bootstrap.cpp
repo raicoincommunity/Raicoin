@@ -1254,11 +1254,12 @@ void rai::BootstrapServer::Send_(const std::function<void()>& callback)
 
 rai::BootstrapListener::BootstrapListener(rai::Node& node,
                                           boost::asio::io_service& service,
+                                          const rai::IP& ip,
                                           uint16_t port)
     : node_(node),
       service_(service),
       acceptor_(service),
-      local_(rai::TcpEndpoint(boost::asio::ip::address_v4::any(), port)),
+      local_(rai::TcpEndpoint(ip, port)),
       stopped_(false)
 {
 }
