@@ -18,7 +18,7 @@ class Node;
 class UdpNetwork
 {
 public:
-    UdpNetwork(rai::Node&, uint16_t);
+    UdpNetwork(rai::Node&, const rai::IP&, uint16_t);
     void Receive();
     void Start();
     void Stop();

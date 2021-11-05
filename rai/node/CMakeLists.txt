@@ -10,6 +10,8 @@ add_library (node
 	blockquery.cpp
 	bootstrap.hpp
 	bootstrap.cpp
+	config.cpp
+	config.hpp
 	dumper.hpp
 	dumper.cpp
 	election.hpp

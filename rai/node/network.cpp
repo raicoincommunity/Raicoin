@@ -13,14 +13,13 @@ std::string rai::ToString(const rai::Endpoint& endpoint)
     return stream.str();
 }
 
-rai::UdpNetwork::UdpNetwork(rai::Node& node, uint16_t port)
-    : socket_(node.service_,
-              rai::Endpoint(boost::asio::ip::address_v4::any(), port)),
+rai::UdpNetwork::UdpNetwork(rai::Node& node, const rai::IP& ip, uint16_t port)
+    : socket_(node.service_, rai::Endpoint(ip, port)),
       resolver_(node.service_),
       node_(node),
       on_(true)
 {
-    boost::asio::socket_base::receive_buffer_size option(8*1024*1024);
+    boost::asio::socket_base::receive_buffer_size option(8 * 1024 * 1024);
     socket_.set_option(option);
 }
 

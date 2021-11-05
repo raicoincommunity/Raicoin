@@ -168,7 +168,8 @@ private:
 class BootstrapListener
 {
 public:
-    BootstrapListener(rai::Node&, boost::asio::io_service&, uint16_t);
+    BootstrapListener(rai::Node&, boost::asio::io_service&, const rai::IP&,
+                      uint16_t);
 
     void Accept();
     void Connected(const boost::system::error_code&,
@@ -186,7 +187,8 @@ private:
     rai::TcpEndpoint local_;
     std::mutex mutex_;
     bool stopped_;
-    std::unordered_map<rai::IP, std::weak_ptr<rai::BootstrapServer>> connections_;
+    std::unordered_map<rai::IP, std::weak_ptr<rai::BootstrapServer>>
+        connections_;
 };
 
 }  // namespace rai

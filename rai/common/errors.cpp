@@ -820,6 +820,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse app object from config file";
         }
+        case rai::ErrorCode::JSON_CONFIG_NODE_ADDRESS:
+        {
+            return "Failed to parse node address from config file";
+        }
         case rai::ErrorCode::RPC_GENERIC:
         {
             return "[RPC] Internal server error";
