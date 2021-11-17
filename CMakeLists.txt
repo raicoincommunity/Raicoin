@@ -154,54 +154,63 @@ if (WIN32)
 	enable_language(ASM)
 	enable_language(ASM_MASM)
 	# similar to SSE2 settings
-	add_definitions(-DCRYPTOPP_DISABLE_SSSE3
-					-DCRYPTOPP_DISABLE_AESNI)
+	add_definitions(-DCRYPTOPP_DISABLE_SSSE3)
 endif ()
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_definitions(-DCRYPTOPP_DISABLE_MIXED_ASM -DCRYPTOPP_DISABLE_ASM)
+  message(
+    "CryptoPP with disabled ASM for ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+  )
+endif()
+add_definitions(-DCRYPTOPP_DISABLE_SHANI)
+add_definitions(-DCRYPTOPP_DISABLE_CLMUL)
+add_definitions(-DCRYPTOPP_DISABLE_AESNI)
 
-if (CRYPTOPP_CUSTOM OR NOT RAICOIN_SIMD_OPTIMIZATIONS)
-	set (CRYPTOPP_LIBRARY cryptopp)
-	add_library (cryptopp
-		cryptopp/algparam.cpp
-		cryptopp/asn.cpp
-		cryptopp/basecode.cpp
-		cryptopp/cpu.cpp
-		cryptopp/cryptlib.cpp
-		cryptopp/default.cpp
-		cryptopp/des.cpp
-		cryptopp/dessp.cpp
-		cryptopp/dll.cpp
-		cryptopp/ec2n.cpp
-		cryptopp/ecp.cpp
-		cryptopp/filters.cpp
-		cryptopp/fips140.cpp
-		cryptopp/gcm.cpp
-		cryptopp/gf2n.cpp
-		cryptopp/gfpcrypt.cpp
-		cryptopp/hex.cpp
-		cryptopp/hmac.cpp
-		cryptopp/hrtimer.cpp
-		cryptopp/integer.cpp
-		cryptopp/iterhash.cpp
-		cryptopp/misc.cpp
-		cryptopp/modes.cpp
-		cryptopp/mqueue.cpp
-		cryptopp/nbtheory.cpp
-		cryptopp/oaep.cpp
-		cryptopp/osrng.cpp
-		cryptopp/pubkey.cpp
-		cryptopp/queue.cpp
-		cryptopp/randpool.cpp
-		cryptopp/rdtables.cpp
-		cryptopp/rijndael.cpp
-		cryptopp/rng.cpp
-		cryptopp/sha.cpp
-		cryptopp/simple.cpp
-		cryptopp/winpipes.cpp
-		${CRYPTOPP_EXTRA})
-else ()
-	set(CRYPTOPP_LIBRARY cryptopp-static)
-	add_subdirectory (cryptopp)
-endif ()
+set (CRYPTOPP_LIBRARY cryptopp)
+add_library (cryptopp
+	cryptopp/algparam.cpp
+	cryptopp/allocate.cpp
+	cryptopp/asn.cpp
+	cryptopp/basecode.cpp
+	cryptopp/cpu.cpp
+	cryptopp/cryptlib.cpp
+	cryptopp/default.cpp
+	cryptopp/des.cpp
+	cryptopp/dessp.cpp
+	cryptopp/dll.cpp
+	cryptopp/ec2n.cpp
+	cryptopp/ecp.cpp
+	cryptopp/filters.cpp
+	cryptopp/fips140.cpp
+	cryptopp/gcm.cpp
+	cryptopp/gf2n.cpp
+	cryptopp/gfpcrypt.cpp
+	cryptopp/hex.cpp
+	cryptopp/hmac.cpp
+	cryptopp/hrtimer.cpp
+	cryptopp/integer.cpp
+	cryptopp/iterhash.cpp
+	cryptopp/misc.cpp
+	cryptopp/modes.cpp
+	cryptopp/mqueue.cpp
+	cryptopp/nbtheory.cpp
+	cryptopp/oaep.cpp
+	cryptopp/osrng.cpp
+	cryptopp/pubkey.cpp
+	cryptopp/queue.cpp
+	cryptopp/randpool.cpp
+	cryptopp/rdtables.cpp
+	cryptopp/rijndael.cpp
+	cryptopp/rijndael_simd.cpp
+	cryptopp/rng.cpp
+	cryptopp/sha.cpp
+	cryptopp/sha_simd.cpp
+	cryptopp/simple.cpp
+	cryptopp/sse_simd.cpp
+	cryptopp/xed25519.cpp
+	cryptopp/donna_64.cpp
+	cryptopp/donna_sse.cpp
+	${CRYPTOPP_EXTRA})
 
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
 	set(ARGON_CORE phc-winner-argon2/src/opt.c)
