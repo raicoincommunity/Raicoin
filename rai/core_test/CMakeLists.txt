@@ -9,10 +9,11 @@ add_executable (core_test
 	test_util.cpp
 	invite.cpp
 	common_util.cpp
+	cryptopp.cpp
 )
 
 #target_compile_definitions(core_test
 #		PRIVATE
 #			-DRAIBLOCKS_VERSION_MAJOR=${CPACK_PACKAGE_VERSION_MAJOR}
 #			-DRAIBLOCKS_VERSION_MINOR=${CPACK_PACKAGE_VERSION_MINOR})
-target_link_libraries (core_test gtest_main gtest secure ed25519 blake2 lmdb ${Boost_LIBRARIES})
+target_link_libraries (core_test gtest_main gtest secure ed25519 blake2 lmdb cryptopp ${Boost_LIBRARIES})
