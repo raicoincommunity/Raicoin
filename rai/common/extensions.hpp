@@ -2,9 +2,11 @@
 
 #include <string>
 #include <vector>
-
+#include <memory>
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/numbers.hpp>
+#include <rai/common/token.hpp>
 
 namespace rai
 {
@@ -15,6 +17,7 @@ enum class ExtensionType : uint16_t
     SUB_ACCOUNT = 1, // UTF-8 encoding string
     NOTE        = 2, // UTF-8 encoding string
     ALIAS       = 3,
+    TOKEN       = 4,
 
     RESERVED_MAX = 1023,
 };
@@ -105,6 +108,111 @@ public:
 
     Op op_;
     std::vector<uint8_t> op_value_;
+};
+
+class ExtensionToken : public Extension
+{
+public:
+    enum class Op : uint8_t 
+    {
+        INVALID         = 0,
+        CREATE          = 1,
+        MINT            = 2,
+        BURN            = 3,
+        SEND            = 4,
+        RECEIVE         = 5,
+        SWAP            = 6,
+        UNMAP           = 7,
+        WRAP            = 8,
+        MAX
+    };
+    static std::string OpToString(Op);
+    static Op StringToOp(const std::string&);
+
+    class Data
+    {
+    public:
+        virtual ~Data()                                           = default;
+        virtual void Serialize(rai::Stream&) const                = 0;
+        virtual rai::ErrorCode Deserialize(rai::Stream&)          = 0;
+        virtual void SerializeJson(rai::Ptree&) const             = 0;
+        virtual rai::ErrorCode DeserializeJson(const rai::Ptree&) = 0;
+    };
+
+    ExtensionToken();
+    virtual ~ExtensionToken() = default;
+    rai::ErrorCode FromJson(const rai::Ptree&) override;
+    rai::Ptree Json() const override;
+    rai::ErrorCode FromExtension(const rai::Extension&) override;
+
+    void UpdateExtensionValue();
+    static std::shared_ptr<Data> MakeData(Op);
+
+    Op op_;
+    std::shared_ptr<Data> op_data_;
+};
+
+class ExtensionTokenCreate : public rai::ExtensionToken::Data
+{
+public:
+    class Data
+    {
+    public:
+        virtual ~Data()                                           = default;
+        virtual void Serialize(rai::Stream&) const                = 0;
+        virtual rai::ErrorCode Deserialize(rai::Stream&)          = 0;
+        virtual void SerializeJson(rai::Ptree&) const             = 0;
+        virtual rai::ErrorCode DeserializeJson(const rai::Ptree&) = 0;
+    };
+
+    ExtensionTokenCreate();
+    virtual ~ExtensionTokenCreate() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    static std::shared_ptr<Data> MakeData(rai::TokenType);
+    
+    rai::TokenType type_;
+    std::shared_ptr<Data> creation_data_;
+};
+
+class ExtensionToken20Create : public rai::ExtensionTokenCreate::Data
+{
+public:
+    ExtensionToken20Create();
+    virtual ~ExtensionToken20Create() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
+    
+    std::string name_;
+    std::string symbol_;
+    rai::TokenValue init_supply_;
+    rai::TokenValue cap_supply_;
+    uint8_t decimals_;
+    bool burnable_;
+    bool mintable_;
+    bool circulable_;
+};
+
+class ExtensionToken721Create : public rai::ExtensionTokenCreate::Data
+{
+public:
+    ExtensionToken721Create();
+    virtual ~ExtensionToken721Create() = default;
+    
+    std::string name_;
+    std::string symbol_;
+    std::string base_uri_;
+    rai::TokenValue cap_supply_;
+    bool burnable_;
+    bool circulable_;
 };
 
 rai::ErrorCode ParseExtension(const rai::Extension&,

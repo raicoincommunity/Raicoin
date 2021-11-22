@@ -120,6 +120,11 @@ typename std::enable_if<is_bytes<T>::value>::type Write(rai::Stream& stream,
     assert(num == value.size());
 }
 
+bool Read(rai::Stream&, bool&);
+void Write(rai::Stream&, bool);
+bool Read(rai::Stream&, std::string&);
+void Write(rai::Stream&, const std::string&);
+
 bool Read(rai::Stream& stream, size_t size, std::vector<uint8_t>& data);
 void Write(rai::Stream& stream, size_t size, const std::vector<uint8_t>& data);
 
@@ -259,6 +264,23 @@ bool StringStartsWith(const std::string&, const std::string&, bool);
 inline std::string BoolToString(bool b)
 {
     return b ? "true" : "false";
+}
+
+inline bool StringToBool(const std::string& str, bool& b)
+{
+    if (str == "true")
+    {
+        b = true;
+    }
+    else if (str == "false")
+    {
+        b = false;
+    }
+    else
+    {
+        return true;
+    }
+    return false;
 }
 
 inline std::string BytesToString(const std::vector<uint8_t>& bytes)

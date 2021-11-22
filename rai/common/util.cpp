@@ -4,6 +4,77 @@
 #include <string>
 #include <iostream>
 
+bool rai::Read(rai::Stream& stream, bool& value)
+{
+    uint8_t value_l;
+    auto num(
+        stream.sgetn(reinterpret_cast<uint8_t*>(&value_l), sizeof(value_l)));
+    if (num != sizeof(value_l))
+    {
+        return true;
+    }
+
+    if (value_l == 0)
+    {
+        value = false;
+    }
+    else if (value_l == 1)
+    {
+        value = true;
+    }
+    else
+    {
+        return true;
+    }
+    
+    return false;
+}
+
+void rai::Write(rai::Stream& stream, bool value)
+{
+    uint8_t value_l = value ? 1 : 0;
+    auto num(stream.sputn(reinterpret_cast<const uint8_t*>(&value_l),
+                          sizeof(value_l)));
+    assert(num == sizeof(value_l));
+}
+
+bool rai::Read(rai::Stream& stream, std::string& str)
+{
+    uint8_t size;
+    auto num(
+        stream.sgetn(reinterpret_cast<uint8_t*>(&size), sizeof(size)));
+    if (num != sizeof(size))
+    {
+        return true;
+    }
+
+    if (size == 0)
+    {
+        str = "";
+        return false;
+    }
+
+    std::vector<uint8_t> bytes;
+    bytes.reserve(size);
+    bool error = rai::Read(stream, size, bytes);
+    IF_ERROR_RETURN(error, true);
+
+    str = rai::BytesToString(bytes);
+    return false;
+}
+
+void rai::Write(rai::Stream& stream, const std::string& str)
+{
+    if (str.size() > std::numeric_limits<uint8_t>::max())
+    {
+        return;
+    }
+    uint8_t size = str.size();
+    rai::Write(stream, size);
+    std::vector<uint8_t> bytes(str.begin(), str.end());
+    rai::Write(stream, bytes);
+}
+
 bool rai::Read(rai::Stream& stream, size_t size, std::vector<uint8_t>& data)
 {
     uint8_t byte;

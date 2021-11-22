@@ -112,3 +112,95 @@ TEST(CommonUtil, CheckUtf8)
     };
     ASSERT_EQ(true, rai::CheckUtf8(illegal_2, ctrl));
 }
+
+TEST(CommonUtil, StreamBool)
+{
+    std::vector<uint8_t> bytes1 = {0, };
+    rai::BufferStream stream1(bytes1.data(), bytes1.size());
+    bool bool1 = true;
+    bool ret = rai::Read(stream1, bool1);
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ(false, bool1);
+    ret = rai::Read(stream1, bool1);
+    ASSERT_EQ(true, ret);
+
+    std::vector<uint8_t> bytes2 = {1, };
+    rai::BufferStream stream2(bytes2.data(), bytes2.size());
+    bool bool2 = false;
+    ret = rai::Read(stream2, bool2);
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ(true, bool2);
+    ret = rai::Read(stream2, bool2);
+    ASSERT_EQ(true, ret);
+
+    std::vector<uint8_t> bytes3 = {2, };
+    rai::BufferStream stream3(bytes3.data(), bytes3.size());
+    bool bool3 = false;
+    ret = rai::Read(stream3, bool3);
+    ASSERT_EQ(true, ret);
+
+    std::vector<uint8_t> bytes4;
+    {
+        rai::VectorStream stream4(bytes4);
+        bool bool4 = false;
+        rai::Write(stream4, bool4);
+    }
+    ASSERT_EQ(1, bytes4.size());
+    ASSERT_EQ(0, bytes4[0]);
+
+    std::vector<uint8_t> bytes5;
+    {
+        rai::VectorStream stream5(bytes5);
+        bool bool5 = true;
+        rai::Write(stream5, bool5);
+    }
+    ASSERT_EQ(1, bytes5.size());
+    ASSERT_EQ(1, bytes5[0]);
+}
+
+TEST(CommonUtil, StreamString)
+{
+    std::vector<uint8_t> bytes1 = {7, 'R', 'a', 'i', 'c', 'o', 'i', 'n'};
+    rai::BufferStream stream1(bytes1.data(), bytes1.size());
+    std::string str1;
+    bool ret = rai::Read(stream1, str1);
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ("Raicoin", str1);
+    ret = rai::Read(stream1, str1);
+    ASSERT_EQ(true, ret);
+
+    std::vector<uint8_t> bytes2 = {0, };
+    rai::BufferStream stream2(bytes2.data(), bytes2.size());
+    std::string str2;
+    ret = rai::Read(stream2, str2);
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ("", str2);
+    ret = rai::Read(stream2, str2);
+    ASSERT_EQ(true, ret);
+
+
+    std::vector<uint8_t> bytes3 = {1, };
+    rai::BufferStream stream3(bytes3.data(), bytes3.size());
+    std::string str3;
+    ret = rai::Read(stream3, str3);
+    ASSERT_EQ(true, ret);
+
+    std::vector<uint8_t> bytes4;
+    {
+        rai::VectorStream stream4(bytes4);
+        std::string str4 = "Raicoin";
+        rai::Write(stream4, str4);
+    }
+    std::vector<uint8_t> bytes4_expected = {7,   'R', 'a', 'i',
+                                            'c', 'o', 'i', 'n'};
+    ASSERT_EQ(bytes4_expected, bytes4);
+
+    std::vector<uint8_t> bytes5;
+    {
+        rai::VectorStream stream5(bytes5);
+        std::string str5 = "";
+        rai::Write(stream5, str5);
+    }
+    std::vector<uint8_t> bytes5_expected = {0, };
+    ASSERT_EQ(bytes5_expected, bytes5);
+}
