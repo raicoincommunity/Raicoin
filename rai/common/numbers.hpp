@@ -95,11 +95,12 @@ union uint256_union
     std::array<uint64_t, 4> qwords;
     std::array<uint128_union, 2> owords;
 };
-using BlockHash  = uint256_union;
-using Account    = uint256_union;
-using PublicKey  = uint256_union;
-using PrivateKey = uint256_union;
-using UniqueId   = uint256_union;
+using BlockHash     = uint256_union;
+using Account       = uint256_union;
+using PublicKey     = uint256_union;
+using PrivateKey    = uint256_union;
+using UniqueId      = uint256_union;
+using TokenValue    = uint256_union;
 
 class AccountParser
 {

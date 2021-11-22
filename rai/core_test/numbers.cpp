@@ -327,6 +327,50 @@ TEST(uint256_union, arithmetic_operator)
     ASSERT_EQ(rai::uint256_t(-1), result.Number());
 }
 
+TEST(uint256_union, dec)
+{
+    bool ret;
+    rai::uint256_union value;
+
+    ret = value.DecodeDec("255");
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ(255, value.Number());
+
+    ret = value.DecodeDec(
+        "1157920892373161954235709850086879078532699846656405640394575840079131"
+        "29639935");
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    ret = value.DecodeDec(
+        "1157920892373161954235709850086879078532699846656405640394575840079131"
+        "29639936");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    ret = value.DecodeDec(
+        "1234567890123456789012345678901234567890123456789012345678901234567890"
+        "123456789");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    ret = value.DecodeDec("FF");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    string str;
+    value.EncodeDec(str);
+    ASSERT_EQ(
+        "1157920892373161954235709850086879078532699846656405640394575840079131"
+        "29639935",
+        str);
+
+    ret = value.DecodeDec("255");
+    ASSERT_EQ(false, ret);
+    value.EncodeDec(str);
+    ASSERT_EQ("255", str);
+}
+
 TEST(uint256_union, hex)
 {
     bool ret;

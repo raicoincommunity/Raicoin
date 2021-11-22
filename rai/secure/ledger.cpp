@@ -2744,7 +2744,7 @@ rai::ErrorCode rai::Ledger::InitMemoryTables_(rai::Transaction& transaction)
         error = BlockGet(transaction, info.head_, block);
         IF_ERROR_RETURN(error, rai::ErrorCode::LEDGER_BLOCK_GET);
 
-        if (block->HasRepresentative())
+        if (block->HasRepresentative() && !block->Balance().IsZero())
         {
             rep_weights_[block->Representative()] += block->Balance();
             total_rep_weight_ += block->Balance();

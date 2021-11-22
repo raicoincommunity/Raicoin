@@ -18,7 +18,12 @@ add_library (rai_common
 	stat.cpp
 	stat.hpp
 	extensions.cpp
-	extensions.hpp)
+	extensions.hpp
+	chain.cpp
+	chain.hpp
+	token.cpp
+	token.hpp
+	)
 
 
 target_link_libraries (rai_common

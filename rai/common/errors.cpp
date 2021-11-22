@@ -534,6 +534,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid ledger version";
         }
+        case rai::ErrorCode::EXTENSION_VALUE:
+        {
+            return "Invalid extension value";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -629,6 +633,46 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_ALIAS_OP_VALUE:
         {
             return "Failed to parse alias extension op_value from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_OP:
+        {
+            return "Failed to parse token extension op from json";;
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TYPE:
+        {
+            return "Failed to parse token extension type from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_NAME:
+        {
+            return "Failed to parse token extension name from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SYMBOL:
+        {
+            return "Failed to parse token extension symbol from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_INIT_SUPPLY:
+        {
+            return "Failed to parse token extension init_supply";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_CAP_SUPPLY:
+        {
+            return "Failed to parse token extension cap_supply";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_DECIMALS:
+        {
+            return "Failed to parse token extension decimals";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_BURNABLE:
+        {
+            return "Failed to parse token extension burnable from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_MINTABLE:
+        {
+            return "Failed to parse token extension mintable from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_CIRCULABLE:
+        {
+            return "Failed to parse token extension circulable from json";
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
@@ -1379,6 +1423,38 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::ALIAS_LEDGER_PUT:
         {
             return "Failed to put data to ledger";
+        }
+        case rai::ErrorCode::TOKEN_GENERIC:
+        {
+            return "Token generic error";
+        }
+        case rai::ErrorCode::TOKEN_OP_INVALID:
+        {
+            return "Invalid token operation";
+        }
+        case rai::ErrorCode::TOKEN_OP_UNKNOWN:
+        {
+            return "Unknown token operation";
+        }
+        case rai::ErrorCode::TOKEN_TYPE_INVALID:
+        {
+            return "Invalid token type";
+        }
+        case rai::ErrorCode::TOKEN_TYPE_UNKNOWN:
+        {
+            return "Unknown token type";
+        }
+        case rai::ErrorCode::TOKEN_NAME_UTF8_CHECK:
+        {
+            return "The token name isn't a valid UTF-8 string";
+        }
+        case rai::ErrorCode::TOKEN_SYMBOL_UTF8_CHECK:
+        {
+            return "The token symbol isn't a valid UTF-8 string";
+        }
+        case rai::ErrorCode::TOKEN_CAP_SUPPLY_EXCEEDED:
+        {
+            return "The token cap supply is exceeded";
         }
         default:
         {
