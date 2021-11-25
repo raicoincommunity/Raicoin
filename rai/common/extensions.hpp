@@ -7,6 +7,7 @@
 #include <rai/common/util.hpp>
 #include <rai/common/numbers.hpp>
 #include <rai/common/token.hpp>
+#include <rai/common/chain.hpp>
 
 namespace rai
 {
@@ -147,6 +148,7 @@ public:
 
     void UpdateExtensionValue();
     static std::shared_ptr<Data> MakeData(Op);
+    static rai::ErrorCode CheckType(rai::TokenType);
 
     Op op_;
     std::shared_ptr<Data> op_data_;
@@ -206,6 +208,13 @@ class ExtensionToken721Create : public rai::ExtensionTokenCreate::Data
 public:
     ExtensionToken721Create();
     virtual ~ExtensionToken721Create() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
     
     std::string name_;
     std::string symbol_;
@@ -213,6 +222,87 @@ public:
     rai::TokenValue cap_supply_;
     bool burnable_;
     bool circulable_;
+};
+
+class ExtensionTokenMint : public rai::ExtensionToken::Data
+{
+public:
+    ExtensionTokenMint();
+    virtual ~ExtensionTokenMint() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
+
+    rai::TokenType type_;
+    rai::Account to_;
+    rai::TokenValue value_;
+    std::string uri_;
+};
+
+class ExtensionTokenBurn : public rai::ExtensionToken::Data
+{
+public:
+    ExtensionTokenBurn();
+    virtual ~ExtensionTokenBurn() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
+
+    rai::TokenType type_;
+    rai::TokenValue value_;
+};
+
+class ExtensionTokenInfo
+{
+public:
+    ExtensionTokenInfo();
+    void Serialize(rai::Stream&) const;
+    rai::ErrorCode Deserialize(rai::Stream&);
+    void SerializeJson(rai::Ptree&) const;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&);
+
+    rai::ErrorCode CheckData() const;
+    
+    rai::Chain chain_;
+    rai::TokenType type_;
+    rai::TokenAddress address_;
+};
+
+class ExtensionTokenSend : public rai::ExtensionToken::Data
+{
+public:
+    ExtensionTokenSend();
+    virtual ~ExtensionTokenSend() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
+
+    rai::ExtensionTokenInfo token_;
+    rai::Account to_;
+    rai::TokenValue value_;
+
+};
+
+class ExtensionTokenReceive : public rai::ExtensionToken::Data
+{
+public:
+    ExtensionTokenReceive();
+    virtual ~ExtensionTokenReceive() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
 };
 
 rai::ErrorCode ParseExtension(const rai::Extension&,

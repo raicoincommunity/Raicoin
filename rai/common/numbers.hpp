@@ -101,6 +101,7 @@ using PublicKey     = uint256_union;
 using PrivateKey    = uint256_union;
 using UniqueId      = uint256_union;
 using TokenValue    = uint256_union;
+using TokenAddress  = uint256_union;
 
 class AccountParser
 {

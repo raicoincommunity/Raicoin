@@ -652,15 +652,15 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_INIT_SUPPLY:
         {
-            return "Failed to parse token extension init_supply";
+            return "Failed to parse token extension init_supply from json";
         }
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_CAP_SUPPLY:
         {
-            return "Failed to parse token extension cap_supply";
+            return "Failed to parse token extension cap_supply from json";
         }
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_DECIMALS:
         {
-            return "Failed to parse token extension decimals";
+            return "Failed to parse token extension decimals from json";
         }
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_BURNABLE:
         {
@@ -673,6 +673,30 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_CIRCULABLE:
         {
             return "Failed to parse token extension circulable from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_BASE_URI:
+        {
+            return "Failed to parse token extension base_uri from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO:
+        {
+            return "Failed to parse token extension to from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_VALUE:
+        {
+            return "Failed to parse token extension value from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_URI:
+        {
+            return "Failed to parse token extension uri from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_CHAIN:
+        {
+            return "Failed to parse token extension chain from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_ADDRESS:
+        {
+            return "Failed to parse token extension address from json";
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
@@ -1455,6 +1479,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_CAP_SUPPLY_EXCEEDED:
         {
             return "The token cap supply is exceeded";
+        }
+        case rai::ErrorCode::TOKEN_BASE_URI_UTF8_CHECK:
+        {
+            return "The token base uri isn't a valid UTF-8 string";
+        }
+        case rai::ErrorCode::TOKEN_URI_UTF8_CHECK:
+        {
+            return "The token uri isn't a valid UTF-8 string";
+        }
+        case rai::ErrorCode::TOKEN_CHAIN_INVALID:
+        {
+            return "Invalid chain";
+        }
+        case rai::ErrorCode::TOKEN_CHAIN_UNKNOWN:
+        {
+            return "Unknown chain";
         }
         default:
         {
