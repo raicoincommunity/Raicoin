@@ -698,6 +698,50 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse token extension address from json";
         }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SOURCE:
+        {
+            return "Failed to parse token extension source from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_FROM:
+        {
+            return "Failed to parse token extension from from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_BLOCK_HEIGHT:
+        {
+            return "Failed to parse token extension block_height from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TX_HASH:
+        {
+            return "Failed to parse token extension transaction hash from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_SUBOP:
+        {
+            return "Failed to parse token extension swap sub_op from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TOKEN_OFFER:
+        {
+            return "Failed to parse token extension swap token_offer from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TOKEN_WANT:
+        {
+            return "Failed to parse token extension swap token_want from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE_OFFER:
+        {
+            return "Failed to parse token extension swap value_offer from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE_WANT:
+        {
+            return "Failed to parse token extension swap value_want from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_MIN_OFFER:
+        {
+            return "Failed to parse token extension swap min_offer from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER:
+        {
+            return "Failed to parse token extension swap max_offer from json";
+        }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
             return "Failed to parse version from config file";
@@ -1495,6 +1539,38 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_CHAIN_UNKNOWN:
         {
             return "Unknown chain";
+        }
+        case rai::ErrorCode::TOKEN_SOURCE_INVALID:
+        {
+            return  "Invalid token source";
+        }
+        case rai::ErrorCode::TOKEN_SOURCE_UNKNOWN:
+        {
+            return "Unknown token source";
+        }
+        case rai::ErrorCode::TOKEN_CREATION_DATA_MISS:
+        {
+            return "Token creation data is missing";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_SUB_DATA_MISS:
+        {
+            return "Token swap sub-data is missing";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_VALUE_OFFER:
+        {
+            return "Invalid token value offered";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_VALUE_WANT:
+        {
+            return "Invalid token value wanted";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_MIN_OFFER:
+        {
+            return "Invalid minimum tradable value";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_MAX_OFFER:
+        {
+            return "Invalid maximum tradable value";
         }
         default:
         {

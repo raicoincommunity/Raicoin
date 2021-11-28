@@ -38,3 +38,50 @@ rai::TokenType rai::StringToTokenType(const std::string& str)
         return rai::TokenType::INVALID;
     }
 }
+
+std::string rai::TokenSourceToString(rai::TokenSource source)
+{
+    switch (source)
+    {
+        case rai::TokenSource::INVALID:
+        {
+            return "invalid";
+        }
+        case rai::TokenSource::LOCAL:
+        {
+            return "local";
+        }
+        case rai::TokenSource::MAP:
+        {
+            return "map";
+        }
+        case rai::TokenSource::UNWRAP:
+        {
+            return "unwrap";
+        }
+        default:
+        {
+            return "unknown";
+        }
+    }
+}
+
+rai::TokenSource rai::StringToTokenSource(const std::string& str)
+{
+    if ("local" == str)
+    {
+        return rai::TokenSource::LOCAL;
+    }
+    else if ("map" == str)
+    {
+        return rai::TokenSource::MAP;
+    }
+    else if ("unwrap" == str)
+    {
+        return rai::TokenSource::UNWRAP;
+    }
+    else
+    {
+        return rai::TokenSource::INVALID;
+    }
+}
