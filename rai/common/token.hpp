@@ -15,4 +15,15 @@ enum class TokenType : uint8_t
 std::string TokenTypeToString(TokenType);
 TokenType StringToTokenType(const std::string&);
 
+enum class TokenSource : uint8_t
+{
+    INVALID = 0,
+    LOCAL   = 1,
+    MAP     = 2,
+    UNWRAP  = 3,
+    MAX
+};
+std::string TokenSourceToString(TokenSource);
+TokenSource StringToTokenSource(const std::string&);
+
 }

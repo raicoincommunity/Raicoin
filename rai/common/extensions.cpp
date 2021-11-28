@@ -951,6 +951,10 @@ std::shared_ptr<rai::ExtensionToken::Data> rai::ExtensionToken::MakeData(
         {
             return std::make_shared<rai::ExtensionTokenSend>();
         }
+        case Op::RECEIVE:
+        {
+            return std::make_shared<rai::ExtensionTokenReceive>();
+        }
         //todo:
         default:
         {
@@ -1007,6 +1011,14 @@ rai::ErrorCode rai::ExtensionTokenCreate::Deserialize(rai::Stream& stream)
 
 void rai::ExtensionTokenCreate::SerializeJson(rai::Ptree& ptree) const
 {
+    rai::ErrorCode error_code = CheckData();
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+        return;
+    }
+    
     ptree.put("type", rai::TokenTypeToString(type_));
     if (creation_data_)
     {
@@ -1039,6 +1051,19 @@ rai::ErrorCode rai::ExtensionTokenCreate::DeserializeJson(
     }
 
     return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::ExtensionTokenCreate::CheckData() const
+{
+    rai::ErrorCode error_code = rai::ExtensionToken::CheckType(type_);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (creation_data_ == nullptr)
+    {
+        return rai::ErrorCode::TOKEN_CREATION_DATA_MISS;
+    }
+
+    return creation_data_->CheckData();
 }
 
 std::shared_ptr<rai::ExtensionTokenCreate::Data>
@@ -1356,7 +1381,7 @@ void rai::ExtensionTokenMint::SerializeJson(rai::Ptree& ptree) const
     }
 
     ptree.put("type", rai::TokenTypeToString(type_));
-    ptree.put("to", to_.StringAccount());
+    ptree.put("to", to_.StringHex());
     ptree.put("value", value_.StringDec());
 
     if (type_ == rai::TokenType::_721)
@@ -1562,6 +1587,16 @@ rai::ErrorCode rai::ExtensionTokenInfo::CheckData() const
     return rai::ErrorCode::SUCCESS;
 }
 
+bool rai::ExtensionTokenInfo::Fungible() const
+{
+    return type_ == rai::TokenType::_20;
+}
+
+bool rai::ExtensionTokenInfo::NonFungible() const
+{
+    return type_ == rai::TokenType::_721;
+}
+
 void rai::ExtensionTokenSend::Serialize(rai::Stream& stream) const
 {
     token_.Serialize(stream);
@@ -1594,7 +1629,7 @@ void rai::ExtensionTokenSend::SerializeJson(rai::Ptree& ptree) const
     }
 
     token_.SerializeJson(ptree);
-    ptree.put("to", to_.StringAccount());
+    ptree.put("to", to_.StringHex());
     ptree.put("value", value_.StringDec());
 }
 
@@ -1629,6 +1664,386 @@ rai::ErrorCode rai::ExtensionTokenSend::DeserializeJson(const rai::Ptree& ptree)
 rai::ErrorCode rai::ExtensionTokenSend::CheckData() const
 {
     return token_.CheckData();
+}
+
+rai::ExtensionTokenReceive::ExtensionTokenReceive()
+    : source_(rai::TokenSource::INVALID),
+      block_height_(std::numeric_limits<uint64_t>::max())
+{
+}
+
+void rai::ExtensionTokenReceive::Serialize(rai::Stream& stream) const
+{
+    token_.Serialize(stream);
+    rai::Write(stream, source_);
+    rai::Write(stream, from_.bytes);
+    rai::Write(stream, block_height_);
+    rai::Write(stream, tx_hash_.bytes);
+    rai::Write(stream, value_.bytes);
+}
+
+rai::ErrorCode rai::ExtensionTokenReceive::Deserialize(rai::Stream& stream)
+{
+    rai::ErrorCode error_code = token_.Deserialize(stream);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    bool error = rai::Read(stream, source_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, from_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, block_height_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, tx_hash_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, value_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    return CheckData();
+}
+
+void rai::ExtensionTokenReceive::SerializeJson(rai::Ptree& ptree) const
+{
+    rai::ErrorCode error_code = CheckData();
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+        return;
+    }
+
+    token_.SerializeJson(ptree);
+    ptree.put("source", rai::TokenSourceToString(source_));
+    ptree.put("from", from_.StringHex());
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("tx_hash", tx_hash_.StringHex());
+    ptree.put("value", value_.StringDec());
+}
+
+rai::ErrorCode rai::ExtensionTokenReceive::DeserializeJson(
+    const rai::Ptree& ptree)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::UNEXPECTED;
+    try
+    {
+        error_code = token_.DeserializeJson(ptree);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SOURCE;
+        std::string source = ptree.get<std::string>("source");
+        source_ = rai::StringToTokenSource(source);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_FROM;
+        std::string from = ptree.get<std::string>("from");
+        bool error = from_.DecodeHex(from);
+        IF_ERROR_RETURN(error, error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_BLOCK_HEIGHT;
+        std::string height = ptree.get<std::string>("block_height");
+        error = rai::StringToUint(height, block_height_);
+        IF_ERROR_RETURN(error, error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TX_HASH;
+        std::string hash = ptree.get<std::string>("tx_hash");
+        error = tx_hash_.DecodeHex(hash);
+        IF_ERROR_RETURN(error, error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_VALUE;
+        std::string value = ptree.get<std::string>("value");
+        error = value_.DecodeDec(value);
+        IF_ERROR_RETURN(error, error_code);
+
+        return CheckData();
+    }
+    catch (...)
+    {
+        return error_code;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::ExtensionTokenReceive::CheckData() const
+{
+    rai::ErrorCode error_code = token_.CheckData();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (source_ == rai::TokenSource::INVALID)
+    {
+        return rai::ErrorCode::TOKEN_SOURCE_INVALID;
+    }
+
+    if (source_ >= rai::TokenSource::MAX)
+    {
+        return rai::ErrorCode::TOKEN_SOURCE_UNKNOWN;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ExtensionTokenSwap::ExtensionTokenSwap()
+    : sub_op_(rai::ExtensionTokenSwap::SubOp::INVALID), sub_data_(nullptr)
+{
+}
+
+void rai::ExtensionTokenSwap::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, sub_op_);
+    if (sub_data_)
+    {
+        sub_data_->Serialize(stream);
+    }
+}
+
+rai::ErrorCode rai::ExtensionTokenSwap::Deserialize(rai::Stream& stream)
+{
+    bool error = rai::Read(stream, sub_op_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    rai::ErrorCode error_code = rai::ExtensionTokenSwap::CheckSubOp(sub_op_);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    sub_data_ = rai::ExtensionTokenSwap::MakeSubData(sub_op_);
+    if (sub_data_ == nullptr)
+    {
+        return rai::ErrorCode::UNEXPECTED;
+    }
+
+    return sub_data_->Deserialize(stream);
+}
+
+void rai::ExtensionTokenSwap::SerializeJson(rai::Ptree& ptree) const
+{
+    rai::ErrorCode error_code = CheckData();
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+        return;
+    }
+
+    ptree.put("sub_op", rai::ExtensionTokenSwap::SubOpToString(sub_op_));
+    if (sub_data_)
+    {
+        sub_data_->SerializeJson(ptree);
+    }
+}
+
+rai::ErrorCode rai::ExtensionTokenSwap::DeserializeJson(
+    const rai::Ptree& ptree)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::UNEXPECTED;
+    try
+    {
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_SUBOP;
+        std::string sub_op = ptree.get<std::string>("sub_op");
+        sub_op_ = rai::ExtensionTokenSwap::StringToSubOp(sub_op);
+        error_code = rai::ExtensionTokenSwap::CheckSubOp(sub_op_);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        sub_data_ = rai::ExtensionTokenSwap::MakeSubData(sub_op_);
+        if (sub_data_ == nullptr)
+        {
+            return rai::ErrorCode::UNEXPECTED;
+        }
+
+        return sub_data_->DeserializeJson(ptree);
+    }
+    catch (...)
+    {
+        return error_code;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::ExtensionTokenSwap::CheckData() const
+{
+    rai::ErrorCode error_code = rai::ExtensionTokenSwap::CheckSubOp(sub_op_);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (sub_data_ == nullptr)
+    {
+        return rai::ErrorCode::TOKEN_SWAP_SUB_DATA_MISS;
+    }
+
+    return sub_data_->CheckData();
+}
+
+
+std::shared_ptr<rai::ExtensionTokenSwap::Data>
+rai::ExtensionTokenSwap::MakeSubData(rai::ExtensionTokenSwap::SubOp op)
+{
+    using SubOp = rai::ExtensionTokenSwap::SubOp;
+    switch (op)
+    {
+        case SubOp::MAKE:
+        {
+            return std::make_shared<rai::ExtensionTokenSwapMake>();
+        }
+        // todo:
+        default:
+        {
+            return nullptr;
+        }
+    }
+}
+
+void rai::ExtensionTokenSwapMake::Serialize(rai::Stream& stream) const
+{
+    token_offer_.Serialize(stream);
+    token_want_.Serialize(stream);
+    rai::Write(stream, value_offer_.bytes);
+    rai::Write(stream, value_want_.bytes);
+    if (token_offer_.type_ == rai::TokenType::_20)
+    {
+        rai::Write(stream, min_offer_.bytes);
+        rai::Write(stream, max_offer_.bytes);
+    }
+}
+
+rai::ErrorCode rai::ExtensionTokenSwapMake::Deserialize(rai::Stream& stream) 
+{
+    rai::ErrorCode error_code = token_offer_.Deserialize(stream);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = token_want_.Deserialize(stream);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    bool error = rai::Read(stream, value_offer_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, value_want_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    if (token_want_.type_ == rai::TokenType::_20)
+    {
+
+    }
+    error = rai::Read(stream, min_offer_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, max_offer_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    return CheckData();
+}
+
+void rai::ExtensionTokenSwapMake::SerializeJson(rai::Ptree& ptree) const
+{
+    rai::ErrorCode error_code = CheckData();
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        ptree.put("error", rai::ErrorString(error_code));
+        ptree.put("error_code", static_cast<uint32_t>(error_code));
+        return;
+    }
+
+    rai::Ptree token_offer;
+    token_offer_.SerializeJson(token_offer);
+    ptree.put_child("token_offer", token_offer);
+
+    rai::Ptree token_want;
+    token_want_.SerializeJson(token_want);
+    ptree.put_child("token_want", token_want);
+
+    ptree.put("value_offer", value_offer_.StringDec());
+    ptree.put("value_want", value_want_.StringDec());
+    ptree.put("min_offer", min_offer_.StringDec());
+    ptree.put("max_offer", max_offer_.StringDec());
+}
+
+rai::ErrorCode rai::ExtensionTokenSwapMake::DeserializeJson(
+    const rai::Ptree& ptree)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::UNEXPECTED;
+    try
+    {
+        error_code =
+            rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TOKEN_OFFER;
+        rai::Ptree token_offer = ptree.get_child("token_offer");
+        error_code = token_offer_.DeserializeJson(token_offer);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TOKEN_WANT;
+        rai::Ptree token_want = ptree.get_child("token_want");
+        error_code = token_want_.DeserializeJson(token_want);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code =
+            rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE_OFFER;
+        std::string value_offer = ptree.get<std::string>("value_offer");
+        bool error = value_offer_.DecodeDec(value_offer);
+        IF_ERROR_RETURN(error, error_code);
+
+        error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE_WANT;
+        std::string value_want = ptree.get<std::string>("value_want");
+        error = value_want_.DecodeDec(value_want);
+        IF_ERROR_RETURN(error, error_code);
+
+        if (token_offer_.Fungible())
+        {
+            error_code =
+                rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_MIN_OFFER;
+            std::string min_offer = ptree.get<std::string>("min_offer");
+            error = min_offer_.DecodeDec(min_offer);
+            IF_ERROR_RETURN(error, error_code);
+
+            error_code =
+                rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER;
+            std::string max_offer = ptree.get<std::string>("max_offer");
+            error = max_offer_.DecodeDec(max_offer);
+            IF_ERROR_RETURN(error, error_code);
+        }
+
+        return CheckData();
+    }
+    catch (...)
+    {
+        return error_code;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::ExtensionTokenSwapMake::CheckData() const
+{
+    rai::ErrorCode error_code = token_offer_.CheckData();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = token_want_.CheckData();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (token_offer_.Fungible())
+    {
+        if (value_offer_.IsZero())
+        {
+            return rai::ErrorCode::TOKEN_SWAP_VALUE_OFFER;
+        }
+        
+        if (max_offer_.IsZero())
+        {
+            return rai::ErrorCode::TOKEN_SWAP_MAX_OFFER;
+        }
+
+        if (min_offer_ > max_offer_)
+        {
+            return rai::ErrorCode::TOKEN_SWAP_MIN_OFFER;
+        }
+    }
+
+    if (token_want_.Fungible())
+    {
+        if (value_want_.IsZero())
+        {
+            return rai::ErrorCode::TOKEN_SWAP_VALUE_WANT;
+        }
+    }
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::ErrorCode rai::ParseExtension(const rai::Extension& in,
