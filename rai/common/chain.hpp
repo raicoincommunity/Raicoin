@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <rai/common/numbers.hpp>
 
 namespace rai
 {

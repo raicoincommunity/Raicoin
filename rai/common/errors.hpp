@@ -394,7 +394,6 @@ enum class ErrorCode : int
     ALIAS_LEDGER_GET                    = 706,
     ALIAS_LEDGER_PUT                    = 707,
 
-
     TOKEN_GENERIC                       = 800,
     TOKEN_OP_INVALID                    = 801,
     TOKEN_OP_UNKNOWN                    = 802,
@@ -415,9 +414,41 @@ enum class ErrorCode : int
     TOKEN_SWAP_VALUE_WANT               = 817,
     TOKEN_SWAP_MIN_OFFER                = 818,
     TOKEN_SWAP_MAX_OFFER                = 819,
+    TOKEN_SWAP_PAIR_EQUAL               = 820,
+    TOKEN_SWAP_SUB_OP_INVALID           = 821,
+    TOKEN_SWAP_SUB_OP_UNKNOWN           = 822,
+    TOKEN_SWAP_MAKER                    = 823,
+    TOKEN_SWAP_SHARE                    = 824,
+    TOKEN_SWAP_ORDER_HEIGHT             = 825,
+    TOKEN_SWAP_TRADE_HEIGHT             = 826,
+    TOKEN_SWAP_INQUIRY_HEIGHT           = 827,
+    TOKEN_SWAP_TAKER                    = 828,
+    TOKEN_SWAP_TAKE_HEIGHT              = 829,
+    TOKEN_UNMAP_CHAIN                   = 830,
+    TOKEN_UNMAP_TO                      = 831,
+    TOKEN_WRAP_CHAIN                    = 832,
+    TOKEN_WRAP_TO                       = 833,
+    TOKEN_VALUE                         = 834,
+    TOKEN_MINT_TO                       = 835,
+    TOKEN_SEND_TO                       = 836,
+    TOKEN_BLOCK_HEIGHT                  = 837,
+    TOKEN_UNWRAP_CHAIN                  = 838,
 
-    JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER   = 900,
-
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER       = 900,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT         = 901,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAKER           = 902,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_ORDER_HEIGHT    = 903,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_TRADE_HEIGHT    = 904,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE           = 905,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_SHARE           = 906,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_TAKER           = 907,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_INQUIRY_HEIGHT  = 908,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_SIGNATURE       = 909,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_TAKE_HEIGHT     = 910,
+    JSON_BLOCK_EXTENSION_TOKEN_TO_CHAIN             = 911,
+    JSON_BLOCK_EXTENSION_TOKEN_TO_ACCOUNT           = 912,
+    JSON_BLOCK_EXTENSION_TOKEN_UNWRAP_CHAIN         = 913,
+    
     MAX = 1000
 };
 

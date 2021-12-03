@@ -742,6 +742,60 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse token extension swap max_offer from json";
         }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT:
+        {
+            return "Failed to parse token extension swap timeout from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAKER:
+        {
+            return "Failed to parse token extension swap maker from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_ORDER_HEIGHT:
+        {
+            return "Failed to parse token extension swap order_height from "
+                   "json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TRADE_HEIGHT:
+        {
+            return "Failed to parse token extension swap trade_height from "
+                   "json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE:
+        {
+            return "Failed to parse token extension swap value from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_SHARE:
+        {
+            return "Failed to parse token extension swap share from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TAKER:
+        {
+            return "Failed to parse token extension swap taker from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_INQUIRY_HEIGHT:
+        {
+            return "Failed to parse token extension swap inquiry_height from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_SIGNATURE:
+        {
+            return "Failed to parse token extension swap signature from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TAKE_HEIGHT:
+        {
+            return "Failed to parse token extension swap take_height from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO_CHAIN:
+        {
+            return "Failed to parse token extension to_chain from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO_ACCOUNT:
+        {
+            return "Failed to parse token extension to_account from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_UNWRAP_CHAIN:
+        {
+            return "Failed to parse token extension unwrap_chain from json";
+        }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
             return "Failed to parse version from config file";
@@ -1571,6 +1625,82 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_SWAP_MAX_OFFER:
         {
             return "Invalid maximum tradable value";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_PAIR_EQUAL:
+        {
+            return "Invalid token pair";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_SUB_OP_INVALID:
+        {
+            return "Invalid token swap operation";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_SUB_OP_UNKNOWN:
+        {
+            return "Unknown token swap operation";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_MAKER:
+        {
+            return "Invalid token swap maker";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_SHARE:
+        {
+            return "Invalid token swap share public key";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_ORDER_HEIGHT:
+        {
+            return "Invalid token swap order_height";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT:
+        {
+            return "Invalid token swap trade_height";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_INQUIRY_HEIGHT:
+        {
+            return "Invalid token swap inquiry_height";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TAKER:
+        {
+            return "Invalid token swap taker";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT:
+        {
+            return "Invalid token swap take_height";
+        }
+        case rai::ErrorCode::TOKEN_UNMAP_CHAIN:
+        {
+            return "Unmap token to invalid chain";
+        }
+        case rai::ErrorCode::TOKEN_UNMAP_TO:
+        {
+            return "Unmap token to invalid destination address";
+        }
+        case rai::ErrorCode::TOKEN_WRAP_CHAIN:
+        {
+            return "Wrap token to invalid chain";
+        }
+        case rai::ErrorCode::TOKEN_WRAP_TO:
+        {
+            return "Wrap token to invalid destination address";
+        }
+        case rai::ErrorCode::TOKEN_VALUE:
+        {
+            return "Invalid token value";
+        }
+        case rai::ErrorCode::TOKEN_MINT_TO:
+        {
+            return "Mint token to invalid destination address";
+        }
+        case rai::ErrorCode::TOKEN_SEND_TO:
+        {
+            return "Send token to invalid destination address";
+        }
+        case rai::ErrorCode::TOKEN_BLOCK_HEIGHT:
+        {
+            return "Token invalid block height";
+        }
+        case rai::ErrorCode::TOKEN_UNWRAP_CHAIN:
+        {
+            return "Unwrap from invalid chain";
         }
         default:
         {

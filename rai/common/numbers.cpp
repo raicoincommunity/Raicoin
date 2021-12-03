@@ -8,6 +8,8 @@
 #include <blake2/blake2.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/modes.h>
+#include <cryptopp/osrng.h>
+#include <cryptopp/xed25519.h>
 #include <ed25519-donna/ed25519.h>
 
 using std::string;
@@ -657,6 +659,12 @@ std::string rai::uint256_union::StringAccount() const
 void rai::uint256_union::Random()
 {
     rai::random_pool.GenerateBlock(bytes.data(), bytes.size());
+}
+
+bool rai::uint256_union::ValidPublicKey() const
+{
+    CryptoPP::x25519 x;
+    return !x.IsSmallOrder(bytes.data());
 }
 
 rai::AccountParser::AccountParser(const std::string& str)
