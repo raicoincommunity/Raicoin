@@ -149,6 +149,8 @@ public:
     void UpdateExtensionValue();
     static std::shared_ptr<Data> MakeData(Op);
     static rai::ErrorCode CheckType(rai::TokenType);
+    static rai::ErrorCode CheckChain(rai::Chain);
+    static rai::ErrorCode CheckValue(rai::TokenType, const rai::TokenValue&);
 
     Op op_;
     std::shared_ptr<Data> op_data_;
@@ -270,9 +272,11 @@ public:
     void SerializeJson(rai::Ptree&) const;
     rai::ErrorCode DeserializeJson(const rai::Ptree&);
 
+
     rai::ErrorCode CheckData() const;
     bool Fungible() const;
     bool NonFungible() const;
+    bool operator==(const rai::ExtensionTokenInfo&) const;
 
     rai::Chain chain_;
     rai::TokenType type_;
@@ -282,7 +286,7 @@ public:
 class ExtensionTokenSend : public rai::ExtensionToken::Data
 {
 public:
-    ExtensionTokenSend();
+    ExtensionTokenSend() = default;
     virtual ~ExtensionTokenSend() = default;
     void Serialize(rai::Stream&) const override;
     rai::ErrorCode Deserialize(rai::Stream&) override;
@@ -315,6 +319,7 @@ public:
     uint64_t block_height_;
     rai::BlockHash tx_hash_;
     rai::TokenValue value_;
+    rai::Chain unwrap_chain_;
 };
 
 class ExtensionTokenSwap : public rai::ExtensionToken::Data
@@ -332,13 +337,14 @@ public:
     enum class SubOp : uint8_t
     {
         INVALID     = 0,
-        MAKE        = 1,
-        INQUIRY     = 2,
-        INQUIRY_ACK = 3,
-        TAKE        = 4,
-        TAKE_ACK    = 5,
-        TAKE_NACK   = 6,
-        CANCEL      = 7,
+        CONFIG      = 1,
+        MAKE        = 2,
+        INQUIRY     = 3,
+        INQUIRY_ACK = 4,
+        TAKE        = 5,
+        TAKE_ACK    = 6,
+        TAKE_NACK   = 7,
+        CANCEL      = 8,
         MAX
     };
     static std::string SubOpToString(SubOp);
@@ -365,7 +371,7 @@ public:
 class ExtensionTokenSwapMake : public rai::ExtensionTokenSwap::Data
 {
 public:
-    ExtensionTokenSwapMake() = default;
+    ExtensionTokenSwapMake();
     virtual ~ExtensionTokenSwapMake() = default;
 
     void Serialize(rai::Stream&) const override;
@@ -373,6 +379,7 @@ public:
     void SerializeJson(rai::Ptree&) const override;
     rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
     rai::ErrorCode CheckData() const override;
+    bool FungiblePair() const;
     
     rai::ExtensionTokenInfo token_offer_;
     rai::ExtensionTokenInfo token_want_;
@@ -380,6 +387,146 @@ public:
     rai::TokenValue value_want_;
     rai::TokenValue min_offer_;
     rai::TokenValue max_offer_;
+    uint64_t timeout_;
+};
+
+class ExtensionTokenSwapInquiry : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapInquiry();
+    virtual ~ExtensionTokenSwapInquiry() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    rai::Account maker_;
+    uint64_t order_height_;
+    uint64_t trade_height_;
+    uint64_t timeout_;
+    rai::TokenValue value_;
+    rai::PublicKey share_;
+};
+
+class ExtensionTokenSwapInquiryAck : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapInquiryAck();
+    virtual ~ExtensionTokenSwapInquiryAck() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    rai::Account taker_;
+    uint64_t inquiry_height_;
+    uint64_t timeout_;
+    rai::PublicKey share_;
+    rai::Signature signature_;
+};
+
+class ExtensionTokenSwapTake : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapTake();
+    virtual ~ExtensionTokenSwapTake() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    uint64_t inquiry_height_;
+};
+
+class ExtensionTokenSwapTakeAck : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapTakeAck();
+    virtual ~ExtensionTokenSwapTakeAck() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    rai::Account taker_;
+    uint64_t inquiry_height_;
+    uint64_t take_height_;
+    rai::TokenValue value_;
+};
+
+class ExtensionTokenSwapTakeNack : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapTakeNack();
+    virtual ~ExtensionTokenSwapTakeNack() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    rai::Account taker_;
+    uint64_t inquiry_height_;
+    uint64_t take_height_;
+};
+
+class ExtensionTokenSwapCancel : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapCancel();
+    virtual ~ExtensionTokenSwapCancel() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    uint64_t order_height_;
+};
+
+class ExtensionTokenUnmap : public rai::ExtensionToken::Data
+{
+public:
+    ExtensionTokenUnmap() = default;
+    virtual ~ExtensionTokenUnmap() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
+
+    rai::ExtensionTokenInfo token_;
+    rai::Account to_;
+    rai::TokenValue value_;
+};
+
+class ExtensionTokenWrap : public rai::ExtensionToken::Data
+{
+public:
+    ExtensionTokenWrap();
+    virtual ~ExtensionTokenWrap() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+
+    rai::ErrorCode CheckData() const;
+
+    rai::ExtensionTokenInfo token_;
+    rai::Chain to_chain_;
+    rai::Account to_account_;
+    rai::TokenValue value_;
 };
 
 rai::ErrorCode ParseExtension(const rai::Extension&,
