@@ -1,10 +1,12 @@
+#include <rai/core_test/test_util.hpp>
+
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
+#include <boost/property_tree/json_parser.hpp>
 
 using std::cout;
 using std::string;
@@ -74,3 +76,12 @@ bool TestDecodeHex(const string& in, std::vector<uint8_t>& out)
     return false;
 }
 
+void TestShowJson(const rai::Ptree& data, const std::string& key)
+{
+    rai::Ptree ptree;
+    ptree.put_child(key, data);
+    std::stringstream ostream;
+    boost::property_tree::write_json(ostream, ptree);
+    ostream.flush();
+    std::cout << ostream.str() << std::endl;
+}

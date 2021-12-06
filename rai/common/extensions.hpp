@@ -368,6 +368,21 @@ public:
     std::shared_ptr<Data> sub_data_;
 };
 
+class ExtensionTokenSwapConfig : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapConfig() = default;
+    virtual ~ExtensionTokenSwapConfig() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+    
+    rai::Account main_;
+};
+
 class ExtensionTokenSwapMake : public rai::ExtensionTokenSwap::Data
 {
 public:

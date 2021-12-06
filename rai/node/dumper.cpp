@@ -171,6 +171,10 @@ rai::Ptree rai::MessageDumper::ParseMessageNormal(
     const std::vector<uint8_t>& bytes)
 {
     rai::Ptree result;
+    if (bytes.size() == 0)
+    {
+        return result;
+    }
 
     rai::ErrorCode error_code;
     rai::BufferStream stream(bytes.data(), bytes.size());

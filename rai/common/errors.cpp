@@ -796,6 +796,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse token extension unwrap_chain from json";
         }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAIN_ACCOUNT:
+        {
+            return "Failed to parse token extension main_account from json";
+        }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
             return "Failed to parse version from config file";
@@ -1701,6 +1705,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_UNWRAP_CHAIN:
         {
             return "Unwrap from invalid chain";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT:
+        {
+            return "Invalid token swap main account";
+        }
+        case rai::ErrorCode::TOKEN_CAP_SUPPLY:
+        {
+            return "Invalid token cap supply";
         }
         default:
         {

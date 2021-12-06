@@ -10,6 +10,7 @@ add_executable (core_test
 	invite.cpp
 	common_util.cpp
 	cryptopp.cpp
+	extensions.cpp
 )
 
 #target_compile_definitions(core_test
