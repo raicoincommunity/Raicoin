@@ -433,6 +433,8 @@ enum class ErrorCode : int
     TOKEN_SEND_TO                       = 836,
     TOKEN_BLOCK_HEIGHT                  = 837,
     TOKEN_UNWRAP_CHAIN                  = 838,
+    TOKEN_SWAP_MAIN_ACCOUNT             = 839,
+    TOKEN_CAP_SUPPLY                    = 840,
 
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER       = 900,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT         = 901,
@@ -448,6 +450,7 @@ enum class ErrorCode : int
     JSON_BLOCK_EXTENSION_TOKEN_TO_CHAIN             = 911,
     JSON_BLOCK_EXTENSION_TOKEN_TO_ACCOUNT           = 912,
     JSON_BLOCK_EXTENSION_TOKEN_UNWRAP_CHAIN         = 913,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAIN_ACCOUNT    = 914,
     
     MAX = 1000
 };

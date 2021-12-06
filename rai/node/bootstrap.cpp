@@ -416,7 +416,7 @@ void rai::BootstrapClient::ReadForkBlocks(const boost::system::error_code& ec,
             break;
         }
 
-        if (size != forks_[curr_size_].length_)
+        if (size != forks_[curr_size_].length_ || size == 0)
         {
             error_code_ = rai::ErrorCode::BOOTSTRAP_RECEIVE;
             rai::Stats::AddDetail(
