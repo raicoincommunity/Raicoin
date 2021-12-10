@@ -661,3 +661,43 @@ TEST(Prefix, ToLower)
         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7A5B";
     ASSERT_EQ(expect, value.StringHex());
 }
+
+TEST(SecureMath, u128)
+{
+    rai::uint128_t u128(1);
+    rai::uint256_t u256(u128);
+    EXPECT_EQ(1, u256);
+
+    rai::uint128_t u128_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    EXPECT_EQ(std::numeric_limits<rai::uint128_t>::max(), u128_max);
+    u256 = 1;
+    u256 *= u128_max;
+    EXPECT_EQ(std::numeric_limits<rai::uint128_t>::max(), u256);
+    u256 *= u128_max;
+    EXPECT_EQ(std::numeric_limits<rai::uint256_t>::max()
+                  - std::numeric_limits<rai::uint128_t>::max()
+                  - std::numeric_limits<rai::uint128_t>::max(),
+              u256);
+    u256 /= u128_max;
+    EXPECT_EQ(std::numeric_limits<rai::uint128_t>::max(), u256);
+}
+
+TEST(SecureMath, u256)
+{
+    rai::uint256_t u256(1);
+    rai::uint512_t u512(u256);
+    EXPECT_EQ(1, u512);
+
+    rai::uint256_t u256_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    EXPECT_EQ(std::numeric_limits<rai::uint256_t>::max(), u256_max);
+    u512 = 1;
+    u512 *= u256_max;
+    EXPECT_EQ(std::numeric_limits<rai::uint256_t>::max(), u512);
+    u512 *= u256_max;
+    EXPECT_EQ(std::numeric_limits<rai::uint512_t>::max()
+                  - std::numeric_limits<rai::uint256_t>::max()
+                  - std::numeric_limits<rai::uint256_t>::max(),
+              u512);
+    u512 /= u256_max;
+    EXPECT_EQ(std::numeric_limits<rai::uint256_t>::max(), u512);
+}

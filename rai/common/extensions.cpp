@@ -1731,7 +1731,8 @@ rai::ErrorCode rai::ExtensionTokenSend::CheckData() const
 
 rai::ExtensionTokenReceive::ExtensionTokenReceive()
     : source_(rai::TokenSource::INVALID),
-      block_height_(std::numeric_limits<uint64_t>::max())
+      block_height_(std::numeric_limits<uint64_t>::max()),
+      unwrap_chain_(rai::Chain::INVALID)
 {
 }
 
@@ -1874,12 +1875,24 @@ rai::ErrorCode rai::ExtensionTokenReceive::CheckData() const
     error_code = rai::ExtensionToken::CheckValue(token_.type_, value_);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = rai::ExtensionToken::CheckChain(unwrap_chain_);
-    IF_NOT_SUCCESS_RETURN(error_code);
-
-    if (token_.chain_ == unwrap_chain_)
+    if (source_ == rai::TokenSource::MAP)
     {
-        return rai::ErrorCode::TOKEN_UNWRAP_CHAIN;
+        if (token_.chain_ == rai::Chain::RAICOIN
+            || token_.chain_ == rai::Chain::RAICOIN_TEST)
+        {
+            return rai::ErrorCode::TOKEN_SOURCE_INVALID;
+        }
+    }
+
+    if (source_ == rai::TokenSource::UNWRAP)
+    {
+        error_code = rai::ExtensionToken::CheckChain(unwrap_chain_);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (token_.chain_ == unwrap_chain_)
+        {
+            return rai::ErrorCode::TOKEN_UNWRAP_CHAIN;
+        }
     }
 
     return rai::ErrorCode::SUCCESS;
@@ -2037,7 +2050,7 @@ rai::ExtensionTokenSwap::SubOp rai::ExtensionTokenSwap::StringToSubOp(
     }
     else if ("inquiry" == str)
     {
-        return SubOp::INVALID;
+        return SubOp::INQUIRY;
     }
     else if ("inquiry_ack" == str)
     {
@@ -2088,6 +2101,10 @@ rai::ExtensionTokenSwap::MakeSubData(rai::ExtensionTokenSwap::SubOp op)
     using SubOp = rai::ExtensionTokenSwap::SubOp;
     switch (op)
     {
+        case SubOp::CONFIG:
+        {
+            return std::make_shared<rai::ExtensionTokenSwapConfig>();
+        }
         case SubOp::MAKE:
         {
             return std::make_shared<rai::ExtensionTokenSwapMake>();
@@ -2493,6 +2510,11 @@ rai::ErrorCode rai::ExtensionTokenSwapInquiry::CheckData() const
     }
 
     if (trade_height_ == std::numeric_limits<uint64_t>::max())
+    {
+        return rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT;
+    }
+
+    if (trade_height_ <= order_height_)
     {
         return rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT;
     }
