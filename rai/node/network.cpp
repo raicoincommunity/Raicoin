@@ -19,7 +19,7 @@ rai::UdpNetwork::UdpNetwork(rai::Node& node, const rai::IP& ip, uint16_t port)
       node_(node),
       on_(true)
 {
-    boost::asio::socket_base::receive_buffer_size option(8 * 1024 * 1024);
+    boost::asio::socket_base::receive_buffer_size option(16 * 1024 * 1024);
     socket_.set_option(option);
 }
 
@@ -70,7 +70,7 @@ void rai::UdpNetwork::Process(const boost::system::error_code& error,
         return;
     }
 
-    if (size == 0 || size > 1024)
+    if (size == 0 || size > 1472) // 1500 MTU - 20 bytes IP header - 8 bytes UDP header
     {
         rai::Stats::Add(rai::ErrorCode::UDP_RECEIVE, "bad size=", size);
         Receive();
