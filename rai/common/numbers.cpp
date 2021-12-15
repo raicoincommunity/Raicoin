@@ -667,6 +667,12 @@ bool rai::uint256_union::ValidPublicKey() const
     return !x.IsSmallOrder(bytes.data());
 }
 
+void rai::uint256_union::ClampKey()
+{
+    CryptoPP::x25519 x;
+    x.ClampKey(bytes.data());
+}
+
 rai::AccountParser::AccountParser(const std::string& str)
 {
     error_ = true;

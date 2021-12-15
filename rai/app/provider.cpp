@@ -12,6 +12,10 @@ std::string rai::Provider::ToString(Id id)
         {
             return "alias";
         }
+        case rai::Provider::Id::TOKEN:
+        {
+            return "token";
+        }
         default:
         {
             return "";

@@ -277,6 +277,7 @@ public:
     bool Fungible() const;
     bool NonFungible() const;
     bool operator==(const rai::ExtensionTokenInfo&) const;
+    bool IsNative() const;
 
     rai::Chain chain_;
     rai::TokenType type_;
@@ -512,7 +513,7 @@ public:
 class ExtensionTokenUnmap : public rai::ExtensionToken::Data
 {
 public:
-    ExtensionTokenUnmap() = default;
+    ExtensionTokenUnmap();
     virtual ~ExtensionTokenUnmap() = default;
     void Serialize(rai::Stream&) const override;
     rai::ErrorCode Deserialize(rai::Stream&) override;
@@ -524,6 +525,7 @@ public:
     rai::ExtensionTokenInfo token_;
     rai::Account to_;
     rai::TokenValue value_;
+    uint64_t extra_data_;
 };
 
 class ExtensionTokenWrap : public rai::ExtensionToken::Data

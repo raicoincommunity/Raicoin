@@ -244,6 +244,7 @@ add_subdirectory(rai/wallet)
 add_subdirectory(rai/rai_airdrop)
 add_subdirectory(rai/rai_wallet_rpc)
 add_subdirectory(rai/rai_alias)
+add_subdirectory(rai/rai_token)
 
 if (RAI_GUI)
 	if (WIN32)
