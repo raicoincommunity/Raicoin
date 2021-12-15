@@ -800,6 +800,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse token extension main_account from json";
         }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_UNMAP_EXTRA_DATA:
+        {
+            return "Failed to parse token extension unmap extra_data from json";
+        }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
             return "Failed to parse version from config file";
@@ -1713,6 +1717,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_CAP_SUPPLY:
         {
             return "Invalid token cap supply";
+        }
+        case rai::ErrorCode::TOKEN_LEDGER_GET:
+        {
+            return "Failed to get data from ledger";
+        }
+        case rai::ErrorCode::TOKEN_LEDGER_PUT:
+        {
+            return "Failed to put data to ledger";
         }
         default:
         {

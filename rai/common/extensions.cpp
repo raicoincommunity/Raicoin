@@ -1649,6 +1649,11 @@ bool rai::ExtensionTokenInfo::operator==(
            && address_ == other.address_;
 }
 
+bool rai::ExtensionTokenInfo::IsNative() const
+{
+    return rai::NativeAddress() == address_;
+}
+
 void rai::ExtensionTokenSend::Serialize(rai::Stream& stream) const
 {
     token_.Serialize(stream);
@@ -1880,7 +1885,10 @@ rai::ErrorCode rai::ExtensionTokenReceive::CheckData() const
         if (token_.chain_ == rai::Chain::RAICOIN
             || token_.chain_ == rai::Chain::RAICOIN_TEST)
         {
-            return rai::ErrorCode::TOKEN_SOURCE_INVALID;
+            if (!token_.IsNative())
+            {
+                return rai::ErrorCode::TOKEN_SOURCE_INVALID;
+            }
         }
     }
 
@@ -2777,7 +2785,7 @@ rai::ErrorCode rai::ExtensionTokenSwapTakeAck::DeserializeJson(
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_VALUE;
         std::string value = ptree.get<std::string>("value");
-        error = value_.DecodeHex(value);
+        error = value_.DecodeDec(value);
         IF_ERROR_RETURN(error, error_code);
 
         return CheckData();
@@ -2979,11 +2987,16 @@ rai::ErrorCode rai::ExtensionTokenSwapCancel::DeserializeJson(
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ExtensionTokenUnmap::ExtensionTokenUnmap() : extra_data_(0)
+{
+}
+
 void rai::ExtensionTokenUnmap::Serialize(rai::Stream& stream) const
 {
     token_.Serialize(stream);
     rai::Write(stream, to_.bytes);
     rai::Write(stream, value_.bytes);
+    rai::Write(stream, extra_data_);
 }
 
 rai::ErrorCode rai::ExtensionTokenUnmap::Deserialize(rai::Stream& stream)
@@ -2995,6 +3008,9 @@ rai::ErrorCode rai::ExtensionTokenUnmap::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, value_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, extra_data_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     return CheckData();
@@ -3013,6 +3029,7 @@ void rai::ExtensionTokenUnmap::SerializeJson(rai::Ptree& ptree) const
     token_.SerializeJson(ptree);
     ptree.put("to", to_.StringHex());
     ptree.put("value", value_.StringDec());
+    ptree.put("extra_data", std::to_string(extra_data_));
 }
 
 rai::ErrorCode rai::ExtensionTokenUnmap::DeserializeJson(const rai::Ptree& ptree)
@@ -3033,6 +3050,12 @@ rai::ErrorCode rai::ExtensionTokenUnmap::DeserializeJson(const rai::Ptree& ptree
         error = value_.DecodeDec(value);
         IF_ERROR_RETURN(error, error_code);
 
+        error_code =
+            rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_UNMAP_EXTRA_DATA;
+        std::string extra_data = ptree.get<std::string>("extra_data");
+        error = rai::StringToUint(extra_data, extra_data_);
+        IF_ERROR_RETURN(error, error_code);
+
         return CheckData();
     }
     catch (...)
@@ -3051,7 +3074,10 @@ rai::ErrorCode rai::ExtensionTokenUnmap::CheckData() const
     if (token_.chain_ == rai::Chain::RAICOIN
         || token_.chain_ == rai::Chain::RAICOIN_TEST)
     {
-        return rai::ErrorCode::TOKEN_UNMAP_CHAIN;
+        if (!token_.IsNative())
+        {
+            return rai::ErrorCode::TOKEN_UNMAP_CHAIN;
+        }
     }
 
     if (to_.IsZero())

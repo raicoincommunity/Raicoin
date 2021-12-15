@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <rai/common/numbers.hpp>
 
 namespace rai
 {
@@ -25,5 +26,10 @@ enum class TokenSource : uint8_t
 };
 std::string TokenSourceToString(TokenSource);
 TokenSource StringToTokenSource(const std::string&);
+
+inline rai::TokenAddress NativeAddress()
+{
+    return rai::TokenAddress(1);
+}
 
 }

@@ -7,7 +7,7 @@
 
 using namespace CryptoPP;
 
-TEST(x25519, share)
+TEST(x25519, Share)
 {
     AutoSeededRandomPool rnd;
     x25519 ecdh1, ecdh2;

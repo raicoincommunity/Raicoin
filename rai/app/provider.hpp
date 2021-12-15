@@ -14,6 +14,7 @@ public:
     {
         INVALID         = 0,
         ALIAS           = 1,
+        TOKEN           = 2,
     };
     static std::string ToString(Id);
 

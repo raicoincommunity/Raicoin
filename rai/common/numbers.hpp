@@ -89,6 +89,7 @@ union uint256_union
     std::string StringAccount() const;
     void Random();
     bool ValidPublicKey() const;
+    void ClampKey();
 
     std::array<uint8_t, 32> bytes;
     std::array<char, 32> chars;
