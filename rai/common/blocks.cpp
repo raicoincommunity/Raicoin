@@ -271,6 +271,28 @@ rai::TxBlock::TxBlock(
     uint64_t timestamp, uint64_t height, const rai::Account& account,
     const rai::BlockHash& previous, const rai::Account& representative,
     const rai::Amount& balance, const rai::uint256_union& link,
+    uint32_t extensions_length, const std::vector<uint8_t>& extensions)
+    : type_(rai::BlockType::TX_BLOCK),
+      opcode_(opcode),
+      credit_(credit),
+      counter_(counter),
+      timestamp_(timestamp),
+      height_(height),
+      account_(account),
+      previous_(previous),
+      representative_(representative),
+      balance_(balance),
+      link_(link),
+      extensions_length_(extensions_length),
+      extensions_(extensions)
+{
+}
+
+rai::TxBlock::TxBlock(
+    rai::BlockOpcode opcode, uint16_t credit, uint32_t counter,
+    uint64_t timestamp, uint64_t height, const rai::Account& account,
+    const rai::BlockHash& previous, const rai::Account& representative,
+    const rai::Amount& balance, const rai::uint256_union& link,
     uint32_t extensions_length, const std::vector<uint8_t>& extensions,
     const rai::RawKey& private_key, const rai::PublicKey& public_key)
     : type_(rai::BlockType::TX_BLOCK),
@@ -1383,15 +1405,27 @@ bool rai::AdBlock::CheckOpcode(rai::BlockOpcode opcode)
 }
 
 rai::TxBlockBuilder::TxBlockBuilder(const rai::Account& account,
-                                    const rai::RawKey& private_key,
+                                    const rai::Account& rep,
                                     const std::shared_ptr<rai::Block>& previous)
-    : account_(account), private_key_(private_key), previous_(previous)
+    : has_key_(false), account_(account), rep_(rep), previous_(previous)
 {
 }
 
-rai::ErrorCode rai::TxBlockBuilder::Change(std::shared_ptr<rai::Block>& block,
-                                           const rai::Account& rep,
-                                           uint64_t now)
+rai::TxBlockBuilder::TxBlockBuilder(const rai::Account& account,
+                                    const rai::Account& rep,
+                                    const rai::RawKey& private_key,
+                                    const std::shared_ptr<rai::Block>& previous)
+    : has_key_(true),
+      account_(account),
+      rep_(rep),
+      private_key_(private_key),
+      previous_(previous)
+{
+}
+
+rai::ErrorCode rai::TxBlockBuilder::Change(
+    std::shared_ptr<rai::Block>& block, const rai::Account& rep, uint64_t now,
+    const std::vector<uint8_t>& extensions)
 {
     if (!previous_)
     {
@@ -1401,6 +1435,11 @@ rai::ErrorCode rai::TxBlockBuilder::Change(std::shared_ptr<rai::Block>& block,
     if (previous_->Type() != rai::BlockType::TX_BLOCK)
     {
         return rai::ErrorCode::BLOCK_TYPE;
+    }
+
+    if (extensions.size() > rai::MAX_EXTENSIONS_SIZE)
+    {
+        return rai::ErrorCode::EXTENSIONS_LENGTH;
     }
 
     rai::BlockOpcode opcode = rai::BlockOpcode::CHANGE;
@@ -1424,9 +1463,190 @@ rai::ErrorCode rai::TxBlockBuilder::Change(std::shared_ptr<rai::Block>& block,
     rai::BlockHash previousHash = previous_->Hash();
     rai::Amount balance = previous_->Balance();
     rai::uint256_union link(0);
-    previous_ = block = std::make_shared<rai::TxBlock>(
-        opcode, credit, counter, timestamp, height, account_, previousHash, rep,
-        balance, link, 0, std::vector<uint8_t>(), private_key_, account_);
+    if (has_key_)
+    {
+        block = std::make_shared<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account_, previousHash,
+            rep, balance, link, extensions.size(), extensions, private_key_,
+            account_);
+    }
+    else
+    {
+        block = std::make_shared<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account_, previousHash,
+            rep, balance, link, extensions.size(), extensions);
+    }
+
+    previous_ = block;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::TxBlockBuilder::Receive(
+    std::shared_ptr<rai::Block>& block, const rai::BlockHash& source,
+    const rai::Amount& amount, uint64_t sent_at, uint64_t now,
+    const std::vector<uint8_t>& extensions)
+{
+    if (extensions.size() > rai::MAX_EXTENSIONS_SIZE)
+    {
+        return rai::ErrorCode::EXTENSIONS_LENGTH;
+    }
+
+    if (amount.IsZero())
+    {
+        return rai::ErrorCode::RECEIVABLE_AMOUNT;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
+    uint16_t credit = 0;
+    uint64_t timestamp = 0;
+    uint32_t counter = 0;
+    uint64_t height = 0;
+    rai::BlockHash previous;
+    rai::Amount balance;
+    rai::uint256_union link;
+    rai::Account rep;
+
+    if (!previous_)
+    {
+        credit = 1;
+        timestamp = now >= sent_at ? now : sent_at;
+        if (timestamp > now + 60)
+        {
+            return rai::ErrorCode::BLOCK_TIMESTAMP;
+        }
+        counter = 1;
+        height = 0;
+        previous = 0;
+        if (amount < rai::CreditPrice(timestamp))
+        {
+            return rai::ErrorCode::RECEIVABLE_AMOUNT;
+        }
+        balance = amount - rai::CreditPrice(timestamp);
+        link = source;
+        rep = rep_;
+    }
+    else
+    {
+        if (previous_->Type() != rai::BlockType::TX_BLOCK)
+        {
+            return rai::ErrorCode::BLOCK_TYPE;
+        }
+
+        credit = previous_->Credit();
+        timestamp =
+            now > previous_->Timestamp() ? now : previous_->Timestamp();
+        if (timestamp < sent_at)
+        {
+            timestamp = sent_at;
+        }
+        if (timestamp > now + 60)
+        {
+            return rai::ErrorCode::BLOCK_TIMESTAMP;
+        }
+
+        counter = rai::SameDay(timestamp, previous_->Timestamp())
+                      ? previous_->Counter() + 1
+                      : 1;
+        if (counter
+            > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+        {
+            return rai::ErrorCode::BLOCK_COUNTER;
+        }
+        height = previous_->Height() + 1;
+        previous = previous_->Hash();
+        balance = previous_->Balance() + amount;
+        if (balance < amount)
+        {
+            return rai::ErrorCode::RECEIVABLE_AMOUNT;
+        }
+        link = source;
+        rep = previous_->Representative();
+    }
+
+    if (has_key_)
+    {
+        block = std::make_shared<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            rep, balance, link, extensions.size(), extensions, private_key_,
+            account_);
+    }
+    else
+    {
+        block = std::make_shared<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            rep, balance, link, extensions.size(), extensions);
+    }
+
+    previous_ = block;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::TxBlockBuilder::Send(std::shared_ptr<rai::Block>& block,
+                                         const rai::Account& destination,
+                                         const rai::Amount& amount,
+                                         uint64_t now,
+                                         const std::vector<uint8_t>& extensions)
+{
+    if (!previous_)
+    {
+        return rai::ErrorCode::BLOCK_OPCODE;
+    }
+
+    if (previous_->Type() != rai::BlockType::TX_BLOCK)
+    {
+        return rai::ErrorCode::BLOCK_TYPE;
+    }
+
+    if (amount.IsZero())
+    {
+        return rai::ErrorCode::SEND_AMOUNT;
+    }
+
+    if (extensions.size() > rai::MAX_EXTENSIONS_SIZE)
+    {
+        return rai::ErrorCode::EXTENSIONS_LENGTH;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::SEND;
+    uint16_t credit = previous_->Credit();
+    uint64_t timestamp =
+        now > previous_->Timestamp() ? now : previous_->Timestamp();
+    if (timestamp > now + 60)
+    {
+        return rai::ErrorCode::BLOCK_TIMESTAMP;
+    }
+    uint32_t counter = rai::SameDay(timestamp, previous_->Timestamp())
+                           ? previous_->Counter() + 1
+                           : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        return rai::ErrorCode::BLOCK_COUNTER;
+    }
+    uint64_t height = previous_->Height() + 1;
+    rai::BlockHash previous = previous_->Hash();
+    if (previous_->Balance() < amount)
+    {
+        return rai::ErrorCode::SEND_AMOUNT;
+    }
+    rai::Amount balance = previous_->Balance() - amount;
+    rai::uint256_union link = destination;
+    rai::Account rep = previous_->Representative();
+
+    if (has_key_)
+    {
+        block = std::make_shared<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            rep, balance, link, extensions.size(), extensions, private_key_,
+            account_);
+    }
+    else
+    {
+        block = std::make_shared<rai::TxBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            rep, balance, link, extensions.size(), extensions);
+    }
+
+    previous_ = block;
     return rai::ErrorCode::SUCCESS;
 }
 

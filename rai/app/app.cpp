@@ -72,6 +72,8 @@ void rai::App::Start()
             std::chrono::seconds(5));
     Ongoing(std::bind(&rai::BlockCache::Age, &block_cache_, 300),
             std::chrono::seconds(5));
+    Ongoing(std::bind(&rai::BlockWaiting::Age, &block_waiting_, 3600),
+            std::chrono::seconds(60));
 
     if (ws_server_)
     {
@@ -193,6 +195,12 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
         return;
     }
 
+    if (!confirmed && block_waiting_.Exists(block->Account(), block->Height()))
+    {
+        block_confirm_.Add(block);
+        return;
+    }
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     {
         rai::Transaction transaction(error_code, ledger_, true);
@@ -209,6 +217,10 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             case rai::ErrorCode::SUCCESS:
             {
                 PullNextBlockAsync(block);
+                if (confirmed)
+                {
+                    QueueWaitings(block);
+                }
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_LEDGER_ACCOUNT_PUT:
@@ -276,8 +288,12 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             }
             case rai::ErrorCode::APP_PROCESS_CONFIRMED_FORK:
             case rai::ErrorCode::APP_PROCESS_EXIST:
+            {
+                break;
+            }
             case rai::ErrorCode::APP_PROCESS_CONFIRMED:
             {
+                QueueWaitings(block);
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_CONFIRM_REQUIRED:
@@ -294,6 +310,10 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
                 rai::Log::Error(error_info);
                 std::cout << error_info << std::endl;
                 Background([this](){Stop();});
+            }
+            case rai::ErrorCode::APP_PROCESS_WAITING:
+            {
+                break;
             }
             default:
             {
@@ -451,6 +471,15 @@ void rai::App::QueueBlockRollback(const std::shared_ptr<rai::Block>& block)
             app_s->ProcessBlockRollback(block);
         }
     });
+}
+
+void rai::App::QueueWaitings(const std::shared_ptr<rai::Block>& block)
+{
+    auto waitings = block_waiting_.Remove(block->Account(), block->Height());
+    for (const auto& i : waitings)
+    {
+        QueueBlock(i.block_, i.confirmed_);
+    }
 }
 
 void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
@@ -859,6 +888,91 @@ void rai::App::NotifyProviderInfo(const rai::UniqueId& uid)
     ptree.put_child("actions", actions);
 
     SendToClient(ptree, uid);
+}
+
+rai::ErrorCode rai::App::WaitBlock(rai::Transaction& transaction,
+                                   const rai::Account& account, uint64_t height,
+                                   const std::shared_ptr<rai::Block>& waiting,
+                                   bool confirmed,
+                                   std::shared_ptr<rai::Block>& out)
+{
+    rai::AccountInfo info;
+    bool error = ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        block_waiting_.Insert(account, height, waiting, confirmed);
+        SyncAccountAsync(account, 0);
+        return rai::ErrorCode::APP_PROCESS_WAITING;
+    }
+
+    if (height > info.head_height_)
+    {
+        block_waiting_.Insert(account, height, waiting, confirmed);
+        SyncAccountAsync(account, info.head_height_ + 1);
+        return rai::ErrorCode::APP_PROCESS_WAITING;
+    }
+    else if (height < info.tail_height_)
+    {
+        return rai::ErrorCode::APP_PROCESS_PRUNED;
+    }
+
+    std::shared_ptr<rai::Block> block;
+    error = ledger_.BlockGet(transaction, account, height, block);
+    if (error || block == nullptr)
+    {
+        return rai::ErrorCode::APP_PROCESS_HALT;
+    }
+
+    if (!info.Confirmed(height))
+    {
+        block_waiting_.Insert(account, height, waiting, confirmed);
+        block_confirm_.Add(block);
+        return rai::ErrorCode::APP_PROCESS_WAITING;
+    }
+
+    out = block;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::App::WaitBlockIfExist(
+    rai::Transaction& transaction, const rai::Account& account, uint64_t height,
+    const std::shared_ptr<rai::Block>& waiting, bool confirmed,
+    std::shared_ptr<rai::Block>& out)
+{
+    out = nullptr;
+    rai::AccountInfo info;
+    bool error = ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    if (height > info.head_height_)
+    {
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    if (height < info.tail_height_)
+    {
+        return rai::ErrorCode::APP_PROCESS_PRUNED;
+    }
+
+    std::shared_ptr<rai::Block> block;
+    error = ledger_.BlockGet(transaction, account, height, block);
+    if (error || block == nullptr)
+    {
+        return rai::ErrorCode::APP_PROCESS_HALT;
+    }
+
+    if (!info.Confirmed(height))
+    {
+        block_waiting_.Insert(account, height, waiting, confirmed);
+        block_confirm_.Add(block);
+        return rai::ErrorCode::APP_PROCESS_WAITING;
+    }
+
+    out = block;
+    return rai::ErrorCode::SUCCESS;
 }
 
 void rai::App::RegisterObservers_()

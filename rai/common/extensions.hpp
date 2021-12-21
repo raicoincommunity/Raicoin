@@ -421,6 +421,7 @@ public:
     rai::Account maker_;
     uint64_t order_height_;
     uint64_t trade_height_;
+    uint64_t ack_height_;
     uint64_t timeout_;
     rai::TokenValue value_;
     rai::PublicKey share_;

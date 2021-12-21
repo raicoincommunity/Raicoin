@@ -14,6 +14,91 @@ rai::Token::Token(rai::ErrorCode& error_code, boost::asio::io_service& service,
     error_code = InitLedger_();
 }
 
+rai::ErrorCode rai::Token::PreBlockAppend(
+    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
+    bool confirmed)
+{
+    if (confirmed)
+    {
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    do
+    {
+        if (block->Extensions().empty())
+        {
+            break;
+        }
+
+        rai::Extensions extensions;
+        rai::ErrorCode error_code = extensions.FromBytes(block->Extensions());
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+
+        if (extensions.Count(rai::ExtensionType::TOKEN) > 0)
+        {
+            return rai::ErrorCode::APP_PROCESS_CONFIRM_REQUIRED;
+        }
+    } while (0);
+    
+
+    // todo: check swap waitings
+    
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+
+rai::ErrorCode rai::Token::AfterBlockAppend(
+    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
+    bool confirmed)
+{
+    do
+    {
+        if (block->Extensions().empty())
+        {
+            break;
+        }
+
+        rai::Extensions extensions;
+        rai::ErrorCode error_code = extensions.FromBytes(block->Extensions());
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+
+        if (extensions.Count(rai::ExtensionType::TOKEN) == 0)
+        {
+            break;
+        }
+
+        if (!confirmed)
+        {
+            rai::Log::Error(
+                "Alias::AfterBlockAppend: unexpected unconfirmed block");
+            return rai::ErrorCode::APP_PROCESS_CONFIRM_REQUIRED;
+        }
+
+        error_code =  Process(transaction, block, extensions);
+        IF_NOT_SUCCESS_RETURN(error_code);
+    } while (0);
+    
+
+
+    // todo: process swap waitings
+
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Token::Process(rai::Transaction& transaction,
+                                   const std::shared_ptr<rai::Block>& block,
+                                   const rai::Extensions& extensions)
+{
+}
+
 std::vector<rai::BlockType> rai::Token::BlockTypes()
 {
     std::vector<rai::BlockType> types{rai::BlockType::TX_BLOCK,

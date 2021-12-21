@@ -126,6 +126,7 @@ public:
     uint64_t height_;
 
     bool operator<(const AccountHeight& other) const;
+    rai::AccountHeight& operator++();
 };
 
 class RawKey

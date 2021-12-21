@@ -89,6 +89,10 @@ public:
     TxBlock(rai::BlockOpcode, uint16_t, uint32_t, uint64_t, uint64_t,
             const rai::Account&, const rai::BlockHash&, const rai::Account&,
             const rai::Amount&, const rai::uint256_union&, uint32_t,
+            const std::vector<uint8_t>&);
+    TxBlock(rai::BlockOpcode, uint16_t, uint32_t, uint64_t, uint64_t,
+            const rai::Account&, const rai::BlockHash&, const rai::Account&,
+            const rai::Amount&, const rai::uint256_union&, uint32_t,
             const std::vector<uint8_t>&, const rai::RawKey&,
             const rai::PublicKey&);
     TxBlock(rai::ErrorCode&, rai::Stream&);
@@ -268,19 +272,40 @@ class BlockBuilder
 {
 public:
     virtual rai::ErrorCode Change(std::shared_ptr<rai::Block>&,
-                                  const rai::Account&, uint64_t) = 0;
+                                  const rai::Account&, uint64_t,
+                                  const std::vector<uint8_t>&) = 0;
+    virtual rai::ErrorCode Receive(std::shared_ptr<rai::Block>&,
+                                   const rai::BlockHash&, const rai::Amount&,
+                                   uint64_t, uint64_t,
+                                   const std::vector<uint8_t>&) = 0;
+    virtual rai::ErrorCode Send(std::shared_ptr<rai::Block>&,
+                                const rai::Account&, const rai::Amount&,
+                                uint64_t, const std::vector<uint8_t>&) = 0;
 };
 
 class TxBlockBuilder : public BlockBuilder
 {
 public:
-    TxBlockBuilder(const rai::Account&, const rai::RawKey&,
+    TxBlockBuilder(const rai::Account&, const rai::Account&,
+                   const std::shared_ptr<rai::Block>&);
+    TxBlockBuilder(const rai::Account&, const rai::Account&, const rai::RawKey&,
                    const std::shared_ptr<rai::Block>&);
 
-    rai::ErrorCode Change(std::shared_ptr<rai::Block>&,
-                          const rai::Account&, uint64_t) override;
+    rai::ErrorCode Change(
+        std::shared_ptr<rai::Block>&, const rai::Account&, uint64_t,
+        const std::vector<uint8_t>& = std::vector<uint8_t>()) override;
+    rai::ErrorCode Receive(
+        std::shared_ptr<rai::Block>&, const rai::BlockHash&, const rai::Amount&,
+        uint64_t, uint64_t,
+        const std::vector<uint8_t>& = std::vector<uint8_t>()) override;
+    rai::ErrorCode Send(
+        std::shared_ptr<rai::Block>&, const rai::Account&, const rai::Amount&,
+        uint64_t,
+        const std::vector<uint8_t>& = std::vector<uint8_t>()) override;
 
+    bool has_key_;
     rai::Account account_;
+    rai::Account rep_;
     rai::RawKey private_key_;
     std::shared_ptr<rai::Block> previous_;
 };

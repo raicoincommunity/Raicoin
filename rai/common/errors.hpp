@@ -140,6 +140,8 @@ enum class ErrorCode : int
     HANDSHAKE_TIMESTAMP                  = 130,
     LEDGER_VERSION                       = 131,
     EXTENSION_VALUE                      = 132,
+    RECEIVABLE_AMOUNT                    = 133,
+    SEND_AMOUNT                          = 134,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                                    = 200,
@@ -380,6 +382,7 @@ enum class ErrorCode : int
     APP_PROCESS_LEDGER_PUT              = 619,
     APP_PROCESS_LEDGER_DEL              = 620,
     APP_PROCESS_HALT                    = 621,
+    APP_PROCESS_WAITING                 = 622,
 
     APP_RPC_MISS_FIELD_TRACE            = 650,
     APP_RPC_INVALID_FIELD_TRACE         = 651,
@@ -437,6 +440,7 @@ enum class ErrorCode : int
     TOKEN_CAP_SUPPLY                    = 840,
     TOKEN_LEDGER_GET                    = 841,
     TOKEN_LEDGER_PUT                    = 842,
+    TOKEN_SWAP_ACK_HEIGHT               = 843,
 
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER       = 900,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT         = 901,
@@ -454,6 +458,7 @@ enum class ErrorCode : int
     JSON_BLOCK_EXTENSION_TOKEN_UNWRAP_CHAIN         = 913,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAIN_ACCOUNT    = 914,
     JSON_BLOCK_EXTENSION_TOKEN_UNMAP_EXTRA_DATA     = 915,
+    JSON_BLOCK_EXTENSION_TOKEN_SWAP_ACK_HEIGHT      = 916,
     
     MAX = 1000
 };
