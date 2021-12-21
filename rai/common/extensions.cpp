@@ -2402,7 +2402,7 @@ bool rai::ExtensionTokenSwapMake::FungiblePair() const
 }
 
 rai::ExtensionTokenSwapInquiry::ExtensionTokenSwapInquiry()
-    : order_height_(0), trade_height_(0), timeout_(0)
+    : order_height_(0), trade_height_(0), ack_height_(0), timeout_(0)
 {
 }
 
@@ -2411,6 +2411,7 @@ void rai::ExtensionTokenSwapInquiry::Serialize(rai::Stream& stream) const
     rai::Write(stream, maker_.bytes);
     rai::Write(stream, order_height_);
     rai::Write(stream, trade_height_);
+    rai::Write(stream, ack_height_);
     rai::Write(stream, timeout_);
     rai::Write(stream, value_.bytes);
     rai::Write(stream, share_.bytes);
@@ -2425,6 +2426,9 @@ rai::ErrorCode rai::ExtensionTokenSwapInquiry::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, trade_height_);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, ack_height_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, timeout_);
@@ -2452,6 +2456,7 @@ void rai::ExtensionTokenSwapInquiry::SerializeJson(rai::Ptree& ptree) const
     ptree.put("maker", maker_.StringAccount());
     ptree.put("order_height", std::to_string(order_height_));
     ptree.put("trade_height", std::to_string(trade_height_));
+    ptree.put("ack_height", std::to_string(ack_height_));
     ptree.put("timeout", std::to_string(timeout_));
     ptree.put("value", value_.StringDec());
     ptree.put("share", share_.StringHex());
@@ -2478,6 +2483,12 @@ rai::ErrorCode rai::ExtensionTokenSwapInquiry::DeserializeJson(
             rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TRADE_HEIGHT;
         std::string trade_height = ptree.get<std::string>("trade_height");
         error = rai::StringToUint(trade_height, trade_height_);
+        IF_ERROR_RETURN(error, error_code);
+
+        error_code =
+            rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_ACK_HEIGHT;
+        std::string ack_height = ptree.get<std::string>("ack_height");
+        error = rai::StringToUint(ack_height, ack_height_);
         IF_ERROR_RETURN(error, error_code);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT;
@@ -2525,6 +2536,11 @@ rai::ErrorCode rai::ExtensionTokenSwapInquiry::CheckData() const
     if (trade_height_ <= order_height_)
     {
         return rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT;
+    }
+
+    if (ack_height_ == std::numeric_limits<uint64_t>::max())
+    {
+        return rai::ErrorCode::TOKEN_SWAP_ACK_HEIGHT;
     }
 
     if (!share_.ValidPublicKey())

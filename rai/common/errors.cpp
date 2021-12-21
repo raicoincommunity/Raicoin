@@ -538,6 +538,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid extension value";
         }
+        case rai::ErrorCode::RECEIVABLE_AMOUNT:
+        {
+            return "Invalid receivable amount";
+        }
+        case rai::ErrorCode::SEND_AMOUNT:
+        {
+            return "Invalid send amount";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -803,6 +811,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_UNMAP_EXTRA_DATA:
         {
             return "Failed to parse token extension unmap extra_data from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_ACK_HEIGHT:
+        {
+            return "Failed to parse token extension swap ack_height from json";
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
@@ -1514,6 +1526,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "The app encounters fatal error and is halted";
         }
+        case rai::ErrorCode::APP_PROCESS_WAITING:
+        {
+            return "Wait for source block";
+        }
         case rai::ErrorCode::APP_RPC_MISS_FIELD_TRACE:
         {
             return "The trace field is missing";
@@ -1725,6 +1741,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_LEDGER_PUT:
         {
             return "Failed to put data to ledger";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_ACK_HEIGHT:
+        {
+            return "Invalid swap ack height";
         }
         default:
         {

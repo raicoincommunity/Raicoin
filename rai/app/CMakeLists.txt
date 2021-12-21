@@ -5,6 +5,8 @@ add_library (app
 	blockcache.hpp
 	blockconfirm.cpp
 	blockconfirm.hpp
+	blockwaiting.cpp
+	blockwaiting.hpp
 	bootstrap.cpp
 	bootstrap.hpp
 	subscribe.cpp

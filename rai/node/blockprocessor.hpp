@@ -91,15 +91,11 @@ public:
 
         bool operator<(const OrderedKey& other) const
         {
-            if (priority_ < other.priority_)
+            if (priority_ != other.priority_)
             {
-                return true;
+                return priority_ < other.priority_;
             }
-            if (arrival_ < other.arrival_)
-            {
-                return true;
-            }
-            return false;
+            return arrival_ < other.arrival_;
         }
     };
 

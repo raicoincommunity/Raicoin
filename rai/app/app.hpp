@@ -17,6 +17,7 @@
 #include <rai/app/subscribe.hpp>
 #include <rai/app/rpc.hpp>
 #include <rai/app/provider.hpp>
+#include <rai/app/blockwaiting.hpp>
 
 namespace rai
 {
@@ -90,6 +91,7 @@ public:
     void QueueBlock(const std::shared_ptr<rai::Block>&, bool,
                     rai::AppActionPri = rai::AppActionPri::NORMAL);
     void QueueBlockRollback(const std::shared_ptr<rai::Block>&);
+    void QueueWaitings(const std::shared_ptr<rai::Block>&);
     void ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockAppendNotify(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockConfirmNotify(const std::shared_ptr<rai::Ptree>&);
@@ -139,6 +141,7 @@ public:
     rai::BlockConfirm block_confirm_;
     rai::Provider::Info provider_info_;
     std::vector<std::string> provider_actions_;
+    rai::BlockWaiting block_waiting_;
 
 protected:
     template <typename Derived>
@@ -146,6 +149,14 @@ protected:
     {
         return std::static_pointer_cast<Derived>(Shared());
     }
+
+    rai::ErrorCode WaitBlock(rai::Transaction&, const rai::Account&, uint64_t,
+                             const std::shared_ptr<rai::Block>&, bool,
+                             std::shared_ptr<rai::Block>&);
+    rai::ErrorCode WaitBlockIfExist(rai::Transaction&, const rai::Account&,
+                                    uint64_t,
+                                    const std::shared_ptr<rai::Block>&, bool,
+                                    std::shared_ptr<rai::Block>&);
 
 private:
     void RegisterObservers_();

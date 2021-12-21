@@ -733,15 +733,21 @@ bool rai::AccountParser::Error() const
 
 bool rai::AccountHeight::operator<(const rai::AccountHeight& other) const
 {
-    if (account_ < other.account_)
+    if (account_ != other.account_)
     {
-        return true;
+        return account_ < other.account_;
     }
-    if (height_ < other.height_)
+    return height_ < other.height_;
+}
+
+rai::AccountHeight& rai::AccountHeight::operator++()
+{
+    ++height_;
+    if (0 == height_)
     {
-        return true;
+        account_ += 1;
     }
-    return false;
+    return *this;
 }
 
 rai::RawKey::~RawKey()

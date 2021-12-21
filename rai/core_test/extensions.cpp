@@ -1566,11 +1566,12 @@ TEST(ExtensionToken, SwapMake)
 TEST(ExtensionToken, SwapInquiry)
 {
     std::string hex;
-    hex = "0004007A";  // type + length
+    hex = "00040082";  // type + length
     hex += "0603";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
     hex += "0000000000000100";  // order height
     hex += "0000000000000101";  // trade height
+    hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
     hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
@@ -1617,11 +1618,12 @@ TEST(ExtensionToken, SwapInquiry)
     rai::ExtensionToken token2;
     std::vector<uint8_t> bytes2;
 
-    hex = "0004007A";  // type + length
+    hex = "00040082";  // type + length
     hex += "0603";  // op_swap + subop
     hex += "0000000000000000000000000000000000000000000000000000000000000000"; // maker
     hex += "0000000000000100";  // order height
     hex += "0000000000000101";  // trade height
+    hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
     hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
@@ -1636,11 +1638,12 @@ TEST(ExtensionToken, SwapInquiry)
     EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_MAKER, error_code);
 
 
-    hex = "0004007A";  // type + length
+    hex = "00040082";  // type + length
     hex += "0603";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
     hex += "FFFFFFFFFFFFFFFF";  // order height
     hex += "0000000000000101";  // trade height
+    hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
     hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
@@ -1654,11 +1657,12 @@ TEST(ExtensionToken, SwapInquiry)
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
     EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_ORDER_HEIGHT, error_code);
 
-    hex = "0004007A";  // type + length
+    hex = "00040082";  // type + length
     hex += "0603";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
     hex += "0000000000000100";  // order height
     hex += "FFFFFFFFFFFFFFFF";  // trade height
+    hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
     hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
@@ -1672,29 +1676,50 @@ TEST(ExtensionToken, SwapInquiry)
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
     EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT, error_code);
 
-    hex = "0004007A";  // type + length
-    hex += "0603";  // op_swap + subop
-    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
-    hex += "0000000000000100";  // order height
-    hex += "0000000000000100";  // trade height
-    hex += "100000001234567F"; // timeout
-    hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
-    hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
-    bytes2.clear();
-    ret = TestDecodeHex(hex, bytes2);
-    EXPECT_EQ(false, ret);
-    error_code = extensions2.FromBytes(bytes2);
-    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
-    count = extensions2.Count(rai::ExtensionType::TOKEN);
-    EXPECT_EQ(1, count);
-    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT, error_code);
-
-    hex = "0004007A";  // type + length
+    hex = "00040082";  // type + length
     hex += "0603";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
     hex += "0000000000000100";  // order height
     hex += "0000000000000101";  // trade height
+    hex += "FFFFFFFFFFFFFFFF";  // ack height
+    hex += "100000001234567F"; // timeout
+    hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
+    hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
+    bytes2.clear();
+    ret = TestDecodeHex(hex, bytes2);
+    EXPECT_EQ(false, ret);
+    error_code = extensions2.FromBytes(bytes2);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
+    count = extensions2.Count(rai::ExtensionType::TOKEN);
+    EXPECT_EQ(1, count);
+    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
+    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_ACK_HEIGHT, error_code);
+
+    hex = "00040082";  // type + length
+    hex += "0603";  // op_swap + subop
+    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
+    hex += "0000000000000100";  // order height
+    hex += "0000000000000100";  // trade height
+    hex += "00000000000000FF";  // ack height
+    hex += "100000001234567F"; // timeout
+    hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
+    hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
+    bytes2.clear();
+    ret = TestDecodeHex(hex, bytes2);
+    EXPECT_EQ(false, ret);
+    error_code = extensions2.FromBytes(bytes2);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
+    count = extensions2.Count(rai::ExtensionType::TOKEN);
+    EXPECT_EQ(1, count);
+    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
+    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT, error_code);
+
+    hex = "00040082";  // type + length
+    hex += "0603";  // op_swap + subop
+    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
+    hex += "0000000000000100";  // order height
+    hex += "0000000000000101";  // trade height
+    hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
     hex += "0000000000000000000000000000000000000000000000000000000000000000"; // share
@@ -1708,11 +1733,12 @@ TEST(ExtensionToken, SwapInquiry)
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
     EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_SHARE, error_code);
 
-    hex = "0004007A";  // type + length
+    hex = "00040082";  // type + length
     hex += "0603";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
     hex += "0000000000000100";  // order height
     hex += "0000000000000101";  // trade height
+    hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
     hex += "DBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"; // share
@@ -2056,14 +2082,14 @@ TEST(ExtensionToken, SwapTakeNack)
         std::static_pointer_cast<rai::ExtensionTokenSwap>(token.op_data_);
     EXPECT_EQ(rai::ExtensionTokenSwap::SubOp::TAKE_NACK, swap->sub_op_);
     EXPECT_EQ(false, swap->sub_data_ == nullptr);
-    auto take_ack =
-        std::static_pointer_cast<rai::ExtensionTokenSwapTakeAck>(
+    auto take_nack =
+        std::static_pointer_cast<rai::ExtensionTokenSwapTakeNack>(
             swap->sub_data_);
     EXPECT_EQ(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0",
-        take_ack->taker_.StringHex());
-    EXPECT_EQ(256, take_ack->inquiry_height_);
-    EXPECT_EQ(257, take_ack->take_height_);
+        take_nack->taker_.StringHex());
+    EXPECT_EQ(256, take_nack->inquiry_height_);
+    EXPECT_EQ(257, take_nack->take_height_);
 
     EXPECT_EQ(bytes, extensions.Bytes());
     rai::Extensions extensions2;

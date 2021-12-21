@@ -6,6 +6,8 @@
 #include <boost/multi_index_container.hpp>
 #include <rai/common/parameters.hpp>
 #include <rai/common/blocks.hpp>
+#include <rai/common/token.hpp>
+#include <rai/common/chain.hpp>
 #include <rai/secure/util.hpp>
 #include <rai/secure/store.hpp>
 
@@ -125,6 +127,20 @@ public:
 
     rai::Prefix prefix_;
     rai::Account account_;
+};
+
+class TokenKey
+{
+public:
+    rai::Chain chain_;
+    rai::TokenAddress address_;
+};
+
+class TokenInfo
+{
+public:
+    rai::TokenType type_;
+    // todo:
 };
 
 class ReceivableInfo
