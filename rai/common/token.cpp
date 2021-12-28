@@ -47,9 +47,9 @@ std::string rai::TokenSourceToString(rai::TokenSource source)
         {
             return "invalid";
         }
-        case rai::TokenSource::LOCAL:
+        case rai::TokenSource::TRANSFER:
         {
-            return "local";
+            return "transfer";
         }
         case rai::TokenSource::MAP:
         {
@@ -58,6 +58,14 @@ std::string rai::TokenSourceToString(rai::TokenSource source)
         case rai::TokenSource::UNWRAP:
         {
             return "unwrap";
+        }
+        case rai::TokenSource::SWAP:
+        {
+            return "swap";
+        }
+        case rai::TokenSource::MINT:
+        {
+            return "mint";
         }
         default:
         {
@@ -68,9 +76,9 @@ std::string rai::TokenSourceToString(rai::TokenSource source)
 
 rai::TokenSource rai::StringToTokenSource(const std::string& str)
 {
-    if ("local" == str)
+    if ("transfer" == str)
     {
-        return rai::TokenSource::LOCAL;
+        return rai::TokenSource::TRANSFER;
     }
     else if ("map" == str)
     {
@@ -79,6 +87,14 @@ rai::TokenSource rai::StringToTokenSource(const std::string& str)
     else if ("unwrap" == str)
     {
         return rai::TokenSource::UNWRAP;
+    }
+    else if ("swap" == str)
+    {
+        return rai::TokenSource::SWAP;
+    }
+    else if ("mint" == str)
+    {
+        return rai::TokenSource::MINT;
     }
     else
     {

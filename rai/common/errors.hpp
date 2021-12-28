@@ -383,6 +383,7 @@ enum class ErrorCode : int
     APP_PROCESS_LEDGER_DEL              = 620,
     APP_PROCESS_HALT                    = 621,
     APP_PROCESS_WAITING                 = 622,
+    APP_PROCESS_UNEXPECTED              = 623,
 
     APP_RPC_MISS_FIELD_TRACE            = 650,
     APP_RPC_INVALID_FIELD_TRACE         = 651,
@@ -441,6 +442,7 @@ enum class ErrorCode : int
     TOKEN_LEDGER_GET                    = 841,
     TOKEN_LEDGER_PUT                    = 842,
     TOKEN_SWAP_ACK_HEIGHT               = 843,
+    TOKEN_MULTI_EXTENSIONS              = 844,
 
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER       = 900,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT         = 901,

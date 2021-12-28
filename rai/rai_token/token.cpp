@@ -1,5 +1,14 @@
 #include <rai/rai_token/token.hpp>
 
+rai::TokenError::TokenError() : return_code_(rai::ErrorCode::SUCCESS)
+{
+}
+
+rai::TokenError::TokenError(rai::ErrorCode error_code)
+    : return_code_(error_code)
+{
+}
+
 rai::Token::Token(rai::ErrorCode& error_code, boost::asio::io_service& service,
                   const boost::filesystem::path& data_path, rai::Alarm& alarm,
                   const rai::TokenConfig& config)
@@ -86,8 +95,8 @@ rai::ErrorCode rai::Token::AfterBlockAppend(
     } while (0);
     
 
-
     // todo: process swap waitings
+    // todo: process swap timeout
 
 
     return rai::ErrorCode::SUCCESS;
@@ -97,6 +106,152 @@ rai::ErrorCode rai::Token::Process(rai::Transaction& transaction,
                                    const std::shared_ptr<rai::Block>& block,
                                    const rai::Extensions& extensions)
 {
+    rai::Account account = block->Account();
+    uint64_t height = block->Height();
+    rai::AccountTokensInfo info;
+    bool error = ledger_.AccountTokensInfoGet(transaction, account, info);
+    if (!error && info.head_ >= height)
+    {
+        rai::Log::Error(rai::ToString("Token::Process: block re-entry, hash=",
+                                      block->Hash().StringHex()));
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    if (extensions.Count(rai::ExtensionType::TOKEN) != 1)
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_MULTI_EXTENSIONS);
+    }
+
+    rai::ExtensionToken token;
+    rai::ErrorCode error_code =
+        token.FromExtension(extensions.Get(rai::ExtensionType::TOKEN));
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return UpdateLedgerCommon_(transaction, block, error_code);
+    }
+
+    if (token.op_data_ == nullptr)
+    {
+        rai::Log::Error(
+            rai::ToString("Token::Process: op_data is null, hash=",
+                            block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+    }
+
+    using Op = rai::ExtensionToken::Op;
+    rai::TokenError token_error;
+    switch (token.op_)
+    {
+        case Op::CREATE:
+        {
+            token_error = ProcessCreate_(transaction, block, token);
+            break;
+        }
+        default:
+        {
+            rai::Log::Error(
+                rai::ToString("Token::Process: unknown token operation, hash=",
+                              block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+    }
+
+    error_code = ProcessError_(transaction, token_error);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Token::UpdateLedgerCommon_(
+    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
+    rai::ErrorCode status, const std::vector<rai::TokenKey>& tokens)
+{
+    rai::Account account = block->Account();
+    uint64_t height = block->Height();
+    rai::AccountTokensInfo info;
+    bool error = ledger_.AccountTokensInfoGet(transaction, account, info);
+    if (error)
+    {
+        info = rai::AccountTokensInfo();
+    }
+    else
+    {
+        if (height <= info.head_)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::UpateLedgerCommon_: unexpected block height, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+    }
+
+    rai::TokenBlock token_block(info.head_, block->Hash(), status);
+    error = ledger_.TokenBlockPut(transaction, account, height, token_block);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("Token::UpateLedgerCommon_: put token block, hash=",
+                          block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+
+    info.head_ = height;
+    info.blocks_ += 1;
+    info.last_active_ = block->Timestamp();
+    error = ledger_.AccountTokensInfoPut(transaction, account, info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::UpateLedgerCommon_: put account tokens info, hash=",
+            block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+
+    for (const auto& token : tokens)
+    {
+        rai::AccountTokenInfo account_token_info;
+        error = ledger_.AccountTokenInfoGet(transaction, account, token.chain_,
+                                            token.address_, account_token_info);
+        if (error)
+        {
+            account_token_info = rai::AccountTokenInfo();
+        }
+        else
+        {
+            if (height <= account_token_info.head_)
+            {
+                rai::Log::Error(rai::ToString(
+                    "Token::UpateLedgerCommon_: unexpected block height, hash=",
+                    block->Hash().StringHex()));
+                return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+            }
+        }
+
+        rai::AccountTokenLink link(account, token.chain_, token.address_,
+                                   height);
+        error = ledger_.AccountTokenLinkPut(transaction, link,
+                                            account_token_info.head_);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::UpateLedgerCommon_: put account token link, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+
+        account_token_info.head_ = height;
+        account_token_info.blocks_ += 1;
+        error = ledger_.AccountTokenInfoPut(transaction, account, token.chain_,
+                                            token.address_, account_token_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::UpateLedgerCommon_: put account token info, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+    }
 }
 
 std::vector<rai::BlockType> rai::Token::BlockTypes()

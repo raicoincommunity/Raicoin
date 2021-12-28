@@ -1,5 +1,6 @@
 #pragma once
 #include <unordered_map>
+#include <string>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -8,6 +9,8 @@
 #include <rai/common/blocks.hpp>
 #include <rai/common/token.hpp>
 #include <rai/common/chain.hpp>
+#include <rai/common/errors.hpp>
+#include <rai/common/numbers.hpp>
 #include <rai/secure/util.hpp>
 #include <rai/secure/store.hpp>
 
@@ -132,15 +135,258 @@ public:
 class TokenKey
 {
 public:
+    TokenKey();
+    TokenKey(rai::Chain, const rai::TokenAddress&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
     rai::Chain chain_;
     rai::TokenAddress address_;
+};
+
+// token transfers
+class TokenIndex
+{
+public:
+    TokenIndex();
+    TokenIndex(rai::Chain, const rai::TokenAddress&, uint64_t,
+               const rai::Account&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    uint64_t ts_comp_; // timestamp's complement
+    rai::Account account_;
+    uint64_t height_;
 };
 
 class TokenInfo
 {
 public:
+    TokenInfo();
+    TokenInfo(rai::TokenType, const std::string&, const std::string&, uint8_t,
+              bool, bool, bool, const rai::TokenValue&);
+    TokenInfo(rai::TokenType, const std::string&, const std::string&, bool,
+              bool, const rai::TokenValue&, const std::string);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
     rai::TokenType type_;
-    // todo:
+    std::string symbol_;
+    std::string name_;
+    uint8_t decimals_;
+    bool burnable_;
+    bool mintable_;
+    bool circulable_;
+    uint64_t holders_;
+    uint64_t transfers_;
+    uint64_t swaps_;
+    rai::TokenValue total_supply_;
+    rai::TokenValue cap_supply_;
+    std::string base_uri_;
+};
+
+class TokenBlock
+{
+public:
+    TokenBlock();
+    TokenBlock(uint64_t, const rai::BlockHash&, rai::ErrorCode);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint64_t previous_;
+    rai::BlockHash hash_;
+    rai::ErrorCode status_;
+};
+
+class TokenHolder
+{
+public:
+    TokenHolder();
+    TokenHolder(rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
+                const rai::Account&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    rai::TokenValue balance_comp_; // balance's complement
+    rai::Account account_;
+};
+
+class AccountTokensInfo
+{
+public:
+    AccountTokensInfo();
+    AccountTokensInfo(uint64_t, uint64_t, uint64_t);
+    AccountTokensInfo(const rai::Account&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint64_t head_;
+    uint64_t blocks_;
+    uint64_t last_active_;
+    
+    rai::Account main_;
+};
+
+class AccountTokenInfo
+{
+public:
+    AccountTokenInfo();
+    AccountTokenInfo(uint64_t, uint64_t, const rai::TokenValue&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint64_t head_;
+    uint64_t blocks_;
+    rai::TokenValue balance_;
+};
+
+class AccountTokenId
+{
+public:
+    AccountTokenId();
+    AccountTokenId(const rai::Account&, const rai::TokenKey&,
+                   const rai::TokenValue&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account account_;
+    rai::TokenKey token_;
+    rai::TokenValue id_;
+};
+
+class AccountTokenLink
+{
+public:
+    AccountTokenLink();
+    AccountTokenLink(const rai::Account&, rai::Chain, const rai::TokenAddress&,
+                     uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account account_;
+    rai::TokenKey token_;
+    uint64_t height_;
+};
+
+class OrderIndex
+{
+public:
+    OrderIndex();
+    OrderIndex(rai::Chain, const rai::TokenAddress&, rai::Chain,
+               const rai::TokenAddress&, const rai::SwapRate&,
+               const rai::Account&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_offer_;
+    rai::TokenKey token_want_;
+    rai::SwapRate rate_;
+    rai::Account maker_;
+    uint64_t height_;
+};
+
+class OrderInfo
+{
+public:
+    OrderInfo();
+    OrderInfo(const rai::Account&, rai::Chain, const rai::TokenAddress&,
+              rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
+              const rai::TokenValue&, uint64_t);
+    OrderInfo(const rai::Account&, rai::Chain, const rai::TokenAddress&,
+              rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
+              const rai::TokenValue&, const rai::TokenValue&,
+              const rai::TokenValue&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    enum class FinishedBy : uint8_t
+    {
+        INVALID = 0,
+        TIMEOUT = 1,
+        CANCEL  = 2,
+        FULFILL = 3,
+        MAX
+    };
+
+    rai::Account main_;
+    rai::TokenKey token_offer_;
+    rai::TokenKey token_want_;
+    rai::TokenValue value_offer_;
+    rai::TokenValue value_want_;
+    rai::TokenValue min_offer_;
+    rai::TokenValue max_offer_;
+    rai::TokenValue left_;
+    uint64_t timeout_;
+    uint64_t finished_height_;
+    bool has_nft_;
+    FinishedBy finished_by_;
+};
+
+class OrderSwapIndex
+{
+public:
+    OrderSwapIndex();
+    OrderSwapIndex(const rai::Account&, uint64_t, const rai::Account&, uint64_t,
+                   uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account maker_;
+    uint64_t order_height_;
+    uint64_t ts_comp_;
+    rai::Account taker_;
+    uint64_t inquiry_height_;
+};
+
+class TokenSwapIndex
+{
+public:
+    TokenSwapIndex();
+    TokenSwapIndex(rai::Chain, const rai::TokenAddress&, const rai::Account&,
+                   uint64_t, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    uint64_t ts_comp_;
+    rai::Account taker_;
+    uint64_t inquiry_height_;
+};
+
+class SwapInfo
+{
+public:
+    SwapInfo();
+    SwapInfo(const rai::Account&, uint64_t, uint64_t, uint64_t,
+             const rai::TokenValue&, const rai::PublicKey&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    enum class Status : uint8_t
+    {
+        INVALID         = 0,
+        INQUIRY         = 1,
+        INQUIRY_ACK     = 2,
+        INQUIRY_NACK    = 3,
+        TAKE            = 4,
+        TAKE_ACK        = 5,
+        TAKE_NACK       = 6,
+        MAX
+    };
+
+    Status status_;
+    rai::Account maker_;
+    uint64_t order_height_;
+    uint64_t inquiry_ack_height_;
+    uint64_t take_height_;
+    uint64_t trade_height_;
+    uint64_t timeout_;
+    rai::TokenValue value_;
+    rai::PublicKey taker_share_;
+    rai::PublicKey maker_share_;
+    rai::Signature maker_signature_;
 };
 
 class ReceivableInfo
@@ -314,6 +560,22 @@ public:
                                           const rai::Prefix&);
     rai::Iterator AliasDnsIndexUpperBound(rai::Transaction&, const rai::Prefix&,
                                           size_t = 64);
+    bool AccountTokenInfoPut(rai::Transaction&, const rai::Account&, rai::Chain,
+                             const rai::TokenAddress&,
+                             const rai::AccountTokenInfo&);
+    bool AccountTokenInfoGet(rai::Transaction&, const rai::Account&, rai::Chain,
+                             const rai::TokenAddress&,
+                             rai::AccountTokenInfo&) const;
+    bool AccountTokenLinkPut(rai::Transaction&, const rai::AccountTokenLink&,
+                             uint64_t);
+    bool AccountTokenLinkGet(rai::Transaction&, const rai::AccountTokenLink&,
+                             uint64_t&) const;
+    bool AccountTokensInfoPut(rai::Transaction&, const rai::Account&,
+                              rai::AccountTokensInfo&);
+    bool AccountTokensInfoGet(rai::Transaction&, const rai::Account&,
+                              rai::AccountTokensInfo&) const;
+    bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
+                       const rai::TokenBlock&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);

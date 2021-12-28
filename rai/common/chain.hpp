@@ -26,5 +26,9 @@ enum class Chain : uint32_t
 };
 std::string ChainToString(Chain);
 Chain StringToChain(const std::string&);
+inline bool IsRaicoin(Chain chain)
+{
+    return chain == Chain::RAICOIN || chain == Chain::RAICOIN_TEST;
+}
 
 }  // namespace rai

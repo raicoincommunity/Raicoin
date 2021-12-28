@@ -447,6 +447,11 @@ rai::uint256_union& rai::uint256_union::operator-=(
     return *this;
 }
 
+rai::uint256_union rai::uint256_union::operator~() const
+{
+    return rai::uint256_union(~Number());
+}
+
 rai::uint256_t rai::uint256_union::Number() const
 {
     rai::uint256_t result;
@@ -837,6 +842,19 @@ rai::uint512_union::uint512_union(const std::string& str, bool to_lower)
     {
         ToLower();
     }
+}
+
+rai::uint512_union::uint512_union(const rai::uint256_union& denominator,
+                                  const rai::uint256_union& numerator)
+{
+    if (denominator.IsZero())
+    {
+        *this = std::numeric_limits<rai::uint512_t>::max();
+        return;
+    }
+
+    *this = rai::uint512_t(numerator.Number());
+    *this = ((*this).Number() << 256) / denominator.Number();
 }
 
 bool rai::uint512_union::operator==(const rai::uint512_union& other) const

@@ -315,6 +315,15 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             {
                 break;
             }
+            case rai::ErrorCode::APP_PROCESS_UNEXPECTED:
+            {
+                std::string error_info = rai::ToString(
+                    "App::ProcessBlock: unexpected error, block hash=",
+                    block->Hash().StringHex());
+                rai::Log::Error(error_info);
+                std::cout << error_info << std::endl;
+                break;
+            }
             default:
             {
                 // log

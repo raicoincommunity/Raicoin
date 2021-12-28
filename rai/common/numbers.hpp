@@ -72,6 +72,7 @@ union uint256_union
     rai::uint256_union operator-(const rai::uint256_union&) const;
     rai::uint256_union& operator+=(const rai::uint256_union&);
     rai::uint256_union& operator-=(const rai::uint256_union&);
+    rai::uint256_union operator~() const;
     rai::uint256_t Number() const;
     void Clear();
     void SecureClear();
@@ -151,6 +152,7 @@ union uint512_union
     uint512_union(const std::vector<uint8_t>&);
     uint512_union(uint8_t, size_t);
     uint512_union(const std::string&, bool = true);
+    uint512_union(const rai::uint256_union&, const rai::uint256_union&);
     bool operator==(const rai::uint512_union&) const;
     bool operator!=(const rai::uint512_union&) const;
     rai::uint512_union operator+(const rai::uint512_union&) const;
@@ -170,6 +172,7 @@ union uint512_union
 };
 using Signature = uint512_union;
 using Prefix = uint512_union;
+using SwapRate = uint512_union;
 
 rai::uint512_union SignMessage(const rai::RawKey&, const rai::PublicKey&,
                                const rai::uint256_union&);

@@ -15,6 +15,15 @@ class TokenObservers
 public:
 };
 
+class TokenError
+{
+public:
+    TokenError();
+    TokenError(rai::ErrorCode);
+
+    rai::ErrorCode return_code_;
+
+};
 
 class Token : public rai::App
 {
@@ -60,6 +69,12 @@ public:
 private:
     static uint32_t constexpr CURRENT_LEDGER_VERSION = 1;
     rai::ErrorCode InitLedger_();
+    rai::TokenError ProcessCreate_(rai::Transaction&,
+                                   const std::shared_ptr<rai::Block>&,
+                                   const rai::ExtensionToken&);
+    rai::ErrorCode ProcessError_(rai::Transaction&, const rai::TokenError&);
+    rai::ErrorCode UpdateLedgerCommon_(
+        rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
+        const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
 };
-
-};
+}

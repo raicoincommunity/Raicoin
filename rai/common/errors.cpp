@@ -1746,6 +1746,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid swap ack height";
         }
+        case rai::ErrorCode::TOKEN_MULTI_EXTENSIONS:
+        {
+            return "Contain more than one token extension in the block";
+        }
         default:
         {
             return "Invalid error code";
