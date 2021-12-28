@@ -16,7 +16,11 @@ rai::Store::Store(rai::ErrorCode& error_code,
       alias_(0),
       alias_block_(0),
       alias_index_(0),
-      alias_dns_index_(0)
+      alias_dns_index_(0),
+      account_tokens_info_(0),
+      token_block_(0),
+      account_token_link_(0),
+      account_token_info_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -122,6 +126,39 @@ rai::Store::Store(rai::ErrorCode& error_code,
 
     ret = mdb_dbi_open(transaction, "alias_dns_index", MDB_CREATE,
                        &alias_dns_index_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "account_tokens_info", MDB_CREATE,
+                       &account_tokens_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "token_block", MDB_CREATE,
+                       &token_block_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    
+    ret = mdb_dbi_open(transaction, "account_token_link", MDB_CREATE,
+                       &account_token_link_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "account_token_info", MDB_CREATE,
+                       &account_token_info_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

@@ -260,6 +260,676 @@ bool rai::AliasIndex::Deserialize(rai::Stream& stream)
     return false;
 }
 
+rai::TokenKey::TokenKey() : chain_(rai::Chain::INVALID), address_(0)
+{
+}
+
+rai::TokenKey::TokenKey(rai::Chain chain, const rai::TokenAddress& address)
+    : chain_(chain), address_(address)
+{
+}
+
+void rai::TokenKey::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, address_.bytes);
+    rai::Write(stream, chain_);
+}
+
+bool rai::TokenKey::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, address_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, chain_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::TokenIndex::TokenIndex() : token_(), ts_comp_(0), account_(0), height_(0)
+{
+}
+
+rai::TokenIndex::TokenIndex(rai::Chain chain, const rai::TokenAddress& address,
+                            uint64_t timestamp, const rai::Account& account,
+                            uint64_t height)
+    : token_(chain, address),
+      ts_comp_(~timestamp),
+      account_(account),
+      height_(height)
+{
+}
+
+void rai::TokenIndex::Serialize(rai::Stream& stream) const
+{
+    token_.Serialize(stream);
+    rai::Write(stream, ts_comp_);
+    rai::Write(stream, account_.bytes);
+    rai::Write(stream, height_);
+}
+
+bool rai::TokenIndex::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = token_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, ts_comp_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, height_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::TokenInfo::TokenInfo()
+    : type_(rai::TokenType::INVALID),
+      decimals_(0),
+      burnable_(false),
+      mintable_(false),
+      circulable_(true),
+      holders_(0),
+      transfers_(0),
+      swaps_(0),
+      total_supply_(0),
+      cap_supply_(0)
+{
+}
+
+rai::TokenInfo::TokenInfo(rai::TokenType type, const std::string& symbol,
+                          const std::string& name, uint8_t decimals,
+                          bool burnable, bool mintable, bool circulable,
+                          const rai::TokenValue& cap_supply)
+    : type_(type),
+      symbol_(symbol),
+      name_(name),
+      decimals_(decimals),
+      burnable_(burnable),
+      mintable_(mintable),
+      circulable_(circulable),
+      holders_(0),
+      transfers_(0),
+      swaps_(0),
+      total_supply_(0),
+      cap_supply_(cap_supply)
+{
+}
+
+rai::TokenInfo::TokenInfo(rai::TokenType type, const std::string& symbol,
+                          const std::string& name, bool burnable,
+                          bool circulable, const rai::TokenValue& cap_supply,
+                          const std::string base_uri)
+    : type_(type),
+      symbol_(symbol),
+      name_(name),
+      decimals_(0),
+      burnable_(burnable),
+      mintable_(true),
+      circulable_(circulable),
+      holders_(0),
+      transfers_(0),
+      swaps_(0),
+      total_supply_(0),
+      cap_supply_(cap_supply),
+      base_uri_(base_uri)
+{
+}
+
+void rai::TokenInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, type_);
+    rai::Write(stream, symbol_);
+    rai::Write(stream, name_);
+    rai::Write(stream, decimals_);
+    rai::Write(stream, burnable_);
+    rai::Write(stream, mintable_);
+    rai::Write(stream, circulable_);
+    rai::Write(stream, holders_);
+    rai::Write(stream, transfers_);
+    rai::Write(stream, swaps_);
+    rai::Write(stream, total_supply_.bytes);
+    rai::Write(stream, cap_supply_.bytes);
+    rai::Write(stream, base_uri_);
+}
+
+bool rai::TokenInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, type_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, symbol_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, name_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, decimals_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, burnable_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, mintable_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, circulable_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, holders_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, transfers_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, swaps_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, total_supply_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, cap_supply_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, base_uri_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::TokenBlock::TokenBlock()
+    : previous_(rai::Block::INVALID_HEIGHT),
+      hash_(0),
+      status_(rai::ErrorCode::SUCCESS)
+{
+}
+
+rai::TokenBlock::TokenBlock(uint64_t previous, const rai::BlockHash& hash,
+                            rai::ErrorCode status)
+    : previous_(previous), hash_(hash), status_(status)
+{
+}
+
+void rai::TokenBlock::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, previous_);
+    rai::Write(stream, hash_.bytes);
+    rai::Write(stream, status_);
+}
+
+bool rai::TokenBlock::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, previous_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, hash_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, status_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::TokenHolder::TokenHolder() : token_(), balance_comp_(0), account_(0)
+{
+}
+
+rai::TokenHolder::TokenHolder(rai::Chain chain,
+                              const rai::TokenAddress& address,
+                              const rai::TokenValue& balance,
+                              const rai::Account& account)
+    : token_(chain, address), balance_comp_(~balance), account_(account)
+{
+}
+
+void rai::TokenHolder::Serialize(rai::Stream& stream) const
+{
+    token_.Serialize(stream);
+    rai::Write(stream, balance_comp_.bytes);
+    rai::Write(stream, account_.bytes);
+}
+
+bool rai::TokenHolder::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = token_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, balance_comp_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::AccountTokensInfo::AccountTokensInfo()
+    : head_(rai::Block::INVALID_HEIGHT), blocks_(0), last_active_(0), main_(0)
+{
+}
+
+rai::AccountTokensInfo::AccountTokensInfo(uint64_t head, uint64_t blocks,
+                                          uint64_t last_active)
+    : head_(head), blocks_(blocks), last_active_(last_active), main_(0)
+{
+}
+
+rai::AccountTokensInfo::AccountTokensInfo(const rai::Account& account,
+                                          uint64_t last_active)
+    : head_(rai::Block::INVALID_HEIGHT),
+      blocks_(0),
+      last_active_(last_active),
+      main_(account)
+{
+}
+
+void rai::AccountTokensInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, head_);
+    rai::Write(stream, blocks_);
+    rai::Write(stream, last_active_);
+    rai::Write(stream, main_.bytes);
+}
+
+bool rai::AccountTokensInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, head_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, blocks_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, last_active_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, main_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::AccountTokenInfo::AccountTokenInfo()
+    : head_(rai::Block::INVALID_HEIGHT), blocks_(0), balance_(0)
+{
+}
+
+rai::AccountTokenInfo::AccountTokenInfo(uint64_t head, uint64_t blocks,
+                                        const rai::TokenValue& balance)
+    : head_(head), blocks_(blocks), balance_(balance)
+{
+}
+
+void rai::AccountTokenInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, head_);
+    rai::Write(stream, blocks_);
+    rai::Write(stream, balance_.bytes);
+}
+
+bool rai::AccountTokenInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, head_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, blocks_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, balance_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::AccountTokenId::AccountTokenId() : account_(0), token_(), id_(0)
+{
+}
+
+rai::AccountTokenId::AccountTokenId(const rai::Account& account,
+                                    const rai::TokenKey& token,
+                                    const rai::TokenValue& id)
+    : account_(account), token_(token), id_(id)
+{
+}
+
+void rai::AccountTokenId::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, account_.bytes);
+    token_.Serialize(stream);
+    rai::Write(stream, id_.bytes);
+}
+
+bool rai::AccountTokenId::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = token_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, id_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::AccountTokenLink::AccountTokenLink()
+    : account_(0), token_(), height_(rai::Block::INVALID_HEIGHT)
+{
+}
+
+rai::AccountTokenLink::AccountTokenLink(const rai::Account& account,
+                                        rai::Chain chain,
+                                        const rai::TokenAddress& address,
+                                        uint64_t height)
+    : account_(account), token_(chain, address), height_(height)
+{
+}
+
+void rai::AccountTokenLink::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, account_.bytes);
+    token_.Serialize(stream);
+    rai::Write(stream, height_);
+}
+
+bool rai::AccountTokenLink::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = token_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, height_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::OrderIndex::OrderIndex()
+    : token_offer_(),
+      token_want_(),
+      rate_(0),
+      maker_(0),
+      height_(rai::Block::INVALID_HEIGHT)
+{
+}
+
+rai::OrderIndex::OrderIndex(rai::Chain chain_offer,
+                            const rai::TokenAddress& address_offer,
+                            rai::Chain chain_want,
+                            const rai::TokenAddress& address_want,
+                            const rai::SwapRate& rate,
+                            const rai::Account& maker, uint64_t height)
+    : token_offer_(chain_offer, address_offer),
+      token_want_(chain_want, address_want),
+      rate_(rate),
+      maker_(maker),
+      height_(height)
+{
+}
+
+void rai::OrderIndex::Serialize(rai::Stream& stream) const
+{
+    token_offer_.Serialize(stream);
+    token_want_.Serialize(stream);
+    rai::Write(stream, rate_.bytes);
+    rai::Write(stream, maker_.bytes);
+    rai::Write(stream, height_);
+}
+
+bool rai::OrderIndex::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = token_offer_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = token_want_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, rate_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, maker_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, height_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::OrderInfo::OrderInfo()
+    : main_(0),
+      token_offer_(),
+      token_want_(),
+      value_offer_(0),
+      value_want_(0),
+      min_offer_(0),
+      max_offer_(0),
+      left_(0),
+      finished_height_(rai::Block::INVALID_HEIGHT),
+      has_nft_(false),
+      finished_by_(rai::OrderInfo::FinishedBy::INVALID)
+{
+}
+
+rai::OrderInfo::OrderInfo(const rai::Account& main_account,
+                          rai::Chain chain_offer,
+                          const rai::TokenAddress& address_offer,
+                          rai::Chain chain_want,
+                          const rai::TokenAddress& address_want,
+                          const rai::TokenValue& value_offer,
+                          const rai::TokenValue& value_want, uint64_t timeout)
+    : main_(main_account),
+      token_offer_(chain_offer, address_offer),
+      token_want_(chain_want, address_want),
+      value_offer_(value_offer),
+      value_want_(value_want),
+      min_offer_(0),
+      max_offer_(0),
+      left_(0),
+      timeout_(timeout),
+      finished_height_(rai::Block::INVALID_HEIGHT),
+      has_nft_(true),
+      finished_by_(rai::OrderInfo::FinishedBy::INVALID)
+{
+}
+
+rai::OrderInfo::OrderInfo(
+    const rai::Account& main_account, rai::Chain chain_offer,
+    const rai::TokenAddress& address_offer, rai::Chain chain_want,
+    const rai::TokenAddress& address_want, const rai::TokenValue& value_offer,
+    const rai::TokenValue& value_want, const rai::TokenValue& min_offer,
+    const rai::TokenValue& max_offer, uint64_t timeout)
+    : main_(main_account),
+      token_offer_(chain_offer, address_offer),
+      token_want_(chain_want, address_want),
+      value_offer_(value_offer),
+      value_want_(value_want),
+      min_offer_(min_offer),
+      max_offer_(max_offer),
+      left_(max_offer),
+      timeout_(timeout),
+      finished_height_(rai::Block::INVALID_HEIGHT),
+      has_nft_(false),
+      finished_by_(rai::OrderInfo::FinishedBy::INVALID)
+{
+}
+
+void rai::OrderInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, main_.bytes);
+    token_offer_.Serialize(stream);
+    token_want_.Serialize(stream);
+    rai::Write(stream, value_offer_.bytes);
+    rai::Write(stream, value_want_.bytes);
+    rai::Write(stream, min_offer_.bytes);
+    rai::Write(stream, max_offer_.bytes);
+    rai::Write(stream, left_.bytes);
+    rai::Write(stream, timeout_);
+    rai::Write(stream, finished_height_);
+    rai::Write(stream, has_nft_);
+    rai::Write(stream, finished_by_);
+}
+
+bool rai::OrderInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, main_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = token_offer_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = token_want_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, value_offer_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, value_want_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, min_offer_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, max_offer_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, left_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, timeout_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, finished_height_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, has_nft_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, finished_by_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::OrderSwapIndex::OrderSwapIndex()
+    : maker_(0),
+      order_height_(rai::Block::INVALID_HEIGHT),
+      ts_comp_(0),
+      taker_(0),
+      inquiry_height_(rai::Block::INVALID_HEIGHT)
+{
+}
+
+rai::OrderSwapIndex::OrderSwapIndex(const rai::Account& maker,
+                                    uint64_t order_height,
+                                    const rai::Account& taker,
+                                    uint64_t inquiry_height, uint64_t timestamp)
+    : maker_(maker),
+      order_height_(order_height),
+      ts_comp_(~timestamp),
+      taker_(taker),
+      inquiry_height_(inquiry_height)
+{
+}
+
+void rai::OrderSwapIndex::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, maker_.bytes);
+    rai::Write(stream, order_height_);
+    rai::Write(stream, ts_comp_);
+    rai::Write(stream, taker_.bytes);
+    rai::Write(stream, inquiry_height_);
+}
+
+bool rai::OrderSwapIndex::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, maker_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, order_height_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, ts_comp_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, taker_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, inquiry_height_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::TokenSwapIndex::TokenSwapIndex()
+    : token_(),
+      ts_comp_(0),
+      taker_(0),
+      inquiry_height_(rai::Block::INVALID_HEIGHT)
+{
+}
+
+rai::TokenSwapIndex::TokenSwapIndex(rai::Chain chain,
+                                    const rai::TokenAddress& address,
+                                    const rai::Account& taker,
+                                    uint64_t inquiry_height, uint64_t timestamp)
+    : token_(chain, address),
+      ts_comp_(~timestamp),
+      taker_(taker),
+      inquiry_height_(inquiry_height)
+{
+}
+
+void rai::TokenSwapIndex::Serialize(rai::Stream& stream) const
+{
+    token_.Serialize(stream);
+    rai::Write(stream, ts_comp_);
+    rai::Write(stream, taker_.bytes);
+    rai::Write(stream, inquiry_height_);
+}
+
+bool rai::TokenSwapIndex::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = token_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, ts_comp_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, taker_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, inquiry_height_);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::SwapInfo::SwapInfo()
+    : status_(rai::SwapInfo::Status::INVALID),
+      maker_(0),
+      order_height_(rai::Block::INVALID_HEIGHT),
+      inquiry_ack_height_(rai::Block::INVALID_HEIGHT),
+      take_height_(rai::Block::INVALID_HEIGHT),
+      trade_height_(rai::Block::INVALID_HEIGHT),
+      timeout_(0),
+      value_(0)
+{
+}
+
+rai::SwapInfo::SwapInfo(const rai::Account& maker, uint64_t order_height,
+                        uint64_t inquiry_ack_height, uint64_t timeout,
+                        const rai::TokenValue& value,
+                        const rai::PublicKey& take_share)
+    : status_(rai::SwapInfo::Status::INQUIRY),
+      maker_(maker),
+      order_height_(order_height),
+      inquiry_ack_height_(inquiry_ack_height),
+      take_height_(rai::Block::INVALID_HEIGHT),
+      trade_height_(rai::Block::INVALID_HEIGHT),
+      timeout_(timeout),
+      value_(value),
+      taker_share_(take_share)
+{
+}
+
+void rai::SwapInfo::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, status_);
+    rai::Write(stream, maker_.bytes);
+    rai::Write(stream, order_height_);
+    rai::Write(stream, inquiry_ack_height_);
+    rai::Write(stream, take_height_);
+    rai::Write(stream, trade_height_);
+    rai::Write(stream, timeout_);
+    rai::Write(stream, value_.bytes);
+    rai::Write(stream, taker_share_.bytes);
+    rai::Write(stream, maker_share_.bytes);
+    rai::Write(stream, maker_signature_.bytes);
+}
+
+bool rai::SwapInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, status_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, maker_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, order_height_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, inquiry_ack_height_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, take_height_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, trade_height_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, timeout_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, value_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, taker_share_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, maker_share_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, maker_signature_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
 rai::ReceivableInfo::ReceivableInfo(const rai::Account& source,
                                     const rai::Amount& amount,
                                     uint64_t timestamp)
@@ -282,7 +952,7 @@ void rai::ReceivableInfo::Serialize(rai::Stream& stream) const
 bool rai::ReceivableInfo::Deserialize(rai::Stream& stream)
 {
     bool error = false;
-    error      = rai::Read(stream, source_.bytes);
+    error = rai::Read(stream, source_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, amount_.bytes);
     IF_ERROR_RETURN(error, true);
@@ -564,7 +1234,6 @@ bool rai::Ledger::AliasInfoGet(rai::Transaction& transaction,
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
 }
-
 
 bool rai::Ledger::AliasBlockPut(rai::Transaction& transaction,
                                 const rai::Account& account, uint64_t height,
@@ -891,6 +1560,176 @@ rai::Iterator rai::Ledger::AliasDnsIndexUpperBound(
         return rai::Iterator(rai::StoreIterator(nullptr));
     }
     return AliasDnsIndexLowerBound(transaction, index);  // lower bound !
+}
+
+bool rai::Ledger::AccountTokenInfoPut(rai::Transaction& transaction,
+                                      const rai::Account& account,
+                                      rai::Chain chain,
+                                      const rai::TokenAddress& address,
+                                      const rai::AccountTokenInfo& info)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, chain);
+        rai::Write(stream, address.bytes);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        info.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_,
+                            store_.account_token_info_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AccountTokenInfoGet(rai::Transaction& transaction,
+                                      const rai::Account& account,
+                                      rai::Chain chain,
+                                      const rai::TokenAddress& address,
+                                      rai::AccountTokenInfo& info) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, chain);
+        rai::Write(stream, address.bytes);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.account_token_info_, key, value);
+    IF_ERROR_RETURN(error, true);
+    rai::BufferStream stream(value.Data(), value.Size());
+    return info.Deserialize(stream);
+}
+
+bool rai::Ledger::AccountTokenLinkPut(rai::Transaction& transaction,
+                                      const rai::AccountTokenLink& link,
+                                      uint64_t previous)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        link.Serialize(stream);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        rai::Write(stream, previous);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_,
+                            store_.account_token_link_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::AccountTokenLinkGet(rai::Transaction& transaction,
+                                      const rai::AccountTokenLink& link,
+                                      uint64_t& previous) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        link.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.account_token_link_, key, value);
+    IF_ERROR_RETURN(error, true);
+    rai::BufferStream stream(value.Data(), value.Size());
+    return rai::Read(stream, previous);
+}
+
+bool rai::Ledger::AccountTokensInfoPut(rai::Transaction& transaction,
+                                       const rai::Account& account,
+                                       rai::AccountTokensInfo& info)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        info.Serialize(stream);
+    }
+    rai::MdbVal key(account);
+    rai::MdbVal value(bytes.size(), bytes.data());
+    bool error = store_.Put(transaction.mdb_transaction_,
+                            store_.account_tokens_info_, key, value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+bool rai::Ledger::AccountTokensInfoGet(rai::Transaction& transaction,
+                                       const rai::Account& account,
+                                       rai::AccountTokensInfo& info) const
+{
+    rai::MdbVal key(account);
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.account_tokens_info_, key, value);
+    IF_ERROR_RETURN(error, true);
+    rai::BufferStream stream(value.Data(), value.Size());
+    return info.Deserialize(stream);
+}
+
+bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                const rai::TokenBlock& block)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        block.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_, store_.token_block_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
 }
 
 bool rai::Ledger::BlockPut(rai::Transaction& transaction,

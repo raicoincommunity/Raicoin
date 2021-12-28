@@ -156,7 +156,7 @@ rai::Amount rai::RewardRate(uint64_t timestamp)
         7800 * uRAI, 4600 * uRAI, 3200 * uRAI, 2500 * uRAI,  // 1st year
         1500 * uRAI, 1500 * uRAI, 1200 * uRAI, 1200 * uRAI,  // 2nd year
         620  * uRAI, 620  * uRAI, 620  * uRAI, 620  * uRAI,  // 3rd year
-        270  * uRAI, 270  * uRAI, 270 *  uRAI, 270  * uRAI,  // 4th year
+        270  * uRAI, 270  * uRAI, 270  *  uRAI, 270  * uRAI, // 4th year
     };
 
     if (timestamp < rai::EpochTimestamp())

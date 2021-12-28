@@ -290,8 +290,14 @@ TEST(uint256_union, bitwise_operator)
 
     value1 ^= value1;
     ASSERT_EQ(0, value1.Number());
-}
 
+    ASSERT_EQ(std::numeric_limits<rai::uint256_t>::max(), (~value1).Number());
+
+    rai::uint256_union value4;
+    value4.DecodeHex(
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0");
+    ASSERT_EQ(0xF, (~value4).Number());
+}
 
 TEST(uint256_union, arithmetic_operator)
 {
@@ -508,6 +514,19 @@ TEST(uint512_union, constructor)
     ASSERT_EQ(false, value3.IsZero());
     value3.Clear();
     ASSERT_EQ(true, value3.IsZero());
+
+    rai::uint256_union denominator(2);
+    rai::uint256_union numerator(1);
+    rai::uint512_union value4(denominator, numerator);
+    rai::uint512_t value4_expect(
+        "0x8000000000000000000000000000000000000000000000000000000000000000");
+    ASSERT_EQ(value4_expect, value4.Number());
+
+    rai::uint512_union value5(rai::uint256_union(0), numerator);
+    rai::uint512_t value5_expect(
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    ASSERT_EQ(value5_expect, value5.Number());
 }
 
 TEST(uint512_union, relational_operator)

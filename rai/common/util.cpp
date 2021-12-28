@@ -65,13 +65,24 @@ bool rai::Read(rai::Stream& stream, std::string& str)
 
 void rai::Write(rai::Stream& stream, const std::string& str)
 {
-    if (str.size() > std::numeric_limits<uint8_t>::max())
+    std::string str_l(str);
+    size_t max = std::numeric_limits<uint8_t>::max();
+    if (str.size() > max)
     {
-        return;
+        str_l = str.substr(0, max);
+        while (str_l.size() > 0)
+        {
+            bool ctrl;
+            if (!rai::CheckUtf8(str_l, ctrl))
+            {
+                break;
+            }
+            str_l = str_l.substr(0, str_l.size() - 1);
+        }
     }
-    uint8_t size = str.size();
+    uint8_t size = str_l.size();
     rai::Write(stream, size);
-    std::vector<uint8_t> bytes(str.begin(), str.end());
+    std::vector<uint8_t> bytes(str_l.begin(), str_l.end());
     rai::Write(stream, bytes);
 }
 

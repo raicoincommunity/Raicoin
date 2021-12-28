@@ -203,4 +203,37 @@ TEST(CommonUtil, StreamString)
     }
     std::vector<uint8_t> bytes5_expected = {0, };
     ASSERT_EQ(bytes5_expected, bytes5);
+
+    std::vector<uint8_t> bytes6;
+    {
+        rai::VectorStream stream6(bytes6);
+        std::string str6 = "";
+        for (size_t i = 0; i < 249; ++i)
+        {
+            str6 += "*";
+        }
+        str6 += "κόσμε";
+        rai::Write(stream6, str6);
+    }
+    std::vector<uint8_t> bytes6_expected = {254, };
+    for (size_t i = 0; i < 249; ++i)
+    {
+        bytes6_expected.push_back('*');
+    }
+    bytes6_expected.push_back(0xCE);
+    bytes6_expected.push_back(0xBA);
+    bytes6_expected.push_back(0xE1);
+    bytes6_expected.push_back(0xBD);
+    bytes6_expected.push_back(0xB9);
+    ASSERT_EQ(bytes6_expected, bytes6);
+
+    std::vector<uint8_t> bytes8(255, 0xFF);
+    std::string str8(bytes8.begin(), bytes8.end());
+    bytes8.clear();
+    {
+        rai::VectorStream stream8(bytes8);
+        rai::Write(stream8, str8);
+    }
+    std::vector<uint8_t> bytes8_expected(256, 0xFF);
+    ASSERT_EQ(bytes8_expected, bytes8);
 }

@@ -346,6 +346,8 @@ public:
         TAKE_ACK    = 6,
         TAKE_NACK   = 7,
         CANCEL      = 8,
+        PING        = 9,
+        PONG        = 10,
         MAX
     };
     static std::string SubOpToString(SubOp);
@@ -420,7 +422,6 @@ public:
 
     rai::Account maker_;
     uint64_t order_height_;
-    uint64_t trade_height_;
     uint64_t ack_height_;
     uint64_t timeout_;
     rai::TokenValue value_;
@@ -441,7 +442,7 @@ public:
 
     rai::Account taker_;
     uint64_t inquiry_height_;
-    uint64_t timeout_;
+    uint64_t trade_height_;
     rai::PublicKey share_;
     rai::Signature signature_;
 };
@@ -509,6 +510,34 @@ public:
     rai::ErrorCode CheckData() const override;
 
     uint64_t order_height_;
+};
+
+class ExtensionTokenSwapPing : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapPing();
+    virtual ~ExtensionTokenSwapPing() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
+
+    rai::Account maker_;
+};
+
+class ExtensionTokenSwapPong : public rai::ExtensionTokenSwap::Data
+{
+public:
+    ExtensionTokenSwapPong() = default;
+    virtual ~ExtensionTokenSwapPong() = default;
+
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void SerializeJson(rai::Ptree&) const override;
+    rai::ErrorCode DeserializeJson(const rai::Ptree&) override;
+    rai::ErrorCode CheckData() const override;
 };
 
 class ExtensionTokenUnmap : public rai::ExtensionToken::Data
