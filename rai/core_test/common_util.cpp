@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <rai/core_test/test_util.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/errors.hpp>
 
 TEST(CommonUtil, CheckUtf8)
 {
@@ -236,4 +237,16 @@ TEST(CommonUtil, StreamString)
     }
     std::vector<uint8_t> bytes8_expected(256, 0xFF);
     ASSERT_EQ(bytes8_expected, bytes8);
+}
+
+TEST(CommonUtil, ToString)
+{
+    EXPECT_EQ("0", rai::ToString(rai::ErrorCode::SUCCESS));
+    EXPECT_EQ("1", rai::ToString(rai::ErrorCode::GENERIC));
+
+    rai::ErrorCode error_code = rai::ErrorCode::STREAM;
+    EXPECT_EQ("2", rai::ToString(error_code));
+
+    error_code = rai::ErrorCode::BLOCK_TYPE;
+    EXPECT_EQ("error_code=3", rai::ToString("error_code=", error_code));
 }

@@ -13,6 +13,10 @@ namespace rai
 class TokenObservers
 {
 public:
+    rai::ObserverContainer<const rai::TokenReceivableKey&,
+                           const rai::TokenReceivable&>
+        receivable_;
+    rai::ObserverContainer<const rai::TokenKey&> token_creation_;
 };
 
 class TokenError
@@ -20,8 +24,10 @@ class TokenError
 public:
     TokenError();
     TokenError(rai::ErrorCode);
+    TokenError(rai::ErrorCode, const rai::TokenKey&);
 
     rai::ErrorCode return_code_;
+    rai::TokenKey token_;
 
 };
 
@@ -42,6 +48,9 @@ public:
         rai::Transaction&, const std::shared_ptr<rai::Block>&) override;
     rai::ErrorCode AfterBlockRollback(
         rai::Transaction&, const std::shared_ptr<rai::Block>&) override;
+    rai::ErrorCode Process(rai::Transaction&,
+                           const std::shared_ptr<rai::Block>&,
+                           const rai::Extensions&);
     std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
         const rai::UniqueId&, bool, const std::string&,
         const std::function<void(const rai::Ptree&)>&) override;
@@ -51,9 +60,6 @@ public:
 
     void Start() override;
     void Stop() override;
-    rai::ErrorCode Process(rai::Transaction&,
-                           const std::shared_ptr<rai::Block>&,
-                           const rai::Extensions&);
 
     static std::vector<rai::BlockType> BlockTypes();
     static rai::Provider::Info Provide();
@@ -72,9 +78,44 @@ private:
     rai::TokenError ProcessCreate_(rai::Transaction&,
                                    const std::shared_ptr<rai::Block>&,
                                    const rai::ExtensionToken&);
+    rai::TokenError ProcessMint_(rai::Transaction&,
+                                 const std::shared_ptr<rai::Block>&,
+                                 const rai::ExtensionToken&);
+    rai::TokenError ProcessBurn_(rai::Transaction&,
+                                 const std::shared_ptr<rai::Block>&,
+                                 const rai::ExtensionToken&);
+    rai::TokenError ProcessSend_(rai::Transaction&,
+                                 const std::shared_ptr<rai::Block>&,
+                                 const rai::ExtensionToken&);
+    rai::TokenError ProcessReceive_(rai::Transaction&,
+                                    const std::shared_ptr<rai::Block>&,
+                                    const rai::ExtensionToken&);
     rai::ErrorCode ProcessError_(rai::Transaction&, const rai::TokenError&);
     rai::ErrorCode UpdateLedgerCommon_(
         rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
         const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
+    rai::ErrorCode UpdateLedgerReceivable_(rai::Transaction&,
+                                           const rai::TokenReceivableKey&,
+                                           const rai::TokenReceivable&);
+    rai::ErrorCode UpdateLedgerBalance_(rai::Transaction&, const rai::Account&,
+                                        const rai::TokenKey&,
+                                        const rai::TokenValue&,
+                                        const rai::TokenValue&);
+    rai::ErrorCode UpdateLedgerSupplies_(rai::Transaction&,
+                                         const rai::TokenKey&,
+                                         const rai::TokenValue&,
+                                         const rai::TokenValue&);
+    rai::ErrorCode UpdateLedgerTokenTransfer_(rai::Transaction&,
+                                              const rai::TokenKey&, uint64_t,
+                                              const rai::Account&, uint64_t);
+    rai::ErrorCode UpdateLedgerTokenIdTransfer_(rai::Transaction&,
+                                                const rai::TokenKey&,
+                                                const rai::TokenValue&,
+                                                const rai::Account&, uint64_t);
+
+    std::function<void(const rai::TokenReceivableKey&,
+                       const rai::TokenReceivable&)>
+        receivable_observer_;
+    std::function<void(const rai::TokenKey&)> token_creation_observer_;
 };
 }

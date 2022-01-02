@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <rai/common/numbers.hpp>
+#include <rai/common/chain.hpp>
 
 namespace rai
 {
@@ -108,4 +109,5 @@ rai::Amount RewardRate(uint64_t);
 rai::Amount RewardAmount(const rai::Amount&, uint64_t, uint64_t);
 uint64_t RewardTimestamp(uint64_t, uint64_t);
 uint16_t MaxAllowedForks(uint64_t);
+rai::Chain CurrentChain();
 }  // namespace rai

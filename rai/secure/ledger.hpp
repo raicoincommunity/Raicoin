@@ -144,13 +144,12 @@ public:
     rai::TokenAddress address_;
 };
 
-// token transfers
-class TokenIndex
+class TokenTransfer
 {
 public:
-    TokenIndex();
-    TokenIndex(rai::Chain, const rai::TokenAddress&, uint64_t,
-               const rai::Account&, uint64_t);
+    TokenTransfer();
+    TokenTransfer(const rai::TokenKey&, uint64_t, const rai::Account&,
+                  uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
@@ -160,14 +159,27 @@ public:
     uint64_t height_;
 };
 
+class TokenIdTransferKey
+{
+public:
+    TokenIdTransferKey();
+    TokenIdTransferKey(const rai::TokenKey&, const rai::TokenValue&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    rai::TokenValue id_;
+    uint64_t index_comp_; // index's complement
+};
+
 class TokenInfo
 {
 public:
     TokenInfo();
     TokenInfo(rai::TokenType, const std::string&, const std::string&, uint8_t,
-              bool, bool, bool, const rai::TokenValue&);
+              bool, bool, bool, const rai::TokenValue&, uint64_t);
     TokenInfo(rai::TokenType, const std::string&, const std::string&, bool,
-              bool, const rai::TokenValue&, const std::string);
+              bool, const rai::TokenValue&, const std::string, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
@@ -181,8 +193,10 @@ public:
     uint64_t holders_;
     uint64_t transfers_;
     uint64_t swaps_;
+    uint64_t created_at_;
     rai::TokenValue total_supply_;
     rai::TokenValue cap_supply_;
+    rai::TokenValue local_supply_;
     std::string base_uri_;
 };
 
@@ -211,6 +225,50 @@ public:
     rai::TokenKey token_;
     rai::TokenValue balance_comp_; // balance's complement
     rai::Account account_;
+};
+
+class TokenReceivableKey
+{
+public:
+    TokenReceivableKey();
+    TokenReceivableKey(const rai::Account&, const rai::TokenKey&, rai::Chain,
+                       const rai::BlockHash&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account to_;
+    rai::TokenKey token_;
+    rai::Chain chain_;
+    rai::BlockHash tx_hash_;
+};
+
+class TokenReceivable
+{
+public:
+    TokenReceivable();
+    TokenReceivable(const rai::Account&, const rai::TokenValue&, uint64_t,
+                    rai::TokenType, rai::TokenSource);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account from_;
+    rai::TokenValue value_;
+    uint64_t block_height_;
+    rai::TokenType token_type_;
+    rai::TokenSource source_;
+};
+
+class TokenIdInfo
+{
+public:
+    TokenIdInfo();
+    TokenIdInfo(const std::string&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    bool burned_;
+    uint64_t transfers_;
+    std::string uri_;
 };
 
 class AccountTokensInfo
@@ -574,8 +632,36 @@ public:
                               rai::AccountTokensInfo&);
     bool AccountTokensInfoGet(rai::Transaction&, const rai::Account&,
                               rai::AccountTokensInfo&) const;
+    bool AccountTokenIdPut(rai::Transaction&, const rai::AccountTokenId&,
+                           uint64_t);
+    bool AccountTokenIdGet(rai::Transaction&, const rai::AccountTokenId&,
+                           uint64_t&) const;
+    bool AccountTokenIdDel(rai::Transaction&, const rai::AccountTokenId&);
+    bool AccountTokenIdExist(rai::Transaction&,
+                             const rai::AccountTokenId&) const;
     bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
                        const rai::TokenBlock&);
+    bool TokenInfoPut(rai::Transaction&, const rai::TokenKey&,
+                      const rai::TokenInfo&);
+    bool TokenInfoGet(rai::Transaction&, const rai::TokenKey&,
+                      rai::TokenInfo&) const;
+    bool TokenReceivablePut(rai::Transaction&, const rai::TokenReceivableKey&,
+                            const rai::TokenReceivable&);
+    bool TokenReceivableGet(rai::Transaction&, const rai::TokenReceivableKey&,
+                            rai::TokenReceivable&) const;
+    bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
+                        const rai::TokenValue&, const rai::TokenIdInfo&);
+    bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,
+                        const rai::TokenValue&, rai::TokenIdInfo&);
+    bool TokenHolderPut(rai::Transaction&, const rai::TokenKey&,
+                        const rai::Account&, const rai::TokenValue&);
+    bool TokenHolderExist(rai::Transaction&, const rai::TokenKey&,
+                          const rai::Account&, const rai::TokenValue&) const;
+    bool TokenHolderDel(rai::Transaction&, const rai::TokenKey&,
+                        const rai::Account&, const rai::TokenValue&);
+    bool TokenTransferPut(rai::Transaction&, const rai::TokenTransfer&);
+    bool TokenIdTransferPut(rai::Transaction&, const rai::TokenIdTransferKey&,
+                            const rai::Account&, uint64_t);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);

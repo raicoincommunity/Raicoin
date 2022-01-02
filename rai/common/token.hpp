@@ -19,7 +19,7 @@ TokenType StringToTokenType(const std::string&);
 enum class TokenSource : uint8_t
 {
     INVALID     = 0,
-    TRANSFER    = 1,
+    SEND        = 1,
     MAP         = 2,
     UNWRAP      = 3,
     SWAP        = 4,

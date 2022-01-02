@@ -678,6 +678,11 @@ void rai::uint256_union::ClampKey()
     x.ClampKey(bytes.data());
 }
 
+rai::uint256_union rai::uint256_union::Max()
+{
+    return rai::uint256_union(std::numeric_limits<rai::uint256_t>::max());
+}
+
 rai::AccountParser::AccountParser(const std::string& str)
 {
     error_ = true;
