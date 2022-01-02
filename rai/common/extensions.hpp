@@ -299,7 +299,6 @@ public:
     rai::ExtensionTokenInfo token_;
     rai::Account to_;
     rai::TokenValue value_;
-
 };
 
 class ExtensionTokenReceive : public rai::ExtensionToken::Data

@@ -319,13 +319,30 @@ private:
 };
 
 template <typename T>
-void ToStringStream(std::stringstream& stream, T value)
+typename std::enable_if<!std::is_enum<T>::value>::type ToStringStream(
+    std::stringstream& stream, T value)
 {
     stream << value;
 }
 
-template<typename T, typename... Args>
-void ToStringStream(std::stringstream& stream, T value, Args... args)
+template <typename T>
+typename std::enable_if<std::is_enum<T>::value>::type ToStringStream(
+    std::stringstream& stream, T value)
+{
+    stream << static_cast<uint64_t>(value);
+}
+
+template <typename T, typename... Args>
+typename std::enable_if<std::is_enum<T>::value>::type ToStringStream(
+    std::stringstream& stream, T value, Args... args)
+{
+    stream << static_cast<uint64_t>(value);
+    ToStringStream(stream, args...);
+}
+
+template <typename T, typename... Args>
+typename std::enable_if<!std::is_enum<T>::value>::type ToStringStream(
+    std::stringstream& stream, T value, Args... args)
 {
     stream << value;
     ToStringStream(stream, args...);

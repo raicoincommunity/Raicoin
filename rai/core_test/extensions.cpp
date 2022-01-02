@@ -860,7 +860,7 @@ TEST(ExtensionToken, Receive)
     EXPECT_EQ(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0",
         receive->token_.address_.StringHex());
-    EXPECT_EQ(rai::TokenSource::TRANSFER, receive->source_);
+    EXPECT_EQ(rai::TokenSource::SEND, receive->source_);
     EXPECT_EQ(
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0",
         receive->from_.StringHex());

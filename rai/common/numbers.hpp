@@ -92,6 +92,8 @@ union uint256_union
     bool ValidPublicKey() const;
     void ClampKey();
 
+    static rai::uint256_union Max();
+
     std::array<uint8_t, 32> bytes;
     std::array<char, 32> chars;
     std::array<uint32_t, 8> dwords;

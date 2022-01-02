@@ -20,7 +20,15 @@ rai::Store::Store(rai::ErrorCode& error_code,
       account_tokens_info_(0),
       token_block_(0),
       account_token_link_(0),
-      account_token_info_(0)
+      account_token_info_(0),
+      token_info_(0),
+      token_receivable_(0),
+      token_id_info_(0),
+      token_holders_(0),
+      account_token_id_(0),
+      token_transfer_(0),
+      token_id_transfer_(0)
+
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -148,7 +156,6 @@ rai::Store::Store(rai::ErrorCode& error_code,
         return;
     }
 
-    
     ret = mdb_dbi_open(transaction, "account_token_link", MDB_CREATE,
                        &account_token_link_);
     if (ret != MDB_SUCCESS)
@@ -159,6 +166,61 @@ rai::Store::Store(rai::ErrorCode& error_code,
 
     ret = mdb_dbi_open(transaction, "account_token_info", MDB_CREATE,
                        &account_token_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "token_info", MDB_CREATE, &token_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "token_receivable", MDB_CREATE,
+                       &token_receivable_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret =
+        mdb_dbi_open(transaction, "token_id_info", MDB_CREATE, &token_id_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret =
+        mdb_dbi_open(transaction, "token_holders", MDB_CREATE, &token_holders_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "account_token_id", MDB_CREATE,
+                       &account_token_id_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "token_transfer", MDB_CREATE,
+                       &token_transfer_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "token_id_transfer", MDB_CREATE,
+                       &token_id_transfer_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

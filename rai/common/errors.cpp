@@ -1750,6 +1750,83 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Contain more than one token extension in the block";
         }
+        case rai::ErrorCode::TOKEN_RECREATE:
+        {
+            return "Recreate an existing token";
+        }
+        case rai::ErrorCode::TOKEN_NOT_CREATED:
+        {
+            return "Token not created";
+        }
+        case rai::ErrorCode::TOKEN_TOTAL_SUPPLY_OVERFLOW:
+        {
+            return "Token total supply overflow";
+        }
+        case rai::ErrorCode::TOKEN_UNMINTABLE:
+        {
+            return "Token unmintable";
+        }
+        case rai::ErrorCode::TOKEN_ID_REMINT:
+        {
+            return "Remint an existing token id";
+        }
+        case rai::ErrorCode::TOKEN_UNBURNABLE:
+        {
+            return "Token unburnable";
+        }
+        case rai::ErrorCode::TOKEN_BURN_MORE_THAN_BALANCE:
+        {
+            return "Burn more than balance";
+        }
+        case rai::ErrorCode::TOKEN_ID_NOT_OWNED:
+        {
+            return "Doesn't own the token id";
+        }
+        case rai::ErrorCode::TOKEN_BALANCE_IS_EMPTY:
+        {
+            return "The token balance is empty";
+        }
+        case rai::ErrorCode::TOKEN_BALANCE_IS_ZERO:
+        {
+            return "The token balance is 0";
+        }
+        case rai::ErrorCode::TOKEN_UNCIRCULABLE:
+        {
+            return "The token is uncirculable, only allowed to transfer/swap "
+                   "with token issuer";
+        }
+        case rai::ErrorCode::TOKEN_SEND_MORE_THAN_BALANCE:
+        {
+            return "Send more than balance";
+        }
+        case rai::ErrorCode::TOKEN_UNRECEIVABLE:
+        {
+            return "Token unreceivable";
+        }
+        case rai::ErrorCode::TOKEN_SOURCE_TXN_HASH:
+        {
+            return "Invalid source transaction hash";
+        }
+        case rai::ErrorCode::TOKEN_RECEIVE_FROM:
+        {
+            return "Receive from invalid account";
+        }
+        case rai::ErrorCode::TOKEN_RECEIVE_BLOCK_HEIGHT:
+        {
+            return "Receive from invalid block height";
+        }
+        case rai::ErrorCode::TOKEN_RECEIVE_VALUE:
+        {
+            return "Receive with invalid token value or id";
+        }
+        case rai::ErrorCode::TOKEN_RECEIVE_SOURCE:
+        {
+            return "Receive with invalid token source";
+        }
+        case rai::ErrorCode::TOKEN_BALANCE_OVERFLOW:
+        {
+            return "Token balance overflow";
+        }
         default:
         {
             return "Invalid error code";

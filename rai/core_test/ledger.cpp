@@ -65,6 +65,10 @@ TEST(Ledger, Abort)
             EXPECT_EQ(false, error);
             error = ledger.AccountInfoGet(transaction, rai::Account(4), info);
             EXPECT_EQ(false, error);
+            error = ledger.AccountInfoDel(transaction, rai::Account(1));
+            EXPECT_EQ(false, error);
+            error = ledger.AccountInfoGet(transaction, rai::Account(1), info);
+            EXPECT_EQ(true, error);
             uint32_t version = 0;
             error = ledger.VersionGet(transaction, version);
             EXPECT_EQ(false, error);

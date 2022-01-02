@@ -47,9 +47,9 @@ std::string rai::TokenSourceToString(rai::TokenSource source)
         {
             return "invalid";
         }
-        case rai::TokenSource::TRANSFER:
+        case rai::TokenSource::SEND:
         {
-            return "transfer";
+            return "send";
         }
         case rai::TokenSource::MAP:
         {
@@ -76,9 +76,9 @@ std::string rai::TokenSourceToString(rai::TokenSource source)
 
 rai::TokenSource rai::StringToTokenSource(const std::string& str)
 {
-    if ("transfer" == str)
+    if ("send" == str)
     {
-        return rai::TokenSource::TRANSFER;
+        return rai::TokenSource::SEND;
     }
     else if ("map" == str)
     {

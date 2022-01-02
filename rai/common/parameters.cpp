@@ -228,3 +228,26 @@ uint16_t rai::MaxAllowedForks(uint64_t timestamp)
     }
     return static_cast<uint16_t>(forks);
 }
+
+rai::Chain rai::CurrentChain()
+{
+    switch (rai::RAI_NETWORK)
+    {
+        case rai::RaiNetworks::TEST:
+        {
+            return rai::Chain::RAICOIN_TEST;
+        }
+        case rai::RaiNetworks::BETA:
+        {
+            return rai::Chain::RAICOIN_TEST;
+        }
+        case rai::RaiNetworks::LIVE:
+        {
+            return rai::Chain::RAICOIN;
+        }
+        default:
+        {
+            throw std::runtime_error("Unknown rai::RAI_NETWORK");
+        }
+    }
+}

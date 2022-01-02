@@ -236,6 +236,11 @@ TEST(uint256_union, constructor)
     ASSERT_EQ(false, value3.IsZero());
     value3.Clear();
     ASSERT_EQ(true, value3.IsZero());
+
+    rai::uint256_union value4;
+    value4.DecodeHex(
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    ASSERT_EQ(value4, rai::uint256_union::Max());
 }
 
 TEST(uint256_union, relational_operator)
@@ -331,6 +336,15 @@ TEST(uint256_union, arithmetic_operator)
     result = 1;
     result -= 2;
     ASSERT_EQ(rai::uint256_t(-1), result.Number());
+
+    rai::uint256_union value4 = rai::uint256_t(
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0");
+    rai::uint256_union value5 = rai::uint256_t("0x10");
+    rai::uint256_union value6(value4);
+    value6 += value5;
+    ASSERT_EQ(0, value6.Number());
+    ASSERT_EQ(true, value6 < value4);
+    ASSERT_EQ(true, value6 <= value5);
 }
 
 TEST(uint256_union, dec)
