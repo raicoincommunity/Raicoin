@@ -90,7 +90,27 @@ private:
     rai::TokenError ProcessReceive_(rai::Transaction&,
                                     const std::shared_ptr<rai::Block>&,
                                     const rai::ExtensionToken&);
+    rai::TokenError ProcessSwap_(rai::Transaction&,
+                                 const std::shared_ptr<rai::Block>&,
+                                 const rai::ExtensionToken&);
+    rai::TokenError ProcessSwapConfig_(rai::Transaction&,
+                                       const std::shared_ptr<rai::Block>&,
+                                       const rai::ExtensionTokenSwap&);
+    rai::TokenError ProcessSwapMake_(rai::Transaction&,
+                                     const std::shared_ptr<rai::Block>&,
+                                     const rai::ExtensionTokenSwap&);
+    rai::TokenError ProcessSwapInquiry_(rai::Transaction&,
+                                        const std::shared_ptr<rai::Block>&,
+                                        const rai::ExtensionTokenSwap&);
+    rai::TokenError ProcessSwapInquiryAck_(rai::Transaction&,
+                                           const std::shared_ptr<rai::Block>&,
+                                           const rai::ExtensionTokenSwap&);
+    rai::TokenError ProcessSwapTake_(rai::Transaction&,
+                                     const std::shared_ptr<rai::Block>&,
+                                     const rai::ExtensionTokenSwap&);
     rai::ErrorCode ProcessError_(rai::Transaction&, const rai::TokenError&);
+    rai::ErrorCode PurgeInquiryWaiting_(rai::Transaction&, const rai::Account&,
+                                        uint64_t);
     rai::ErrorCode UpdateLedgerCommon_(
         rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
         const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
@@ -112,7 +132,17 @@ private:
                                                 const rai::TokenKey&,
                                                 const rai::TokenValue&,
                                                 const rai::Account&, uint64_t);
+    rai::ErrorCode UpdateLedgerAccountOrdersInc_(rai::Transaction&,
+                                                 const rai::Account&);
+    rai::ErrorCode UpdateLedgerAccountOrdersDec_(rai::Transaction&,
+                                                 const rai::Account&);
+    rai::ErrorCode UpdateLedgerAccountSwapsInc_(rai::Transaction&,
+                                                 const rai::Account&);
+    rai::ErrorCode UpdateLedgerAccountSwapsDec_(rai::Transaction&,
+                                                 const rai::Account&);
 
+    bool CheckInquiryValue_(const rai::OrderInfo&,
+                            const rai::TokenValue&) const;
     std::function<void(const rai::TokenReceivableKey&,
                        const rai::TokenReceivable&)>
         receivable_observer_;

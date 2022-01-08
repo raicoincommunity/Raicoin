@@ -27,8 +27,14 @@ rai::Store::Store(rai::ErrorCode& error_code,
       token_holders_(0),
       account_token_id_(0),
       token_transfer_(0),
-      token_id_transfer_(0)
-
+      token_id_transfer_(0),
+      swap_main_account_(0),
+      account_swap_info_(0),
+      order_info_(0),
+      order_index_(0),
+      swap_info_(0),
+      inquiry_waiting_(0),
+      take_waiting_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -221,6 +227,58 @@ rai::Store::Store(rai::ErrorCode& error_code,
 
     ret = mdb_dbi_open(transaction, "token_id_transfer", MDB_CREATE,
                        &token_id_transfer_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "swap_main_account", MDB_CREATE,
+                       &swap_main_account_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "account_swap_info", MDB_CREATE,
+                       &account_swap_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "order_info", MDB_CREATE, &order_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "order_index", MDB_CREATE, &order_index_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "swap_info", MDB_CREATE, &swap_info_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "inquiry_waiting", MDB_CREATE,
+                       &inquiry_waiting_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "take_waiting", MDB_CREATE, &take_waiting_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

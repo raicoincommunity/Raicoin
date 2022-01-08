@@ -1244,7 +1244,7 @@ TEST(ExtensionToken, SwapConfig)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 }
 
 TEST(ExtensionToken, SwapMake)
@@ -1674,6 +1674,24 @@ TEST(ExtensionToken, SwapInquiry)
     hex += "0603";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
     hex += "0000000000000100";  // order height
+    hex += "0000000000000000";  // ack height
+    hex += "100000001234567F"; // timeout
+    hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
+    hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
+    bytes2.clear();
+    ret = TestDecodeHex(hex, bytes2);
+    EXPECT_EQ(false, ret);
+    error_code = extensions2.FromBytes(bytes2);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
+    count = extensions2.Count(rai::ExtensionType::TOKEN);
+    EXPECT_EQ(1, count);
+    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
+
+    hex = "0004007A";  // type + length
+    hex += "0603";  // op_swap + subop
+    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // maker
+    hex += "0000000000000100";  // order height
     hex += "00000000000000FF";  // ack height
     hex += "100000001234567F"; // timeout
     hex += "0000000000000000000000000000000000000000000000000000000000010000"; // token value
@@ -1808,6 +1826,25 @@ TEST(ExtensionToken, SwapInquiryAck)
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
     hex += "0000000000000100";  // inquiry height;
     hex += "FFFFFFFFFFFFFFFF";  // trade height;
+    hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
+    hex +=
+        "15E23A2EF0D6E0F5B5095F04BE0D157943921927FF0603D435E72D5B333DFEBD956799"
+        "A292100F759343C1829B98CCAD2D700C7C29299866E89E270EC4BACA00";  // signature
+    bytes2.clear();
+    ret = TestDecodeHex(hex, bytes2);
+    EXPECT_EQ(false, ret);
+    error_code = extensions2.FromBytes(bytes2);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
+    count = extensions2.Count(rai::ExtensionType::TOKEN);
+    EXPECT_EQ(1, count);
+    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
+    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT, error_code);
+
+    hex = "00040092";  // type + length
+    hex += "0604";  // op_swap + subop
+    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
+    hex += "0000000000000100";  // inquiry height;
+    hex += "0000000000000000";  // trade height;
     hex += "76E483400A6440E31DE6494A9462EB768F032B9325B16A22E2BD09B812661FE3"; // share
     hex +=
         "15E23A2EF0D6E0F5B5095F04BE0D157943921927FF0603D435E72D5B333DFEBD956799"

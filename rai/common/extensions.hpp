@@ -404,7 +404,7 @@ public:
     rai::TokenValue value_want_;
     rai::TokenValue min_offer_;
     rai::TokenValue max_offer_;
-    uint64_t timeout_;
+    uint64_t timeout_; // a hint for the account it's self, not mandatory
 };
 
 class ExtensionTokenSwapInquiry : public rai::ExtensionTokenSwap::Data

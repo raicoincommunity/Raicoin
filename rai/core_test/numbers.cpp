@@ -733,4 +733,8 @@ TEST(SecureMath, u256)
               u512);
     u512 /= u256_max;
     EXPECT_EQ(std::numeric_limits<rai::uint256_t>::max(), u512);
+    EXPECT_EQ(true,
+              rai::uint512_t(10) * rai::uint512_t(2) % rai::uint512_t(3) != 0);
+    EXPECT_EQ(false,
+              rai::uint512_t(9) * rai::uint512_t(2) % rai::uint512_t(3) != 0);
 }

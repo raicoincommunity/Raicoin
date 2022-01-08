@@ -335,11 +335,24 @@ public:
     OrderIndex(rai::Chain, const rai::TokenAddress&, rai::Chain,
                const rai::TokenAddress&, const rai::SwapRate&,
                const rai::Account&, uint64_t);
+    OrderIndex(rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
+               rai::Chain, const rai::TokenAddress&, const rai::SwapRate&,
+               const rai::Account&, uint64_t);
+    OrderIndex(rai::Chain, const rai::TokenAddress&, rai::Chain,
+               const rai::TokenAddress&, const rai::TokenValue&,
+               const rai::SwapRate&, const rai::Account&, uint64_t);
+    OrderIndex(rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
+               rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
+               const rai::SwapRate&, const rai::Account&, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
     rai::TokenKey token_offer_;
+    rai::TokenType type_offer_;
+    rai::TokenValue id_offer_;
     rai::TokenKey token_want_;
+    rai::TokenType type_want_;
+    rai::TokenValue id_want_;
     rai::SwapRate rate_;
     rai::Account maker_;
     uint64_t height_;
@@ -350,27 +363,29 @@ class OrderInfo
 public:
     OrderInfo();
     OrderInfo(const rai::Account&, rai::Chain, const rai::TokenAddress&,
-              rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
-              const rai::TokenValue&, uint64_t);
+              rai::TokenType, rai::Chain, const rai::TokenAddress&,
+              rai::TokenType, const rai::TokenValue&, const rai::TokenValue&,
+              uint64_t);
     OrderInfo(const rai::Account&, rai::Chain, const rai::TokenAddress&,
-              rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
-              const rai::TokenValue&, const rai::TokenValue&,
-              const rai::TokenValue&, uint64_t);
+              rai::TokenType, rai::Chain, const rai::TokenAddress&,
+              rai::TokenType, const rai::TokenValue&, const rai::TokenValue&,
+              const rai::TokenValue&, const rai::TokenValue&, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
     enum class FinishedBy : uint8_t
     {
         INVALID = 0,
-        TIMEOUT = 1,
-        CANCEL  = 2,
-        FULFILL = 3,
+        CANCEL  = 1,
+        FULFILL = 2,
         MAX
     };
 
     rai::Account main_;
     rai::TokenKey token_offer_;
+    rai::TokenType type_offer_;
     rai::TokenKey token_want_;
+    rai::TokenType type_want_;
     rai::TokenValue value_offer_;
     rai::TokenValue value_want_;
     rai::TokenValue min_offer_;
@@ -378,7 +393,6 @@ public:
     rai::TokenValue left_;
     uint64_t timeout_;
     uint64_t finished_height_;
-    bool has_nft_;
     FinishedBy finished_by_;
 };
 
@@ -445,6 +459,51 @@ public:
     rai::PublicKey taker_share_;
     rai::PublicKey maker_share_;
     rai::Signature maker_signature_;
+    rai::BlockHash trade_previous_;
+};
+
+class AccountSwapInfo
+{
+public:
+    AccountSwapInfo();
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    uint64_t active_orders_;
+    uint64_t total_orders_;
+    uint64_t active_swaps_;
+    uint64_t total_swaps_;
+    uint64_t trusted_;
+    uint64_t blocked_;
+};
+
+class InquiryWaiting
+{
+public:
+    InquiryWaiting();
+    InquiryWaiting(const rai::Account&, uint64_t, const rai::Account&,
+                   uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account main_;
+    uint64_t ack_height_;
+    rai::Account taker_;
+    uint64_t inquiry_height_;
+};
+
+class TakeWaiting
+{
+public:
+    TakeWaiting();
+    TakeWaiting(const rai::Account&, uint64_t, const rai::Account&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account maker_;
+    uint64_t trade_height_;
+    rai::Account taker_;
+    uint64_t inquiry_height_;
 };
 
 class ReceivableInfo
@@ -649,6 +708,7 @@ public:
                             const rai::TokenReceivable&);
     bool TokenReceivableGet(rai::Transaction&, const rai::TokenReceivableKey&,
                             rai::TokenReceivable&) const;
+    bool TokenReceivableDel(rai::Transaction&, const rai::TokenReceivableKey&);
     bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,
@@ -662,6 +722,33 @@ public:
     bool TokenTransferPut(rai::Transaction&, const rai::TokenTransfer&);
     bool TokenIdTransferPut(rai::Transaction&, const rai::TokenIdTransferKey&,
                             const rai::Account&, uint64_t);
+    bool SwapMainAccountPut(rai::Transaction&, const rai::Account&,
+                            const rai::Account&);
+    bool SwapMainAccountGet(rai::Transaction&, const rai::Account&,
+                            rai::Account&) const;
+    bool AccountSwapInfoPut(rai::Transaction&, const rai::Account&,
+                            const rai::AccountSwapInfo&);
+    bool AccountSwapInfoGet(rai::Transaction&, const rai::Account&,
+                            rai::AccountSwapInfo&) const;
+    bool OrderInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
+                      const rai::OrderInfo&);
+    bool OrderInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
+                      rai::OrderInfo&) const;
+    bool OrderIndexPut(rai::Transaction&, const rai::OrderIndex&);
+    bool OrderIndexDel(rai::Transaction&, const rai::OrderIndex&);
+    bool SwapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
+                     const rai::SwapInfo&);
+    bool SwapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
+                     rai::SwapInfo&) const;
+    bool InquiryWaitingPut(rai::Transaction&, const rai::InquiryWaiting&);
+    bool InquiryWaitingGet(const rai::Iterator&, rai::InquiryWaiting&) const;
+    bool InquiryWaitingDel(rai::Transaction&, const rai::InquiryWaiting&);
+    bool InquiryWaitingExist(rai::Transaction&,
+                             const rai::InquiryWaiting&) const;
+    rai::Iterator InquiryWaitingLowerBound(rai::Transaction&,
+                                           const rai::Account&, uint64_t);
+    rai::Iterator InquiryWaitingUpperBound(rai::Transaction&,
+                                           const rai::Account&, uint64_t);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);

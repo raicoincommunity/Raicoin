@@ -2222,11 +2222,6 @@ rai::ErrorCode rai::ExtensionTokenSwapConfig::DeserializeJson(
 
 rai::ErrorCode rai::ExtensionTokenSwapConfig::CheckData() const
 {
-    if (main_.IsZero())
-    {
-        return rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT;
-    }
-
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -2660,7 +2655,8 @@ rai::ErrorCode rai::ExtensionTokenSwapInquiryAck::CheckData() const
         return rai::ErrorCode::TOKEN_SWAP_INQUIRY_HEIGHT;
     }
 
-    if (trade_height_ == std::numeric_limits<uint64_t>::max())
+    if (trade_height_ == std::numeric_limits<uint64_t>::max()
+        || trade_height_ == 0)
     {
         return rai::ErrorCode::TOKEN_SWAP_TRADE_HEIGHT;
     }
