@@ -1827,6 +1827,50 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Token balance overflow";
         }
+        case rai::ErrorCode::TOKEN_SWAP_TIMESTAMP:
+        {
+            return "Invalid timestamp";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE:
+        {
+            return "Have no enough token";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT_EMPTY:
+        {
+            return "Token swap main account not set";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_ORDERS_EXCEEDED:
+        {
+            return "The account's max allowed active orders is exceeded";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_WITH_SELF:
+        {
+            return "Swap token with self";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_ORDER_MISS:
+        {
+            return "The order doesn't exist";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_INQUIRY_VALUE:
+        {
+            return "Swap inquiry with invalid token value or id";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_WITH_MAIN_ACCOUNT:
+        {
+            return "Swap token with main account";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_INQUIRY_WAITING_MISS:
+        {
+            return "The swap inquiry doesn't exist or has been replied";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TIMEOUT:
+        {
+            return "Swap timeout";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_STATUS_UNEXPECTED:
+        {
+            return "Unexpected swap status";
+        }
         default:
         {
             return "Invalid error code";
