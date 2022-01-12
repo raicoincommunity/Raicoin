@@ -2066,11 +2066,10 @@ TEST(ExtensionToken, SwapTakeAck)
 TEST(ExtensionToken, SwapTakeNack)
 {
     std::string hex;
-    hex = "00040032";  // type + length
+    hex = "0004002A";  // type + length
     hex += "0607";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
     hex += "0000000000000100";  // inquiry height;
-    hex += "0000000000000101"; // take height
     std::vector<uint8_t> bytes;
     bool ret = TestDecodeHex(hex, bytes);
     EXPECT_EQ(false, ret);
@@ -2099,7 +2098,6 @@ TEST(ExtensionToken, SwapTakeNack)
         "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0",
         take_nack->taker_.StringHex());
     EXPECT_EQ(256, take_nack->inquiry_height_);
-    EXPECT_EQ(257, take_nack->take_height_);
 
     EXPECT_EQ(bytes, extensions.Bytes());
     rai::Extensions extensions2;
@@ -2110,11 +2108,10 @@ TEST(ExtensionToken, SwapTakeNack)
     rai::ExtensionToken token2;
     std::vector<uint8_t> bytes2;
 
-    hex = "00040032";  // type + length
+    hex = "0004002A";  // type + length
     hex += "0607";  // op_swap + subop
     hex += "0000000000000000000000000000000000000000000000000000000000000000"; // taker
     hex += "0000000000000100";  // inquiry height;
-    hex += "0000000000000101"; // take height
     bytes2.clear();
     ret = TestDecodeHex(hex, bytes2);
     EXPECT_EQ(false, ret);
@@ -2125,11 +2122,10 @@ TEST(ExtensionToken, SwapTakeNack)
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
     EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TAKER, error_code);
 
-    hex = "00040032";  // type + length
+    hex = "0004002A";  // type + length
     hex += "0607";  // op_swap + subop
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
     hex += "FFFFFFFFFFFFFFFF";  // inquiry height;
-    hex += "0000000000000101"; // take height
     bytes2.clear();
     ret = TestDecodeHex(hex, bytes2);
     EXPECT_EQ(false, ret);
@@ -2139,51 +2135,6 @@ TEST(ExtensionToken, SwapTakeNack)
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
     EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_INQUIRY_HEIGHT, error_code);
-
-    hex = "00040032";  // type + length
-    hex += "0607";  // op_swap + subop
-    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
-    hex += "0000000000000101";  // inquiry height;
-    hex += "FFFFFFFFFFFFFFFF"; // take height
-    bytes2.clear();
-    ret = TestDecodeHex(hex, bytes2);
-    EXPECT_EQ(false, ret);
-    error_code = extensions2.FromBytes(bytes2);
-    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
-    count = extensions2.Count(rai::ExtensionType::TOKEN);
-    EXPECT_EQ(1, count);
-    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT, error_code);
-
-    hex = "00040032";  // type + length
-    hex += "0607";  // op_swap + subop
-    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
-    hex += "0000000000000101";  // inquiry height;
-    hex += "0000000000000101"; // take height
-    bytes2.clear();
-    ret = TestDecodeHex(hex, bytes2);
-    EXPECT_EQ(false, ret);
-    error_code = extensions2.FromBytes(bytes2);
-    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
-    count = extensions2.Count(rai::ExtensionType::TOKEN);
-    EXPECT_EQ(1, count);
-    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT, error_code);
-
-    hex = "00040032";  // type + length
-    hex += "0607";  // op_swap + subop
-    hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // taker
-    hex += "0000000000000101";  // inquiry height;
-    hex += "0000000000000100"; // take height
-    bytes2.clear();
-    ret = TestDecodeHex(hex, bytes2);
-    EXPECT_EQ(false, ret);
-    error_code = extensions2.FromBytes(bytes2);
-    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
-    count = extensions2.Count(rai::ExtensionType::TOKEN);
-    EXPECT_EQ(1, count);
-    error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT, error_code);
 }
 
 TEST(ExtensionToken, SwapCancel)

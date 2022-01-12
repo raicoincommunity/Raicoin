@@ -333,18 +333,10 @@ typename std::enable_if<std::is_enum<T>::value>::type ToStringStream(
 }
 
 template <typename T, typename... Args>
-typename std::enable_if<std::is_enum<T>::value>::type ToStringStream(
+void ToStringStream(
     std::stringstream& stream, T value, Args... args)
 {
-    stream << static_cast<uint64_t>(value);
-    ToStringStream(stream, args...);
-}
-
-template <typename T, typename... Args>
-typename std::enable_if<!std::is_enum<T>::value>::type ToStringStream(
-    std::stringstream& stream, T value, Args... args)
-{
-    stream << value;
+    ToStringStream(stream, value);
     ToStringStream(stream, args...);
 }
 

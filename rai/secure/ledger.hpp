@@ -372,6 +372,7 @@ public:
               const rai::TokenValue&, const rai::TokenValue&, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
+    bool Finished() const;
 
     enum class FinishedBy : uint8_t
     {
@@ -416,8 +417,8 @@ class TokenSwapIndex
 {
 public:
     TokenSwapIndex();
-    TokenSwapIndex(rai::Chain, const rai::TokenAddress&, const rai::Account&,
-                   uint64_t, uint64_t);
+    TokenSwapIndex(const rai::TokenKey&, const rai::Account&, uint64_t,
+                   uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
@@ -745,10 +746,24 @@ public:
     bool InquiryWaitingDel(rai::Transaction&, const rai::InquiryWaiting&);
     bool InquiryWaitingExist(rai::Transaction&,
                              const rai::InquiryWaiting&) const;
+    bool InquiryWaitingExist(rai::Transaction&, const rai::Account&,
+                             uint64_t) const;
     rai::Iterator InquiryWaitingLowerBound(rai::Transaction&,
-                                           const rai::Account&, uint64_t);
+                                           const rai::Account&, uint64_t) const;
     rai::Iterator InquiryWaitingUpperBound(rai::Transaction&,
-                                           const rai::Account&, uint64_t);
+                                           const rai::Account&, uint64_t) const;
+    bool TakeWaitingPut(rai::Transaction&, const rai::TakeWaiting&);
+    bool TakeWaitingGet(const rai::Iterator&, rai::TakeWaiting&) const;
+    bool TakeWaitingDel(rai::Transaction&, const rai::TakeWaiting&);
+    bool TakeWaitingExist(rai::Transaction&, const rai::TakeWaiting&) const;
+    bool TakeWaitingExist(rai::Transaction&, const rai::Account&,
+                          uint64_t) const;
+    rai::Iterator TakeWaitingLowerBound(rai::Transaction&, const rai::Account&,
+                                        uint64_t) const;
+    rai::Iterator TakeWaitingUpperBound(rai::Transaction&, const rai::Account&,
+                                        uint64_t) const;
+    bool OrderSwapIndexPut(rai::Transaction&, const rai::OrderSwapIndex&);
+    bool TokenSwapIndexPut(rai::Transaction&, const rai::TokenSwapIndex&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);

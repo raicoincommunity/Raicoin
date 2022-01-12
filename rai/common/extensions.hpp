@@ -493,7 +493,6 @@ public:
 
     rai::Account taker_;
     uint64_t inquiry_height_;
-    uint64_t take_height_;
 };
 
 class ExtensionTokenSwapCancel : public rai::ExtensionTokenSwap::Data

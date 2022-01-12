@@ -34,7 +34,9 @@ rai::Store::Store(rai::ErrorCode& error_code,
       order_index_(0),
       swap_info_(0),
       inquiry_waiting_(0),
-      take_waiting_(0)
+      take_waiting_(0),
+      order_swap_index_(0),
+      token_swap_index_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -279,6 +281,22 @@ rai::Store::Store(rai::ErrorCode& error_code,
     }
 
     ret = mdb_dbi_open(transaction, "take_waiting", MDB_CREATE, &take_waiting_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "order_swap_index", MDB_CREATE,
+                       &order_swap_index_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "token_swap_index", MDB_CREATE,
+                       &token_swap_index_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

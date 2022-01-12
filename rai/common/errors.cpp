@@ -1861,7 +1861,7 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::TOKEN_SWAP_INQUIRY_WAITING_MISS:
         {
-            return "The swap inquiry doesn't exist or has been replied";
+            return "The swap inquiry request doesn't exist or has been replied";
         }
         case rai::ErrorCode::TOKEN_SWAP_TIMEOUT:
         {
@@ -1870,6 +1870,30 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_SWAP_STATUS_UNEXPECTED:
         {
             return "Unexpected swap status";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TAKE_WAITING_MISS:
+        {
+            return "The swap take request doesn't exist or has been replied";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TAKE_ACK_VALUE:
+        {
+            return "Swap take ack with invalid token value or id";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_ORDER_FINISHED:
+        {
+            return "The order has already been fulfilled or canceled";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_MISS:
+        {
+            return "The swap doesn't exist";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_ACCOUNT_NOT_MAKER:
+        {
+            return "The current account is not the swap maker";
+        }
+        case rai::ErrorCode::TOKEN_SWAP_TAKE_NACK_HEIGHT:
+        {
+            return "Invalid take nack height";
         }
         default:
         {
