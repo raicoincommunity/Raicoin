@@ -2844,7 +2844,7 @@ rai::ErrorCode rai::ExtensionTokenSwapTakeAck::CheckData() const
 }
 
 rai::ExtensionTokenSwapTakeNack::ExtensionTokenSwapTakeNack()
-    : inquiry_height_(0), take_height_(0)
+    : inquiry_height_(0)
 {
 }
 
@@ -2852,7 +2852,6 @@ void rai::ExtensionTokenSwapTakeNack::Serialize(rai::Stream& stream) const
 {
     rai::Write(stream, taker_.bytes);
     rai::Write(stream, inquiry_height_);
-    rai::Write(stream, take_height_);
 }
 
 rai::ErrorCode rai::ExtensionTokenSwapTakeNack::Deserialize(
@@ -2862,9 +2861,6 @@ rai::ErrorCode rai::ExtensionTokenSwapTakeNack::Deserialize(
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, inquiry_height_);
-    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
-
-    error = rai::Read(stream, take_height_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     return CheckData();
@@ -2882,7 +2878,6 @@ void rai::ExtensionTokenSwapTakeNack::SerializeJson(rai::Ptree& ptree) const
 
     ptree.put("taker", taker_.StringAccount());
     ptree.put("inquiry_height", std::to_string(inquiry_height_));
-    ptree.put("take_height", std::to_string(take_height_));
 }
 
 rai::ErrorCode rai::ExtensionTokenSwapTakeNack::DeserializeJson(
@@ -2900,12 +2895,6 @@ rai::ErrorCode rai::ExtensionTokenSwapTakeNack::DeserializeJson(
             rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_INQUIRY_HEIGHT;
         std::string inquiry_height = ptree.get<std::string>("inquiry_height");
         error = rai::StringToUint(inquiry_height, inquiry_height_);
-        IF_ERROR_RETURN(error, error_code);
-
-        error_code =
-            rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_SWAP_TAKE_HEIGHT;
-        std::string take_height = ptree.get<std::string>("take_height");
-        error = rai::StringToUint(take_height, take_height_);
         IF_ERROR_RETURN(error, error_code);
 
         return CheckData();
@@ -2928,16 +2917,6 @@ rai::ErrorCode rai::ExtensionTokenSwapTakeNack::CheckData() const
     if (inquiry_height_ == std::numeric_limits<uint64_t>::max())
     {
         return rai::ErrorCode::TOKEN_SWAP_INQUIRY_HEIGHT;
-    }
-
-    if (take_height_ == std::numeric_limits<uint64_t>::max())
-    {
-        return rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT;
-    }
-
-    if (take_height_ <= inquiry_height_)
-    {
-        return rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT;
     }
 
     return rai::ErrorCode::SUCCESS;
