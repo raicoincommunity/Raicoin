@@ -70,6 +70,10 @@ std::string rai::Provider::ToString(Action action)
         {
             return "alias_change";
         }
+        case rai::Provider::Action::TOKEN_ACCOUNT_TOKENS_INFO:
+        {
+            return "account_tokens_info";
+        }
         default:
         {
             return "";

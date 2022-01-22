@@ -1194,6 +1194,26 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid dns field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_CHAIN:
+        {
+            return "[RPC] The chain field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_CHAIN:
+        {
+            return "[RPC] Invalid chain field";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_ADDRESS_RAW:
+        {
+            return "[RPC] Invalid address_raw field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_ADDRESS:
+        {
+            return "[RPC] The address field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_ADDRESS:
+        {
+            return "[RPC] Invalid address field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";
@@ -1792,8 +1812,8 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         }
         case rai::ErrorCode::TOKEN_UNCIRCULABLE:
         {
-            return "The token is uncirculable, only allowed to transfer/swap "
-                   "with token issuer";
+            return "The token is uncirculable, only allowed to transfer or swap"
+                   " with token issuer";
         }
         case rai::ErrorCode::TOKEN_SEND_MORE_THAN_BALANCE:
         {

@@ -101,3 +101,29 @@ rai::TokenSource rai::StringToTokenSource(const std::string& str)
         return rai::TokenSource::INVALID;
     }
 }
+
+std::string rai::TokenAddressToString(rai::Chain chain,
+                                      const rai::TokenAddress& address)
+{
+    if (chain == rai::Chain::RAICOIN || chain == rai::Chain::RAICOIN_TEST)
+    {
+        return address.StringAccount();
+    }
+    else
+    {
+        return "";
+    }
+}
+
+bool rai::StringToTokenAddress(rai::Chain chain, const std::string& str,
+                               rai::TokenAddress& address)
+{
+    if (chain == rai::Chain::RAICOIN || chain == rai::Chain::RAICOIN_TEST)
+    {
+        return address.DecodeAccount(str);
+    }
+    else
+    {
+        return true;
+    }
+}

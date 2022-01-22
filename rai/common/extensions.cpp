@@ -1367,11 +1367,6 @@ rai::ErrorCode rai::ExtensionToken721Create::CheckData() const
     IF_ERROR_RETURN(error, rai::ErrorCode::TOKEN_BASE_URI_UTF8_CHECK);
     IF_ERROR_RETURN(ctrl, rai::ErrorCode::TOKEN_BASE_URI_UTF8_CHECK);
 
-    if (cap_supply_.IsZero())
-    {
-        return rai::ErrorCode::TOKEN_CAP_SUPPLY;
-    }
-
     return rai::ErrorCode::SUCCESS;
 }
 

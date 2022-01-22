@@ -661,6 +661,42 @@ std::string rai::uint256_union::StringAccount() const
     return result;
 }
 
+std::string rai::uint256_union::StringBalance(uint8_t decimals,
+                                              const std::string& symbol) const
+{
+    std::string result;
+    do
+    {
+        if (IsZero())
+        {
+            result = "0";
+            break;
+        }
+
+        result = StringDec();
+        if (decimals == 0)
+        {
+            break;
+        }
+
+        while (result.size() <= decimals)
+        {
+            result = "0" + result;
+        }
+
+        result = result.insert(result.size() - decimals, ".");
+        rai::StringRightTrim(result, "0");
+        rai::StringRightTrim(result, ".");
+    } while (0);
+
+    if (!symbol.empty())
+    {
+        result += " " + symbol;
+    }
+
+    return result;
+}
+
 void rai::uint256_union::Random()
 {
     rai::random_pool.GenerateBlock(bytes.data(), bytes.size());

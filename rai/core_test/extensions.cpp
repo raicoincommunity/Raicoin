@@ -290,7 +290,7 @@ TEST(ExtensionToken, Create721)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CAP_SUPPLY, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 }
 
 TEST(ExtensionToken, Mint20)

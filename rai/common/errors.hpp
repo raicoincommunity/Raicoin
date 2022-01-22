@@ -292,6 +292,11 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_NAME          = 343,
     RPC_MISS_FIELD_DNS              = 344,
     RPC_INVALID_FIELD_DNS           = 345,
+    RPC_MISS_FIELD_CHAIN            = 346,
+    RPC_INVALID_FIELD_CHAIN         = 347,
+    RPC_INVALID_FIELD_ADDRESS_RAW   = 348,
+    RPC_MISS_FIELD_ADDRESS          = 349,
+    RPC_INVALID_FIELD_ADDRESS       = 350,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

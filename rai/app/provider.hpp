@@ -36,6 +36,8 @@ public:
         ALIAS_QUERY             = 100,
         ALIAS_SEARCH            = 101,
         ALIAS_CHANGE            = 102,
+
+        TOKEN_ACCOUNT_TOKENS_INFO   = 200,
     };
     static std::string ToString(Action);
 
