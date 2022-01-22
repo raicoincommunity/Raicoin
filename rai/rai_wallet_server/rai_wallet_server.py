@@ -102,6 +102,12 @@ if not ALIAS_URL.startswith('wss://'):
     print("Error found in .env: invalid ALIAS_URL")
     sys.exit(0)
 
+TOKEN_URL = os.getenv('TOKEN_URL', 'wss://token.raicoin.org/')
+if not TOKEN_URL.startswith('wss://'):
+    print("Error found in .env: invalid TOKEN_URL")
+    sys.exit(0)
+
+
 SRV_PROVIDERS = 'service_providers'
 SRV_SUBS = 'service_subscriptions'
 MAX_FILTERS_PER_SUBSCRIPTION = 1024
@@ -127,6 +133,10 @@ TASKS = [
     {
         'desc': 'RAI alias',
         'url': ALIAS_URL,
+    },
+    {
+        'desc': 'RAI token',
+        'url': TOKEN_URL,
     },
 ]
 GS['tasks'] = TASKS

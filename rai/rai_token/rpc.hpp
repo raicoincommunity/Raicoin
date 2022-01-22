@@ -18,9 +18,18 @@ public:
 
     void Stop() override;
 
+    void AccountTokenLink();
+    void AccountTokenInfo();
+    void AccountTokensInfo();
     void LedgerVersion();
+    void NextTokenBlocks();
+    void PreviousTokenBlocks();
+    void TokenBlock();
 
 private:
+    bool GetChain_(rai::Chain&);
+    bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);
+
     rai::Token& token_;
 };
 

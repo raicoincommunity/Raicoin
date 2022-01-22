@@ -638,22 +638,12 @@ bool rai::TokenIdInfo::Deserialize(rai::Stream& stream)
 }
 
 rai::AccountTokensInfo::AccountTokensInfo()
-    : head_(rai::Block::INVALID_HEIGHT), blocks_(0), last_active_(0), main_(0)
+    : head_(rai::Block::INVALID_HEIGHT), blocks_(0)
 {
 }
 
-rai::AccountTokensInfo::AccountTokensInfo(uint64_t head, uint64_t blocks,
-                                          uint64_t last_active)
-    : head_(head), blocks_(blocks), last_active_(last_active), main_(0)
-{
-}
-
-rai::AccountTokensInfo::AccountTokensInfo(const rai::Account& account,
-                                          uint64_t last_active)
-    : head_(rai::Block::INVALID_HEIGHT),
-      blocks_(0),
-      last_active_(last_active),
-      main_(account)
+rai::AccountTokensInfo::AccountTokensInfo(uint64_t head, uint64_t blocks)
+    : head_(head), blocks_(blocks)
 {
 }
 
@@ -661,8 +651,6 @@ void rai::AccountTokensInfo::Serialize(rai::Stream& stream) const
 {
     rai::Write(stream, head_);
     rai::Write(stream, blocks_);
-    rai::Write(stream, last_active_);
-    rai::Write(stream, main_.bytes);
 }
 
 bool rai::AccountTokensInfo::Deserialize(rai::Stream& stream)
@@ -671,10 +659,6 @@ bool rai::AccountTokensInfo::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, head_);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, blocks_);
-    IF_ERROR_RETURN(error, true);
-    error = rai::Read(stream, last_active_);
-    IF_ERROR_RETURN(error, true);
-    error = rai::Read(stream, main_.bytes);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -1984,9 +1968,92 @@ bool rai::Ledger::AccountTokenInfoGet(rai::Transaction& transaction,
     return info.Deserialize(stream);
 }
 
+bool rai::Ledger::AccountTokenInfoGet(const rai::Iterator& it,
+                                      rai::Account& account, rai::Chain& chain,
+                                      rai::TokenAddress& address,
+                                      rai::AccountTokenInfo& info) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, chain);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, address.bytes);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = info.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::AccountTokenInfoLowerBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        uint32_t chain = 0;
+        rai::Write(stream, chain);
+        rai::TokenAddress address(0);
+        rai::Write(stream, address.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.account_token_info_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::AccountTokenInfoUpperBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    rai::Account next = account + 1;
+    if (next.IsZero())
+    {
+        rai::StoreIterator store_it(nullptr);
+        return rai::Iterator(std::move(store_it));
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, next.bytes);
+        uint32_t chain = 0;
+        rai::Write(stream, chain);
+        rai::TokenAddress address(0);
+        rai::Write(stream, address.bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.account_token_info_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
 bool rai::Ledger::AccountTokenLinkPut(rai::Transaction& transaction,
                                       const rai::AccountTokenLink& link,
                                       uint64_t previous)
+{
+    return AccountTokenLinkPut(transaction, link, previous,
+                               rai::Block::INVALID_HEIGHT);
+}
+
+bool rai::Ledger::AccountTokenLinkPut(rai::Transaction& transaction,
+                                      const rai::AccountTokenLink& link,
+                                      uint64_t previous, uint64_t successor)
 {
     if (!transaction.write_)
     {
@@ -2002,6 +2069,7 @@ bool rai::Ledger::AccountTokenLinkPut(rai::Transaction& transaction,
     {
         rai::VectorStream stream(bytes_value);
         rai::Write(stream, previous);
+        rai::Write(stream, successor);
     }
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
@@ -2017,6 +2085,15 @@ bool rai::Ledger::AccountTokenLinkGet(rai::Transaction& transaction,
                                       const rai::AccountTokenLink& link,
                                       uint64_t& previous) const
 {
+    uint64_t ignore;
+    return AccountTokenLinkGet(transaction, link, previous, ignore);
+}
+
+bool rai::Ledger::AccountTokenLinkGet(rai::Transaction& transaction,
+                                      const rai::AccountTokenLink& link,
+                                      uint64_t& previous,
+                                      uint64_t& successor) const
+{
     std::vector<uint8_t> bytes_key;
     {
         rai::VectorStream stream(bytes_key);
@@ -2029,7 +2106,32 @@ bool rai::Ledger::AccountTokenLinkGet(rai::Transaction& transaction,
                             store_.account_token_link_, key, value);
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
-    return rai::Read(stream, previous);
+    error = rai::Read(stream, previous);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, successor);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+bool rai::Ledger::AccountTokenLinkSuccessorSet(
+    rai::Transaction& transaction, const rai::AccountTokenLink& link,
+    uint64_t successor)
+{
+    uint64_t previous;
+    bool error = AccountTokenLinkGet(transaction, link, previous);
+    IF_ERROR_RETURN(error, true);
+
+    error = AccountTokenLinkPut(transaction, link, previous, successor);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+bool rai::Ledger::AccountTokenLinkSuccessorGet(
+    rai::Transaction& transaction, const rai::AccountTokenLink& link,
+    uint64_t& successor) const
+{
+    uint64_t ignore;
+    return AccountTokenLinkGet(transaction, link, ignore, successor);
 }
 
 bool rai::Ledger::AccountTokensInfoPut(rai::Transaction& transaction,
@@ -2145,6 +2247,15 @@ bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
                                 const rai::Account& account, uint64_t height,
                                 const rai::TokenBlock& block)
 {
+    return TokenBlockPut(transaction, account, height, block,
+                         rai::Block::INVALID_HEIGHT);
+}
+
+bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                const rai::TokenBlock& block,
+                                uint64_t successor)
+{
     if (!transaction.write_)
     {
         return true;
@@ -2160,6 +2271,7 @@ bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
     {
         rai::VectorStream stream(bytes_value);
         block.Serialize(stream);
+        rai::Write(stream, successor);
     }
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
@@ -2169,6 +2281,59 @@ bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
     IF_ERROR_RETURN(error, error);
 
     return false;
+}
+
+bool rai::Ledger::TokenBlockGet(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                rai::TokenBlock& block) const
+{
+    uint64_t ignore;
+    return TokenBlockGet(transaction, account, height, block, ignore);
+}
+
+bool rai::Ledger::TokenBlockGet(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                rai::TokenBlock& block,
+                                uint64_t& successor) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.token_block_, key, value);
+    IF_ERROR_RETURN(error, true);
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = block.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, successor);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+bool rai::Ledger::TokenBlockSuccessorSet(rai::Transaction& transaction,
+                                         const rai::Account& account,
+                                         uint64_t height,
+                                         uint64_t successor)
+{
+    rai::TokenBlock block;
+    bool error = TokenBlockGet(transaction, account, height, block);
+    IF_ERROR_RETURN(error, true);
+    return TokenBlockPut(transaction, account, height, block, successor);
+}
+
+bool rai::Ledger::TokenBlockSuccessorGet(rai::Transaction& transaction,
+                                         const rai::Account& account,
+                                         uint64_t height,
+                                         uint64_t& successor) const
+{
+    rai::TokenBlock block;
+    return TokenBlockGet(transaction, account, height, block, successor);
 }
 
 bool rai::Ledger::TokenInfoPut(rai::Transaction& transaction,

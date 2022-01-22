@@ -275,16 +275,12 @@ class AccountTokensInfo
 {
 public:
     AccountTokensInfo();
-    AccountTokensInfo(uint64_t, uint64_t, uint64_t);
-    AccountTokensInfo(const rai::Account&, uint64_t);
+    AccountTokensInfo(uint64_t, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
     uint64_t head_;
     uint64_t blocks_;
-    uint64_t last_active_;
-    
-    rai::Account main_;
 };
 
 class AccountTokenInfo
@@ -684,10 +680,25 @@ public:
     bool AccountTokenInfoGet(rai::Transaction&, const rai::Account&, rai::Chain,
                              const rai::TokenAddress&,
                              rai::AccountTokenInfo&) const;
+    bool AccountTokenInfoGet(const rai::Iterator&, rai::Account&, rai::Chain&,
+                             rai::TokenAddress&, rai::AccountTokenInfo&) const;
+    rai::Iterator AccountTokenInfoLowerBound(rai::Transaction&,
+                                             const rai::Account&) const;
+    rai::Iterator AccountTokenInfoUpperBound(rai::Transaction&,
+                                             const rai::Account&) const;
     bool AccountTokenLinkPut(rai::Transaction&, const rai::AccountTokenLink&,
                              uint64_t);
+    bool AccountTokenLinkPut(rai::Transaction&, const rai::AccountTokenLink&,
+                             uint64_t, uint64_t);
     bool AccountTokenLinkGet(rai::Transaction&, const rai::AccountTokenLink&,
                              uint64_t&) const;
+    bool AccountTokenLinkGet(rai::Transaction&, const rai::AccountTokenLink&,
+                             uint64_t&, uint64_t&) const;
+    bool AccountTokenLinkSuccessorSet(rai::Transaction&,
+                                      const rai::AccountTokenLink&, uint64_t);
+    bool AccountTokenLinkSuccessorGet(rai::Transaction&,
+                                      const rai::AccountTokenLink&,
+                                      uint64_t&) const;
     bool AccountTokensInfoPut(rai::Transaction&, const rai::Account&,
                               rai::AccountTokensInfo&);
     bool AccountTokensInfoGet(rai::Transaction&, const rai::Account&,
@@ -701,6 +712,16 @@ public:
                              const rai::AccountTokenId&) const;
     bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
                        const rai::TokenBlock&);
+    bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
+                       const rai::TokenBlock&, uint64_t);
+    bool TokenBlockGet(rai::Transaction&, const rai::Account&, uint64_t,
+                       rai::TokenBlock&) const;
+    bool TokenBlockGet(rai::Transaction&, const rai::Account&, uint64_t,
+                       rai::TokenBlock&, uint64_t&) const;
+    bool TokenBlockSuccessorSet(rai::Transaction&, const rai::Account&,
+                                uint64_t, uint64_t);
+    bool TokenBlockSuccessorGet(rai::Transaction&, const rai::Account&,
+                                uint64_t, uint64_t&) const;
     bool TokenInfoPut(rai::Transaction&, const rai::TokenKey&,
                       const rai::TokenInfo&);
     bool TokenInfoGet(rai::Transaction&, const rai::TokenKey&,

@@ -358,6 +358,7 @@ rai::Provider::Info rai::Token::Provide()
 
     info.actions_.push_back(P::Action::APP_SERVICE_SUBSCRIBE);
     info.actions_.push_back(P::Action::APP_ACCOUNT_SYNC);
+    info.actions_.push_back(P::Action::TOKEN_ACCOUNT_TOKENS_INFO);
     // todo:
 
     return info;
@@ -1496,6 +1497,15 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
             transaction, block, rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
     }
 
+    error = CheckOrderCirculable_(error_code, transaction, order_info,
+                                  inquiry->maker_, block->Account());
+    IF_NOT_SUCCESS_RETURN(error_code);
+    if (error)
+    {
+        return UpdateLedgerCommon_(
+            transaction, block, rai::ErrorCode::TOKEN_UNCIRCULABLE, keys);
+    }
+
     error = CheckInquiryValue_(order_info, inquiry->value_);
     if (error)
     {
@@ -2621,6 +2631,19 @@ rai::ErrorCode rai::Token::UpdateLedgerCommon_(
         }
     }
 
+    if (info.head_ != rai::Block::INVALID_HEIGHT)
+    {
+        error = ledger_.TokenBlockSuccessorSet(transaction, account, info.head_,
+                                               height);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::UpateLedgerCommon_: put token block successor, hash=",
+                block->Hash().StringHex(), ", height=", info.head_));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+    }
+
     rai::TokenBlock token_block(info.head_, block->Hash(), status);
     error = ledger_.TokenBlockPut(transaction, account, height, token_block);
     if (error)
@@ -2633,7 +2656,6 @@ rai::ErrorCode rai::Token::UpdateLedgerCommon_(
 
     info.head_ = height;
     info.blocks_ += 1;
-    info.last_active_ = block->Timestamp();
     error = ledger_.AccountTokensInfoPut(transaction, account, info);
     if (error)
     {
@@ -2661,6 +2683,23 @@ rai::ErrorCode rai::Token::UpdateLedgerCommon_(
                     "Token::UpateLedgerCommon_: unexpected block height, hash=",
                     block->Hash().StringHex()));
                 return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+            }
+        }
+
+        if (account_token_info.head_ != rai::Block::INVALID_HEIGHT)
+        {
+            rai::AccountTokenLink link(account, token.chain_, token.address_,
+                                       account_token_info.head_);
+            error =
+                ledger_.AccountTokenLinkSuccessorSet(transaction, link, height);
+            if (error)
+            {
+                rai::Log::Error(
+                    rai::ToString("Token::UpateLedgerCommon_: put account "
+                                  "token link successor, hash=",
+                                  block->Hash().StringHex(),
+                                  ", height=", account_token_info.head_));
+                return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
             }
         }
 
@@ -3190,6 +3229,48 @@ bool rai::Token::CheckTakeAckValue_(const rai::OrderInfo& order,
     {
         return true;
     }
+}
+
+bool rai::Token::CheckOrderCirculable_(rai::ErrorCode& error_code,
+                                       rai::Transaction& transaction,
+                                       const rai::OrderInfo& order_info,
+                                       const rai::Account& maker,
+                                       const rai::Account& taker) const
+{
+    error_code = rai::ErrorCode::SUCCESS;
+    std::vector<rai::TokenKey> tokens{order_info.token_offer_,
+                                      order_info.token_want_};
+
+    for (const auto& token: tokens)
+    {
+        if (!rai::IsRaicoin(token.chain_))
+        {
+            continue;
+        }
+
+        rai::TokenInfo info;
+        bool error = ledger_.TokenInfoGet(transaction, token, info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::CheckOrderCirculable_: get token info, token.chain=",
+                token.chain_, ", token.address=", token.address_.StringHex()));
+            error_code = rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+            return true;
+        }
+
+        if (info.circulable_)
+        {
+            continue;
+        }
+
+        if (token.address_ != maker && token.address_ != taker)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 rai::OrderIndex rai::Token::MakeOrderIndex_(const rai::OrderInfo& info,

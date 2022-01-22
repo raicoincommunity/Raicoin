@@ -116,15 +116,15 @@ class ExtensionToken : public Extension
 public:
     enum class Op : uint8_t 
     {
-        INVALID         = 0,
-        CREATE          = 1,
-        MINT            = 2,
-        BURN            = 3,
-        SEND            = 4,
-        RECEIVE         = 5,
-        SWAP            = 6,
-        UNMAP           = 7,
-        WRAP            = 8,
+        INVALID = 0,
+        CREATE  = 1,
+        MINT    = 2,
+        BURN    = 3,
+        SEND    = 4,
+        RECEIVE = 5,
+        SWAP    = 6,
+        UNMAP   = 7,
+        WRAP    = 8,
         MAX
     };
     static std::string OpToString(Op);

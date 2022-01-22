@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <rai/common/numbers.hpp>
+#include <rai/common/chain.hpp>
 
 namespace rai
 {
@@ -34,4 +35,7 @@ inline rai::TokenAddress NativeAddress()
     return rai::TokenAddress(1);
 }
 
-}
+std::string TokenAddressToString(rai::Chain, const rai::TokenAddress&);
+bool StringToTokenAddress(rai::Chain, const std::string&, rai::TokenAddress&);
+
+}  // namespace rai

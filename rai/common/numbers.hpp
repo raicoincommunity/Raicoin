@@ -88,6 +88,7 @@ union uint256_union
     std::string StringHex() const;
     std::string StringDec() const;
     std::string StringAccount() const;
+    std::string StringBalance(uint8_t, const std::string& = "") const;
     void Random();
     bool ValidPublicKey() const;
     void ClampKey();

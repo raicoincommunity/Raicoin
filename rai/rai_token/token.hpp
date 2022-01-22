@@ -173,6 +173,9 @@ private:
                             const rai::TokenValue&) const;
     bool CheckTakeAckValue_(const rai::OrderInfo&, const rai::TokenValue&,
                             const rai::TokenValue&) const;
+    bool CheckOrderCirculable_(rai::ErrorCode&, rai::Transaction&,
+                               const rai::OrderInfo&, const rai::Account&,
+                               const rai::Account&) const;
     rai::OrderIndex MakeOrderIndex_(const rai::OrderInfo&, const rai::Account&,
                                     uint64_t) const;
     std::function<void(const rai::TokenReceivableKey&,
