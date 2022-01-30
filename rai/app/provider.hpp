@@ -37,7 +37,16 @@ public:
         ALIAS_SEARCH            = 101,
         ALIAS_CHANGE            = 102,
 
-        TOKEN_ACCOUNT_TOKENS_INFO   = 200,
+        TOKEN_ACCOUNT_TOKENS_INFO           = 200,
+        TOKEN_ACCOUNT_TOKEN_LINK            = 201,
+        TOKEN_BLOCK                         = 202,
+        TOKEN_NEXT_ACCOUNT_TOKEN_LINKS      = 203,
+        TOKEN_NEXT_TOKEN_BLOCKS             = 204,
+        TOKEN_PREVIOUS_ACCOUNT_TOKEN_LINKS  = 205,
+        TOKEN_PREVIOUS_TOKEN_BLOCKS         = 206,
+        TOKEN_RECEIVABLE                    = 207,
+        TOKEN_RECEIVABLES                   = 208,
+        TOKEN_INFO                          = 209,
     };
     static std::string ToString(Action);
 

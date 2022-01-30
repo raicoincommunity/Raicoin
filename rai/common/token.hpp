@@ -25,10 +25,12 @@ enum class TokenSource : uint8_t
     UNWRAP      = 3,
     SWAP        = 4,
     MINT        = 5,
+    REFUND      = 6,
     MAX
 };
 std::string TokenSourceToString(TokenSource);
 TokenSource StringToTokenSource(const std::string&);
+bool IsLocalSource(rai::TokenSource);
 
 inline rai::TokenAddress NativeAddress()
 {

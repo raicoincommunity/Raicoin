@@ -285,6 +285,11 @@ bool rai::TokenKey::Deserialize(rai::Stream& stream)
     return false;
 }
 
+bool rai::TokenKey::Valid() const
+{
+    return chain_ != rai::Chain::INVALID && !address_.IsZero();
+}
+
 rai::TokenTransfer::TokenTransfer()
     : token_(), ts_comp_(0), account_(0), height_(0)
 {
@@ -467,13 +472,23 @@ bool rai::TokenInfo::Deserialize(rai::Stream& stream)
 rai::TokenBlock::TokenBlock()
     : previous_(rai::Block::INVALID_HEIGHT),
       hash_(0),
-      status_(rai::ErrorCode::SUCCESS)
+      status_(rai::ErrorCode::SUCCESS),
+      value_(0),
+      value_op_(rai::TokenBlock::ValueOp::NONE),
+      token_()
 {
 }
 
 rai::TokenBlock::TokenBlock(uint64_t previous, const rai::BlockHash& hash,
-                            rai::ErrorCode status)
-    : previous_(previous), hash_(hash), status_(status)
+                            rai::ErrorCode status, const rai::TokenValue& value,
+                            rai::TokenBlock::ValueOp value_op,
+                            const rai::TokenKey& token)
+    : previous_(previous),
+      hash_(hash),
+      status_(status),
+      value_(value),
+      value_op_(value_op),
+      token_(token)
 {
 }
 
@@ -482,6 +497,9 @@ void rai::TokenBlock::Serialize(rai::Stream& stream) const
     rai::Write(stream, previous_);
     rai::Write(stream, hash_.bytes);
     rai::Write(stream, status_);
+    rai::Write(stream, value_.bytes);
+    rai::Write(stream, value_op_);
+    token_.Serialize(stream);
 }
 
 bool rai::TokenBlock::Deserialize(rai::Stream& stream)
@@ -492,6 +510,12 @@ bool rai::TokenBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, hash_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, status_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, value_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, value_op_);
+    IF_ERROR_RETURN(error, true);
+    error = token_.Deserialize(stream);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -2434,6 +2458,33 @@ bool rai::Ledger::TokenReceivableGet(
     return receivable.Deserialize(stream);
 }
 
+bool rai::Ledger::TokenReceivableGet(const rai::Iterator& it,
+                        rai::TokenReceivableKey& receivable_key,
+                        rai::TokenReceivable& receivable) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = receivable_key.Deserialize(stream_key);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = receivable.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
 bool rai::Ledger::TokenReceivableDel(
     rai::Transaction& transaction,
     const rai::TokenReceivableKey& receivable_key)
@@ -2451,6 +2502,35 @@ bool rai::Ledger::TokenReceivableDel(
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     return store_.Del(transaction.mdb_transaction_, store_.token_receivable_,
                       key, nullptr);
+}
+
+rai::Iterator rai::Ledger::TokenReceivableLowerBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    rai::TokenReceivableKey receivable_key(
+        account, rai::TokenKey(rai::Chain::INVALID, rai::TokenAddress(0)),
+        rai::Chain::INVALID, rai::BlockHash(0));
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        receivable_key.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.token_receivable_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::TokenReceivableUpperBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    rai::Account account_next = account + 1;
+    if (account_next.IsZero())
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+
+    return TokenReceivableLowerBound(transaction, account_next);
 }
 
 bool rai::Ledger::TokenIdInfoPut(rai::Transaction& transaction,

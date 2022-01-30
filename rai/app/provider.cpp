@@ -74,6 +74,42 @@ std::string rai::Provider::ToString(Action action)
         {
             return "account_tokens_info";
         }
+        case rai::Provider::Action::TOKEN_ACCOUNT_TOKEN_LINK:
+        {
+            return "account_token_link";
+        }
+        case rai::Provider::Action::TOKEN_BLOCK:
+        {
+            return "token_block";
+        }
+        case rai::Provider::Action::TOKEN_NEXT_ACCOUNT_TOKEN_LINKS:
+        {
+            return "next_account_token_links";
+        }
+        case rai::Provider::Action::TOKEN_NEXT_TOKEN_BLOCKS:
+        {
+            return "next_token_blocks";
+        }
+        case rai::Provider::Action::TOKEN_PREVIOUS_ACCOUNT_TOKEN_LINKS:
+        {
+            return "previous_account_token_links";
+        }
+        case rai::Provider::Action::TOKEN_PREVIOUS_TOKEN_BLOCKS:
+        {
+            return "previous_token_blocks";
+        }
+        case rai::Provider::Action::TOKEN_RECEIVABLE:
+        {
+            return "token_receivable";
+        }
+        case rai::Provider::Action::TOKEN_RECEIVABLES:
+        {
+            return "token_receivables";
+        }
+        case rai::Provider::Action::TOKEN_INFO:
+        {
+            return "token_info";
+        }
         default:
         {
             return "";

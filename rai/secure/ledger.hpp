@@ -139,6 +139,7 @@ public:
     TokenKey(rai::Chain, const rai::TokenAddress&);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
+    bool Valid() const;
 
     rai::Chain chain_;
     rai::TokenAddress address_;
@@ -203,14 +204,27 @@ public:
 class TokenBlock
 {
 public:
+    enum class ValueOp : uint8_t
+    {
+        NONE = 0,
+        INCREASE = 1,
+        DECREASE = 2,
+    };
+
     TokenBlock();
-    TokenBlock(uint64_t, const rai::BlockHash&, rai::ErrorCode);
+    TokenBlock(uint64_t, const rai::BlockHash&, rai::ErrorCode,
+               const rai::TokenValue&, rai::TokenBlock::ValueOp,
+               const rai::TokenKey&);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
+
 
     uint64_t previous_;
     rai::BlockHash hash_;
     rai::ErrorCode status_;
+    rai::TokenValue value_;
+    ValueOp value_op_;
+    rai::TokenKey token_;
 };
 
 class TokenHolder
@@ -730,7 +744,13 @@ public:
                             const rai::TokenReceivable&);
     bool TokenReceivableGet(rai::Transaction&, const rai::TokenReceivableKey&,
                             rai::TokenReceivable&) const;
+    bool TokenReceivableGet(const rai::Iterator&, rai::TokenReceivableKey&,
+                            rai::TokenReceivable&) const;
     bool TokenReceivableDel(rai::Transaction&, const rai::TokenReceivableKey&);
+    rai::Iterator TokenReceivableLowerBound(rai::Transaction&,
+                                           const rai::Account&) const;
+    rai::Iterator TokenReceivableUpperBound(rai::Transaction&,
+                                           const rai::Account&) const;
     bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,

@@ -67,6 +67,10 @@ std::string rai::TokenSourceToString(rai::TokenSource source)
         {
             return "mint";
         }
+        case rai::TokenSource::REFUND:
+        {
+            return "refund";
+        }
         default:
         {
             return "unknown";
@@ -96,10 +100,21 @@ rai::TokenSource rai::StringToTokenSource(const std::string& str)
     {
         return rai::TokenSource::MINT;
     }
+    else if ("refund" == str)
+    {
+        return rai::TokenSource::REFUND;
+    }
     else
     {
         return rai::TokenSource::INVALID;
     }
+}
+
+bool rai::IsLocalSource(rai::TokenSource source)
+{
+    return source == rai::TokenSource::MINT || source == rai::TokenSource::SEND
+           || source == rai::TokenSource::SWAP
+           || source == rai::TokenSource::REFUND;
 }
 
 std::string rai::TokenAddressToString(rai::Chain chain,
