@@ -1027,7 +1027,7 @@ TEST(ExtensionToken, Receive)
     hex = "0004008F";  // type + length
     hex += "050000000101";  // op_receive + chain + token type
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // token address
-    hex += "06"; // token source
+    hex += "07"; // token source
     hex += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0"; // from
     hex += "0000000000000001"; // block height
     hex += "15E23A2EF0D6E0F5B5095F04BE0D157943921927FF0603D435E72D5B333DFEBD"; // tx hash

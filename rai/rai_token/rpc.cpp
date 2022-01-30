@@ -23,7 +23,7 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         AccountTokenInfo();
     }
-    if (action == "account_tokens_info")
+    else if (action == "account_tokens_info")
     {
         AccountTokensInfo();
     }
@@ -31,9 +31,17 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         LedgerVersion();
     }
+    else if (action == "next_account_token_links")
+    {
+        NextAccountTokenLinks();
+    }
     else if (action == "next_token_blocks")
     {
         NextTokenBlocks();
+    }
+    else if (action == "previous_account_token_links")
+    {
+        PreviousAccountTokenLinks();
     }
     else if (action == "previous_token_blocks")
     {
@@ -42,6 +50,14 @@ void rai::TokenRpcHandler::ProcessImpl()
     else if (action == "token_block")
     {
         TokenBlock();
+    }
+    else if (action == "token_info")
+    {
+        TokenInfo();
+    }
+    else if (action == "token_receivables")
+    {
+        TokenReceivables();
     }
     else if (action == "stop")
     {
@@ -78,11 +94,11 @@ void rai::TokenRpcHandler::AccountTokenLink()
     error = GetTokenAddress_(chain, address);
     IF_ERROR_RETURN_VOID(error);
     response_.put("address", rai::TokenAddressToString(chain, address));
+    response_.put("address_raw", address.StringHex());
 
     uint64_t height;
     error = GetHeight_(height);
     IF_ERROR_RETURN_VOID(error);
-    response_.put("height", std::to_string(height));
 
     rai::Transaction transaction(error_code_, token_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
@@ -108,21 +124,7 @@ void rai::TokenRpcHandler::AccountTokenLink()
         response_.put("error", "Get token block failed");
         return;
     }
-    response_.put("status", rai::ErrorString(token_block.status_));
-    response_.put("status_code",
-                  std::to_string(static_cast<uint32_t>(token_block.status_)));
-    response_.put("hash", token_block.hash_.StringHex());
-
-    std::shared_ptr<rai::Block> block(nullptr);
-    error = token_.ledger_.BlockGet(transaction, token_block.hash_, block);
-    if (error)
-    {
-        response_.put("error", "Get block failed");
-        return;
-    }
-    rai::Ptree block_ptree;
-    block->SerializeJson(block_ptree);
-    response_.put_child("block", block_ptree);
+    PutTokenBlock_(transaction, height, token_block, response_);
 }
 
 void rai::TokenRpcHandler::AccountTokenInfo()
@@ -281,6 +283,84 @@ void rai::TokenRpcHandler::LedgerVersion()
     response_.put("verison", std::to_string(version));
 }
 
+void rai::TokenRpcHandler::NextAccountTokenLinks()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("address", rai::TokenAddressToString(chain, address));
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    uint64_t count;
+    error = GetCount_(count);
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint64_t successor;
+    rai::AccountTokenLink link(account, chain, address, height);
+    error = token_.ledger_.AccountTokenLinkSuccessorGet(transaction, link,
+                                                        successor);
+    if (error)
+    {
+        response_.put("error", "The current account token link does not exist");
+        return;
+    }
+
+    rai::Ptree token_links;
+    while (successor != rai::Block::INVALID_HEIGHT && count > 0)
+    {
+        --count;
+
+        link.height_ = successor;
+        uint64_t previous;
+        error = token_.ledger_.AccountTokenLinkGet(transaction, link, previous,
+                                                   successor);
+        if (error)
+        {
+            response_.put(
+                "error", rai::ToString("Get account token link failed, height=",
+                                       link.height_));
+            return;
+        }
+
+        rai::TokenBlock token_block;
+        error = token_.ledger_.TokenBlockGet(transaction, account, link.height_,
+                                             token_block);
+        if (error)
+        {
+            response_.put(
+                "error",
+                rai::ToString("Get token block failed, height=", link.height_));
+            return;
+        }
+        rai::Ptree entry;
+        error = PutTokenBlock_(transaction, link.height_, token_block, entry);
+        IF_ERROR_RETURN_VOID(error);
+        entry.put("previous_height", std::to_string(previous));
+        entry.put("successor_height", std::to_string(successor));
+
+        token_links.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("token_links", token_links);
+}
+
 void rai::TokenRpcHandler::NextTokenBlocks()
 {
     rai::Account account;
@@ -314,11 +394,9 @@ void rai::TokenRpcHandler::NextTokenBlocks()
     {
         --count;
 
-        rai::Ptree entry;
-        entry.put("height", std::to_string(successor));
-
+        uint64_t height = successor;
         rai::TokenBlock token_block;
-        error = token_.ledger_.TokenBlockGet(transaction, account, successor,
+        error = token_.ledger_.TokenBlockGet(transaction, account, height,
                                              token_block, successor);
         if (error)
         {
@@ -327,30 +405,94 @@ void rai::TokenRpcHandler::NextTokenBlocks()
                 rai::ToString("Get token block failed, height=", successor));
             return;
         }
-        entry.put("status", rai::ErrorString(token_block.status_));
-        entry.put("status_code",
-                    std::to_string(static_cast<uint32_t>(token_block.status_)));
+        rai::Ptree entry;
+        error = PutTokenBlock_(transaction, height, token_block, entry);
+        IF_ERROR_RETURN_VOID(error);
         entry.put("previous_height", std::to_string(token_block.previous_));
         entry.put("successor_height", std::to_string(successor));
-        entry.put("hash", token_block.hash_.StringHex());
-
-        std::shared_ptr<rai::Block> block(nullptr);
-        error = token_.ledger_.BlockGet(transaction, token_block.hash_, block);
-        if (error)
-        {
-            response_.put("error",
-                          rai::ToString("Get block failed, hash=",
-                                        token_block.hash_.StringHex()));
-            return;
-        }
-        rai::Ptree block_ptree;
-        block->SerializeJson(block_ptree);
-        entry.put_child("block", block_ptree);
 
         token_blocks.push_back(std::make_pair("", entry));
     }
 
     response_.put_child("token_blocks", token_blocks);
+}
+
+void rai::TokenRpcHandler::PreviousAccountTokenLinks()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("address", rai::TokenAddressToString(chain, address));
+    response_.put("address_raw", address.StringHex());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    uint64_t count;
+    error = GetCount_(count);
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint64_t previous;
+    rai::AccountTokenLink link(account, chain, address, height);
+    error = token_.ledger_.AccountTokenLinkGet(transaction, link, previous);
+    if (error)
+    {
+        response_.put("error", "The current account token link does not exist");
+        return;
+    }
+
+    rai::Ptree token_links;
+    while (previous != rai::Block::INVALID_HEIGHT && count > 0)
+    {
+        --count;
+
+        link.height_ = previous;
+        uint64_t successor;
+        error = token_.ledger_.AccountTokenLinkGet(transaction, link, previous,
+                                                   successor);
+        if (error)
+        {
+            response_.put(
+                "error", rai::ToString("Get account token link failed, height=",
+                                       link.height_));
+            return;
+        }
+
+        rai::TokenBlock token_block;
+        error = token_.ledger_.TokenBlockGet(transaction, account, link.height_,
+                                             token_block);
+        if (error)
+        {
+            response_.put(
+                "error",
+                rai::ToString("Get token block failed, height=", link.height_));
+            return;
+        }
+        rai::Ptree entry;
+        error = PutTokenBlock_(transaction, link.height_, token_block, entry);
+        IF_ERROR_RETURN_VOID(error);
+        entry.put("previous_height", std::to_string(previous));
+        entry.put("successor_height", std::to_string(successor));
+
+        token_links.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("token_links", token_links);
 }
 
 void rai::TokenRpcHandler::PreviousTokenBlocks()
@@ -387,9 +529,6 @@ void rai::TokenRpcHandler::PreviousTokenBlocks()
     {
         --count;
 
-        rai::Ptree entry;
-        entry.put("height", std::to_string(previous));
-
         uint64_t successor;
         error = token_.ledger_.TokenBlockGet(transaction, account, previous,
                                              token_block, successor);
@@ -400,26 +539,12 @@ void rai::TokenRpcHandler::PreviousTokenBlocks()
                 rai::ToString("Get token block failed, height=", previous));
             return;
         }
+        rai::Ptree entry;
+        error = PutTokenBlock_(transaction, previous, token_block, entry);
+        IF_ERROR_RETURN_VOID(error);
         previous = token_block.previous_;
-        entry.put("status", rai::ErrorString(token_block.status_));
-        entry.put("status_code",
-                    std::to_string(static_cast<uint32_t>(token_block.status_)));
         entry.put("previous_height", std::to_string(token_block.previous_));
         entry.put("successor_height", std::to_string(successor));
-        entry.put("hash", token_block.hash_.StringHex());
-
-        std::shared_ptr<rai::Block> block(nullptr);
-        error = token_.ledger_.BlockGet(transaction, token_block.hash_, block);
-        if (error)
-        {
-            response_.put("error",
-                          rai::ToString("Get block failed, hash=",
-                                        token_block.hash_.StringHex()));
-            return;
-        }
-        rai::Ptree block_ptree;
-        block->SerializeJson(block_ptree);
-        entry.put_child("block", block_ptree);
 
         token_blocks.push_back(std::make_pair("", entry));
     }
@@ -437,7 +562,6 @@ void rai::TokenRpcHandler::TokenBlock()
     uint64_t height;
     error = GetHeight_(height);
     IF_ERROR_RETURN_VOID(error);
-    response_.put("height", std::to_string(height));
 
     rai::Transaction transaction(error_code_, token_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
@@ -451,23 +575,99 @@ void rai::TokenRpcHandler::TokenBlock()
         response_.put("error", "The token block does not exist");
         return;
     }
-    response_.put("status", rai::ErrorString(token_block.status_));
-    response_.put("status_code",
-                  std::to_string(static_cast<uint32_t>(token_block.status_)));
+    error = PutTokenBlock_(transaction, height, token_block, response_);
+    IF_ERROR_RETURN_VOID(error);
     response_.put("previous_height", std::to_string(token_block.previous_));
     response_.put("successor_height", std::to_string(successor_height));
-    response_.put("hash", token_block.hash_.StringHex());
+}
 
-    std::shared_ptr<rai::Block> block(nullptr);
-    error = token_.ledger_.BlockGet(transaction, token_block.hash_, block);
+void rai::TokenRpcHandler::TokenInfo()
+{
+    rai::Chain chain;
+    bool error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("address", rai::TokenAddressToString(chain, address));
+    response_.put("address_raw", address.StringHex());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::TokenInfo info;
+    error = token_.ledger_.TokenInfoGet(transaction,
+                                        rai::TokenKey(chain, address), info);
     if (error)
     {
-        response_.put("error", "Get block failed");
+        response_.put("error", "The token doesn't exist");
         return;
     }
-    rai::Ptree block_ptree;
-    block->SerializeJson(block_ptree);
-    response_.put_child("block", block_ptree);
+
+    token_.TokenInfoToPtree(info, response_);
+}
+
+
+void rai::TokenRpcHandler::TokenReceivables()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+
+    uint64_t count = 0;
+    error = GetCount_(count);
+    IF_ERROR_RETURN_VOID(error);
+    if (count == 0) count = 100;
+    if (count > 1000) count = 1000;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree receivables;
+    rai::Iterator i = token_.ledger_.TokenReceivableLowerBound(transaction, account);
+    rai::Iterator n = token_.ledger_.TokenReceivableUpperBound(transaction, account);
+    for (; i != n && count > 0; ++i, --count)
+    {
+        rai::TokenReceivableKey key;
+        rai::TokenReceivable receivable;
+        error = token_.ledger_.TokenReceivableGet(i, key, receivable);
+        if (error)
+        {
+            response_.put("error", "Get token receivable info failed");
+            return;
+        }
+
+        rai::TokenInfo info;
+        error = token_.ledger_.TokenInfoGet(transaction, key.token_, info);
+        if (error)
+        {
+            response_.put("error",
+                          rai::ToString("Get token info failed, token.chain=",
+                                        rai::ChainToString(key.token_.chain_),
+                                        ", token.address_raw=",
+                                        key.token_.address_.StringHex()));
+            return;
+        }
+
+        std::shared_ptr<rai::Block> block(nullptr);
+        if (rai::IsLocalSource(receivable.source_))
+        {
+            error = token_.ledger_.BlockGet(transaction, key.tx_hash_, block);
+            if (error)
+            {
+                response_.put("error", rai::ToString("Get block failed, hash=",
+                                                     key.tx_hash_.StringHex()));
+                return;
+            }
+        }
+
+        rai::Ptree entry;
+        token_.MakeReceivablePtree(key, receivable, info, block, entry);
+        receivables.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("receivables", receivables);
 }
 
 bool rai::TokenRpcHandler::GetChain_(rai::Chain& chain)
@@ -516,5 +716,64 @@ bool rai::TokenRpcHandler::GetTokenAddress_(rai::Chain chain,
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ADDRESS;
         return true;
     }
+    return false;
+}
+
+bool rai::TokenRpcHandler::PutTokenBlock_(rai::Transaction& transaction,
+                                          uint64_t height,
+                                          const rai::TokenBlock& token_block,
+                                          rai::Ptree& entry)
+{
+    entry.put("height", std::to_string(height));
+    entry.put("status", rai::ErrorString(token_block.status_));
+    entry.put("status_code",
+                std::to_string(static_cast<uint32_t>(token_block.status_)));
+    entry.put("value", token_block.value_.StringDec());
+    std::string value_op = "none";
+    if (token_block.value_op_ == rai::TokenBlock::ValueOp::INCREASE)
+    {
+        value_op = "increase";
+    }
+    else if (token_block.value_op_ == rai::TokenBlock::ValueOp::DECREASE)
+    {
+        value_op = "decrease";
+    }
+    entry.put("value_op", value_op);
+    rai::Chain chain = token_block.token_.chain_;
+    rai::TokenAddress address = token_block.token_.address_;
+    entry.put("chain", rai::ChainToString(chain));
+    entry.put("address", rai::TokenAddressToString(chain, address));
+    entry.put("address_raw", address.StringHex());
+    if (token_block.token_.Valid())
+    {
+        rai::TokenInfo token_info;
+        bool error = token_.ledger_.TokenInfoGet(
+            transaction, token_block.token_, token_info);
+        if (error)
+        {
+            response_.put(
+                "error",
+                rai::ToString("Get token info failed, token.chain=",
+                              rai::ChainToString(chain), ", token.address=",
+                              rai::TokenAddressToString(chain, address)));
+            return true;
+        }
+        entry.put("name", token_info.name_);
+        entry.put("symbol", token_info.symbol_);
+        entry.put("type", rai::TokenTypeToString(token_info.type_));
+        entry.put("decimals", token_info.decimals_);
+    }
+
+    entry.put("hash", token_block.hash_.StringHex());
+    std::shared_ptr<rai::Block> block(nullptr);
+    bool error = token_.ledger_.BlockGet(transaction, token_block.hash_, block);
+    if (error)
+    {
+        response_.put("error", "Get block failed");
+        return true;
+    }
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    entry.put_child("block", block_ptree);
     return false;
 }

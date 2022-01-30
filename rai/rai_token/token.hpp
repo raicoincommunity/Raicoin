@@ -14,9 +14,13 @@ class TokenObservers
 {
 public:
     rai::ObserverContainer<const rai::TokenReceivableKey&,
-                           const rai::TokenReceivable&>
+                           const rai::TokenReceivable&, const rai::TokenInfo&,
+                           const std::shared_ptr<rai::Block>&>
         receivable_;
-    rai::ObserverContainer<const rai::TokenKey&> token_creation_;
+    rai::ObserverContainer<const rai::TokenKey&, const rai::TokenInfo&>
+        token_creation_;
+    rai::ObserverContainer<const rai::TokenKey&, const rai::TokenInfo&>
+        token_total_supply_;
 };
 
 class TokenError
@@ -60,6 +64,13 @@ public:
 
     void Start() override;
     void Stop() override;
+
+    void TokenKeyToPtree(const rai::TokenKey&, rai::Ptree&);
+    void TokenInfoToPtree(const rai::TokenInfo&, rai::Ptree&);
+    void MakeReceivablePtree(const rai::TokenReceivableKey&,
+                             const rai::TokenReceivable&, const rai::TokenInfo&,
+                             const std::shared_ptr<rai::Block>&, rai::Ptree&);
+    
 
     static std::vector<rai::BlockType> BlockTypes();
     static rai::Provider::Info Provide();
@@ -137,9 +148,15 @@ private:
     rai::ErrorCode UpdateLedgerCommon_(
         rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
         const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
+    rai::ErrorCode UpdateLedgerCommon_(
+        rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
+        const rai::TokenValue&, rai::TokenBlock::ValueOp,
+        const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
     rai::ErrorCode UpdateLedgerReceivable_(rai::Transaction&,
                                            const rai::TokenReceivableKey&,
-                                           const rai::TokenReceivable&);
+                                           const rai::TokenReceivable&,
+                                           const rai::TokenInfo&,
+                                           const std::shared_ptr<rai::Block>&);
     rai::ErrorCode UpdateLedgerBalance_(rai::Transaction&, const rai::Account&,
                                         const rai::TokenKey&,
                                         const rai::TokenValue&,
@@ -179,8 +196,14 @@ private:
     rai::OrderIndex MakeOrderIndex_(const rai::OrderInfo&, const rai::Account&,
                                     uint64_t) const;
     std::function<void(const rai::TokenReceivableKey&,
-                       const rai::TokenReceivable&)>
+                       const rai::TokenReceivable&, const rai::TokenInfo&,
+                       const std::shared_ptr<rai::Block>&)>
         receivable_observer_;
-    std::function<void(const rai::TokenKey&)> token_creation_observer_;
+    std::function<void(const rai::TokenKey&, const rai::TokenInfo&)>
+        token_creation_observer_;
+    std::function<void(const rai::TokenKey&, const rai::TokenInfo&)>
+        token_total_supply_observer_;
+
+        
 };
 }

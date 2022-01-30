@@ -322,6 +322,12 @@ void rai::WebsocketClient::OnReceive(uint32_t session_id,
     }
 
     lock.lock();
+    if (stopped_ || session_id != session_id_
+        || status_ != rai::WebsocketStatus::CONNECTED)
+    {
+        std::cout << "OnReceive stopped"<< std::endl;
+        return;
+    }
 
     Receive_();
 }
@@ -408,6 +414,7 @@ void rai::WebsocketClient::CloseStream_()
         }
 
         std::shared_ptr<rai::WssStream> stream(std::move(wss_stream_));
+        wss_stream_ = nullptr;
         try
         {
             stream->async_close(boost::beast::websocket::close_code::normal,
@@ -429,6 +436,7 @@ void rai::WebsocketClient::CloseStream_()
         }
 
         std::shared_ptr<rai::WsStream> stream(std::move(ws_stream_));
+        ws_stream_ = nullptr;
         try
         {
             stream->async_close(boost::beast::websocket::close_code::normal,
@@ -452,6 +460,7 @@ void rai::WebsocketClient::Send_()
         return;
     }
 
+    auto message = std::make_shared<std::string>(send_queue_.front());
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     if (ssl_)
     {
@@ -463,9 +472,9 @@ void rai::WebsocketClient::Send_()
         std::shared_ptr<rai::WssStream> stream(wss_stream_);
         auto session_id = session_id_;
         wss_stream_->async_write(
-            boost::asio::buffer(send_queue_.front()),
-            [client_w, stream, session_id](const boost::system::error_code& ec,
-                                           size_t size) {
+            boost::asio::buffer(*message),
+            [client_w, stream, session_id, message](
+                const boost::system::error_code& ec, size_t size) {
                 auto client = client_w.lock();
                 if (!client)
                 {
@@ -485,9 +494,9 @@ void rai::WebsocketClient::Send_()
         std::shared_ptr<rai::WsStream> stream(ws_stream_);
         auto session_id = session_id_;
         ws_stream_->async_write(
-            boost::asio::buffer(send_queue_.front()),
-            [client_w, stream, session_id](const boost::system::error_code& ec,
-                                           size_t size) {
+            boost::asio::buffer(*message),
+            [client_w, stream, session_id, message](
+                const boost::system::error_code& ec, size_t size) {
                 auto client = client_w.lock();
                 if (!client)
                 {
@@ -527,8 +536,9 @@ void rai::WebsocketClient::Receive_()
         std::shared_ptr<boost::beast::multi_buffer> receive_buffer(receive_buffer_);
         auto session_id = session_id_;
         wss_stream_->async_read(
-            *receive_buffer_, [client_w, stream, receive_buffer, session_id](
-                                const boost::system::error_code& ec, size_t size) {
+            *receive_buffer_,
+            [client_w, stream, receive_buffer, session_id](
+                const boost::system::error_code& ec, size_t size) {
                 auto client = client_w.lock();
                 if (!client)
                 {
@@ -779,9 +789,10 @@ void rai::WebsocketSession::Send_(std::unique_lock<std::mutex>& lock)
 
     sending_ = true;
 
+    auto message = std::make_shared<std::string>(send_queue_.front());
     std::shared_ptr<rai::WebsocketSession> session(Shared());
-    ws_.async_write(boost::asio::buffer(send_queue_.front()),
-                    [session](const boost::system::error_code& ec,
+    ws_.async_write(boost::asio::buffer(*message),
+                    [session, message](const boost::system::error_code& ec,
                               size_t size) { session->OnSend(ec, size); });
 }
 

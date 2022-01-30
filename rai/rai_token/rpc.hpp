@@ -22,13 +22,19 @@ public:
     void AccountTokenInfo();
     void AccountTokensInfo();
     void LedgerVersion();
+    void NextAccountTokenLinks();
     void NextTokenBlocks();
+    void PreviousAccountTokenLinks();
     void PreviousTokenBlocks();
     void TokenBlock();
+    void TokenInfo();
+    void TokenReceivables();
 
 private:
     bool GetChain_(rai::Chain&);
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);
+    bool PutTokenBlock_(rai::Transaction&, uint64_t, const rai::TokenBlock&,
+                        rai::Ptree&);
 
     rai::Token& token_;
 };
