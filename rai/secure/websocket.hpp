@@ -76,6 +76,7 @@ private:
     bool sending_;
     std::deque<std::string> send_queue_;
     std::chrono::steady_clock::time_point connect_at_;
+    boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 };
 
 
@@ -119,6 +120,7 @@ private:
     rai::WsStream ws_;
     std::deque<std::string> send_queue_;
     boost::beast::multi_buffer receive_buffer_;
+    boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 };
 
 class WebsocketServer

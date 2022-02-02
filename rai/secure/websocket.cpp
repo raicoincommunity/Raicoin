@@ -19,7 +19,8 @@ rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
       ctx_(boost::asio::ssl::context::tlsv12_client),
       session_id_(0),
       sending_(false),
-      connect_at_()
+      connect_at_(),
+      strand_(service_.get_executor())
 {
     if (ssl)
     {
@@ -55,6 +56,7 @@ void rai::WebsocketClient::OnResolve(
         // log
         std::cout << "Failed to resolve: " << ec.message() << std::endl;
         ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+        CloseStream_();
         return;
     }
     std::cout << "Websocket resolve success " << std::endl;
@@ -109,6 +111,7 @@ void rai::WebsocketClient::OnConnect(const boost::system::error_code& ec)
         // log
         std::cout << "Failed to connect: " << ec.message() << std::endl;
         ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+        CloseStream_();
         return;
     }
 
@@ -122,6 +125,7 @@ void rai::WebsocketClient::OnConnect(const boost::system::error_code& ec)
             // log
             std::cout << "Failed to set SNI: " << host_ << std::endl;
             ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+            CloseStream_();
             return;
         }
 
@@ -174,6 +178,7 @@ void rai::WebsocketClient::OnSslHandshake(const boost::system::error_code& ec)
         // log
         std::cout << "SSL handshake failed: " << ec.message() << std::endl;
         ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+        CloseStream_();
         return;
     }
     std::cout << "SSL handshake success " << std::endl;
@@ -207,6 +212,7 @@ void rai::WebsocketClient::OnWebsocketHandshake(
         std::cout << "Websocket handshake failed: " << ec.message()
                   << std::endl;
         ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+        CloseStream_();
         return;
     }
     ChangeStatus_(rai::WebsocketStatus::CONNECTED);
@@ -272,7 +278,9 @@ void rai::WebsocketClient::OnSend(uint32_t session_id,
     if (ec || size == 0)
     {
         // log
+        std::cout << "OnSend ec:" << ec.message() << std::endl;
         ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+        CloseStream_();
         return;
     }
 
@@ -297,6 +305,7 @@ void rai::WebsocketClient::OnReceive(uint32_t session_id,
         // log
         std::cout << "OnReceive ec:" << ec.message() << std::endl;
         ChangeStatus_(rai::WebsocketStatus::DISCONNECTED);
+        CloseStream_();
         return;
     }
 
@@ -417,12 +426,14 @@ void rai::WebsocketClient::CloseStream_()
         wss_stream_ = nullptr;
         try
         {
-            stream->async_close(boost::beast::websocket::close_code::normal,
-                                [stream](const boost::system::error_code& ec) {
-                                    std::cout
-                                        << "ws stream closed:" << ec.message()
-                                        << std::endl;
-                                });
+            stream->async_close(
+                boost::beast::websocket::close_code::normal,
+                boost::asio::bind_executor(
+                    strand_,
+                    [stream](const boost::system::error_code& ec) {
+                        std::cout << "ws stream closed:" << ec.message()
+                                  << std::endl;
+                    }));
         }
         catch (...)
         {
@@ -439,12 +450,13 @@ void rai::WebsocketClient::CloseStream_()
         ws_stream_ = nullptr;
         try
         {
-            stream->async_close(boost::beast::websocket::close_code::normal,
-                                [stream](const boost::system::error_code& ec) {
-                                    std::cout
-                                        << "ws stream closed:" << ec.message()
-                                        << std::endl;
-                                });
+            stream->async_close(
+                boost::beast::websocket::close_code::normal,
+                boost::asio::bind_executor(
+                    strand_, [stream](const boost::system::error_code& ec) {
+                        std::cout << "ws stream closed:" << ec.message()
+                                  << std::endl;
+                    }));
         }
         catch (...)
         {
@@ -460,7 +472,8 @@ void rai::WebsocketClient::Send_()
         return;
     }
 
-    auto message = std::make_shared<std::string>(send_queue_.front());
+    std::string message = send_queue_.front();
+    auto message_s = std::make_shared<std::string>(std::move(message));
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     if (ssl_)
     {
@@ -472,17 +485,18 @@ void rai::WebsocketClient::Send_()
         std::shared_ptr<rai::WssStream> stream(wss_stream_);
         auto session_id = session_id_;
         wss_stream_->async_write(
-            boost::asio::buffer(*message),
-            [client_w, stream, session_id, message](
-                const boost::system::error_code& ec, size_t size) {
-                auto client = client_w.lock();
-                if (!client)
-                {
-                    return;
-                }
+            boost::asio::buffer(*message_s),
+            boost::asio::bind_executor(
+                strand_, [client_w, stream, session_id, message_s](
+                             const boost::system::error_code& ec, size_t size) {
+                    auto client = client_w.lock();
+                    if (!client)
+                    {
+                        return;
+                    }
 
-                client->OnSend(session_id, ec, size);
-            });
+                    client->OnSend(session_id, ec, size);
+                }));
     }
     else
     {
@@ -494,17 +508,18 @@ void rai::WebsocketClient::Send_()
         std::shared_ptr<rai::WsStream> stream(ws_stream_);
         auto session_id = session_id_;
         ws_stream_->async_write(
-            boost::asio::buffer(*message),
-            [client_w, stream, session_id, message](
-                const boost::system::error_code& ec, size_t size) {
-                auto client = client_w.lock();
-                if (!client)
-                {
-                    return;
-                }
+            boost::asio::buffer(*message_s),
+            boost::asio::bind_executor(
+                strand_, [client_w, stream, session_id, message_s](
+                             const boost::system::error_code& ec, size_t size) {
+                    auto client = client_w.lock();
+                    if (!client)
+                    {
+                        return;
+                    }
 
-                client->OnSend(session_id, ec, size);
-            });
+                    client->OnSend(session_id, ec, size);
+                }));
     }
 
     #if 0
@@ -537,16 +552,17 @@ void rai::WebsocketClient::Receive_()
         auto session_id = session_id_;
         wss_stream_->async_read(
             *receive_buffer_,
-            [client_w, stream, receive_buffer, session_id](
-                const boost::system::error_code& ec, size_t size) {
-                auto client = client_w.lock();
-                if (!client)
-                {
-                    return;
-                }
+            boost::asio::bind_executor(
+                strand_, [client_w, stream, receive_buffer, session_id](
+                             const boost::system::error_code& ec, size_t size) {
+                    auto client = client_w.lock();
+                    if (!client)
+                    {
+                        return;
+                    }
 
-                client->OnReceive(session_id, ec, size);
-            });
+                    client->OnReceive(session_id, ec, size);
+                }));
     }
     else
     {
@@ -556,16 +572,17 @@ void rai::WebsocketClient::Receive_()
         auto session_id = session_id_;
         ws_stream_->async_read(
             *receive_buffer_,
-            [client_w, stream, receive_buffer, session_id](
-                const boost::system::error_code& ec, size_t size) {
-                auto client = client_w.lock();
-                if (!client)
-                {
-                    return;
-                }
+            boost::asio::bind_executor(
+                strand_, [client_w, stream, receive_buffer, session_id](
+                             const boost::system::error_code& ec, size_t size) {
+                    auto client = client_w.lock();
+                    if (!client)
+                    {
+                        return;
+                    }
 
-                client->OnReceive(session_id, ec, size);
-            });
+                    client->OnReceive(session_id, ec, size);
+                }));
     }
 }
 
@@ -578,7 +595,8 @@ rai::WebsocketSession::WebsocketSession(
       closed_(false),
       sending_(false),
       connected_(false),
-      ws_(std::move(socket))
+      ws_(std::move(socket)),
+      strand_(ws_.get_executor())
 {
     using boost::beast::websocket::stream;
     ws_.text(true);
@@ -758,21 +776,25 @@ void rai::WebsocketSession::Close_(std::unique_lock<std::mutex>& lock)
     boost::beast::websocket::close_reason reason;
     reason.code = boost::beast::websocket::close_code::normal;
     reason.reason = "Shutting down";
-    ws_.async_close(reason, [session](const boost::system::error_code ec) {
-        if (ec)
-        {
-            rai::Stats::Add(rai::ErrorCode::WEBSOCKET_CLOSE, ec.message());
-        }
-    });
+    ws_.async_close(reason,
+                    boost::asio::bind_executor(
+                        strand_, [session](const boost::system::error_code ec) {
+                            if (ec)
+                            {
+                                rai::Stats::Add(rai::ErrorCode::WEBSOCKET_CLOSE,
+                                                ec.message());
+                            }
+                        }));
 }
 
 void rai::WebsocketSession::Receive_(std::unique_lock<std::mutex>& lock)
 {
     std::shared_ptr<rai::WebsocketSession> session(Shared());
-    ws_.async_read(receive_buffer_,
-                   [session](const boost::system::error_code& ec, size_t size) {
-                       session->OnReceive(ec, size);
-                   });
+    ws_.async_read(
+        receive_buffer_,
+        boost::asio::bind_executor(
+            strand_, [session](const boost::system::error_code& ec,
+                               size_t size) { session->OnReceive(ec, size); }));
 }
 
 void rai::WebsocketSession::Send_(std::unique_lock<std::mutex>& lock)
@@ -791,9 +813,12 @@ void rai::WebsocketSession::Send_(std::unique_lock<std::mutex>& lock)
 
     auto message = std::make_shared<std::string>(send_queue_.front());
     std::shared_ptr<rai::WebsocketSession> session(Shared());
-    ws_.async_write(boost::asio::buffer(*message),
-                    [session, message](const boost::system::error_code& ec,
-                              size_t size) { session->OnSend(ec, size); });
+    ws_.async_write(
+        boost::asio::buffer(*message),
+        boost::asio::bind_executor(
+            strand_,
+            [session, message](const boost::system::error_code& ec,
+                               size_t size) { session->OnSend(ec, size); }));
 }
 
 rai::WebsocketServer::WebsocketServer(boost::asio::io_service& service,

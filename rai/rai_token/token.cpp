@@ -402,6 +402,7 @@ void rai::Token::MakeReceivablePtree(const rai::TokenReceivableKey& key,
     token.put("type",  rai::TokenTypeToString(receivable.token_type_));
     token.put("name", info.name_);
     token.put("symbol", info.symbol_);
+    token.put("decimals", std::to_string(info.decimals_));
     ptree.put_child("token", token);
     ptree.put("chain", rai::ChainToString(key.chain_));
     ptree.put("tx_hash", key.tx_hash_.StringHex());
@@ -443,6 +444,7 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_NEXT_TOKEN_BLOCKS);
     info.actions_.push_back(P::Action::TOKEN_PREVIOUS_ACCOUNT_TOKEN_LINKS);
     info.actions_.push_back(P::Action::TOKEN_PREVIOUS_TOKEN_BLOCKS);
+    info.actions_.push_back(P::Action::TOKEN_RECEIVABLES);
     info.actions_.push_back(P::Action::TOKEN_INFO);
     // todo:
 
