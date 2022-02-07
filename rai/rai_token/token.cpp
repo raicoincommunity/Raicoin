@@ -314,6 +314,18 @@ void rai::Token::Start()
         });
     };
 
+    received_observer_ = [token](const rai::TokenReceivableKey& key) {
+        auto token_s = token.lock();
+        if (token_s == nullptr) return;
+
+        token_s->Background([token, key]() {
+            if (auto token_s = token.lock())
+            {
+                token_s->observers_.received_.Notify(key);
+            }
+        });
+    };
+
     token_creation_observer_ = [token](const rai::TokenKey& key,
                                        const rai::TokenInfo& info) {
         auto token_s = token.lock();
@@ -1074,9 +1086,7 @@ rai::TokenError rai::Token::ProcessReceive_(
 
     // wait source block
     rai::Chain chain = rai::Chain::INVALID;
-    if (receive->source_ == rai::TokenSource::SEND
-        || receive->source_ == rai::TokenSource::MINT
-        || receive->source_ == rai::TokenSource::SWAP)
+    if (rai::IsLocalSource(receive->source_))
     {
         std::shared_ptr<rai::Block> source_block(nullptr);
         error_code =
@@ -1243,6 +1253,11 @@ rai::TokenError rai::Token::ProcessReceive_(
                                      rai::ErrorCode::SUCCESS, receive->value_,
                                      rai::TokenBlock::ValueOp::INCREASE, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (received_observer_)
+    {
+        received_observer_(receivable_key);
+    }
 
     return rai::ErrorCode::SUCCESS;
 }

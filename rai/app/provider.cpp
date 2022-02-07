@@ -110,6 +110,10 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_info";
         }
+        case rai::Provider::Action::TOKEN_RECEIVED:
+        {
+            return "token_received";
+        }
         default:
         {
             return "";

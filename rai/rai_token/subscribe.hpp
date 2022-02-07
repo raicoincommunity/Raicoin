@@ -13,6 +13,7 @@ public:
     TokenSubscriptions(rai::Token&);
 
     void NotifyTokenInfo(const rai::TokenKey&, const rai::TokenInfo&);
+    void NotifyReceived(const rai::TokenReceivableKey&);
 
     rai::Token& token_;
 };
