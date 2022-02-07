@@ -1585,7 +1585,8 @@ void rai::ExtensionTokenInfo::SerializeJson(rai::Ptree& ptree) const
 {
     ptree.put("chain", rai::ChainToString(chain_));
     ptree.put("type", rai::TokenTypeToString(type_));
-    ptree.put("address", address_.StringHex());
+    ptree.put("address", rai::TokenAddressToString(chain_, address_));
+    ptree.put("address_raw", address_.StringHex());
 }
 
 rai::ErrorCode rai::ExtensionTokenInfo::DeserializeJson(const rai::Ptree& ptree)
@@ -1602,9 +1603,18 @@ rai::ErrorCode rai::ExtensionTokenInfo::DeserializeJson(const rai::Ptree& ptree)
         type_ = rai::StringToTokenType(type);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_ADDRESS;
-        std::string address = ptree.get<std::string>("address");
-        bool error = address_.DecodeHex(address);
-        IF_ERROR_RETURN(error, error_code);
+        auto address_raw_o = ptree.get_optional<std::string>("address_raw");
+        if (address_raw_o)
+        {
+            bool error = address_.DecodeHex(*address_raw_o);
+            IF_ERROR_RETURN(error, error_code);
+        }
+        else
+        {
+            std::string address = ptree.get<std::string>("address");
+            bool error = rai::StringToTokenAddress(chain_, address, address_);
+            IF_ERROR_RETURN(error, error_code);
+        }
 
         return CheckData();
     }
@@ -1791,7 +1801,8 @@ void rai::ExtensionTokenReceive::SerializeJson(rai::Ptree& ptree) const
 
     token_.SerializeJson(ptree);
     ptree.put("source", rai::TokenSourceToString(source_));
-    ptree.put("from", from_.StringHex());
+    ptree.put("from", rai::TokenAddressToString(token_.chain_, from_));
+    ptree.put("from_raw", from_.StringHex());
     ptree.put("block_height", std::to_string(block_height_));
     ptree.put("tx_hash", tx_hash_.StringHex());
     ptree.put("value", value_.StringDec());
@@ -1815,13 +1826,22 @@ rai::ErrorCode rai::ExtensionTokenReceive::DeserializeJson(
         source_ = rai::StringToTokenSource(source);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_FROM;
-        std::string from = ptree.get<std::string>("from");
-        bool error = from_.DecodeHex(from);
-        IF_ERROR_RETURN(error, error_code);
+        auto from_raw_o = ptree.get_optional<std::string>("from_raw");
+        if (from_raw_o)
+        {
+            bool error = from_.DecodeHex(*from_raw_o);
+            IF_ERROR_RETURN(error, error_code);
+        }
+        else
+        {
+            std::string from = ptree.get<std::string>("from");
+            bool error = rai::StringToTokenAddress(token_.chain_, from, from_);
+            IF_ERROR_RETURN(error, error_code);
+        }
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_BLOCK_HEIGHT;
         std::string height = ptree.get<std::string>("block_height");
-        error = rai::StringToUint(height, block_height_);
+        bool error = rai::StringToUint(height, block_height_);
         IF_ERROR_RETURN(error, error_code);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TX_HASH;

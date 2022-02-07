@@ -17,6 +17,8 @@ public:
                            const rai::TokenReceivable&, const rai::TokenInfo&,
                            const std::shared_ptr<rai::Block>&>
         receivable_;
+    rai::ObserverContainer<const rai::TokenReceivableKey&>
+        received_;
     rai::ObserverContainer<const rai::TokenKey&, const rai::TokenInfo&>
         token_creation_;
     rai::ObserverContainer<const rai::TokenKey&, const rai::TokenInfo&>
@@ -199,11 +201,10 @@ private:
                        const rai::TokenReceivable&, const rai::TokenInfo&,
                        const std::shared_ptr<rai::Block>&)>
         receivable_observer_;
+    std::function<void(const rai::TokenReceivableKey)> received_observer_;
     std::function<void(const rai::TokenKey&, const rai::TokenInfo&)>
         token_creation_observer_;
     std::function<void(const rai::TokenKey&, const rai::TokenInfo&)>
         token_total_supply_observer_;
-
-        
 };
 }

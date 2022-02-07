@@ -47,6 +47,7 @@ public:
         TOKEN_RECEIVABLE                    = 207,
         TOKEN_RECEIVABLES                   = 208,
         TOKEN_INFO                          = 209,
+        TOKEN_RECEIVED                      = 210,
     };
     static std::string ToString(Action);
 
