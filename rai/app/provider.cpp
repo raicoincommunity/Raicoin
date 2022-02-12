@@ -114,6 +114,14 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_received";
         }
+        case rai::Provider::Action::TOKEN_MAX_ID:
+        {
+            return "token_max_id";
+        }
+        case rai::Provider::Action::TOKEN_ID_INFO:
+        {
+            return "token_id_info";
+        }
         default:
         {
             return "";

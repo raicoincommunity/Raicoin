@@ -326,31 +326,48 @@ void rai::Token::Start()
         });
     };
 
-    token_creation_observer_ = [token](const rai::TokenKey& key,
-                                       const rai::TokenInfo& info) {
+    token_observer_ = [token](const rai::TokenKey& key,
+                              const rai::TokenInfo& info) {
         auto token_s = token.lock();
         if (token_s == nullptr) return;
 
         token_s->Background([token, key, info]() {
             if (auto token_s = token.lock())
             {
-                token_s->observers_.token_creation_.Notify(key, info);
+                token_s->observers_.token_.Notify(key, info);
             }
         });
     };
 
-    token_total_supply_observer_ = [token](const rai::TokenKey& key,
-                                           const rai::TokenInfo& info) {
+    token_id_creation_observer_ = [token](const rai::TokenKey& key,
+                                          const rai::TokenValue& id,
+                                          const rai::TokenIdInfo& info) {
         auto token_s = token.lock();
         if (token_s == nullptr) return;
 
-        token_s->Background([token, key, info]() {
+        token_s->Background([token, key, id, info]() {
             if (auto token_s = token.lock())
             {
-                token_s->observers_.token_creation_.Notify(key, info);
+                token_s->observers_.token_id_creation_.Notify(key, id, info);
             }
         });
     };
+
+    account_observer_ =
+        [token](
+            const rai::Account& account, const rai::AccountTokensInfo& info,
+            const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&
+                tokens) {
+            auto token_s = token.lock();
+            if (token_s == nullptr) return;
+
+            token_s->Background([token, account, info, tokens]() {
+                if (auto token_s = token.lock())
+                {
+                    token_s->observers_.account_.Notify(account, info, tokens);
+                }
+            });
+        };
 
     App::Start();
 }
@@ -370,14 +387,16 @@ void rai::Token::Stop()
     App::Stop();
 }
 
-void rai::Token::TokenKeyToPtree(const rai::TokenKey& key, rai::Ptree& ptree)
+void rai::Token::TokenKeyToPtree(const rai::TokenKey& key,
+                                 rai::Ptree& ptree) const
 {
     ptree.put("chain", rai::ChainToString(key.chain_));
     ptree.put("address", rai::TokenAddressToString(key.chain_, key.address_));
     ptree.put("address_raw", key.address_.StringHex());
 }
 
-void rai::Token::TokenInfoToPtree(const rai::TokenInfo& info, rai::Ptree& ptree)
+void rai::Token::TokenInfoToPtree(const rai::TokenInfo& info,
+                                  rai::Ptree& ptree) const
 {
     ptree.put("type", rai::TokenTypeToString(info.type_));
     ptree.put("symbol", info.symbol_);
@@ -402,11 +421,21 @@ void rai::Token::TokenInfoToPtree(const rai::TokenInfo& info, rai::Ptree& ptree)
     ptree.put("base_uri", info.base_uri_);
 }
 
+void rai::Token::TokenIdInfoToPtree(const rai::TokenIdInfo& info,
+                                    rai::Ptree& ptree) const
+{
+    ptree.put("burned", rai::BoolToString(info.burned_));
+    ptree.put("unmapped", rai::BoolToString(info.unmapped_));
+    ptree.put("wrapped", rai::BoolToString(info.wrapped_));
+    ptree.put("transfers", std::to_string(info.transfers_));
+    ptree.put("uri", info.uri_);
+}
+
 void rai::Token::MakeReceivablePtree(const rai::TokenReceivableKey& key,
                                      const rai::TokenReceivable& receivable,
                                      const rai::TokenInfo& info,
                                      const std::shared_ptr<rai::Block>& block,
-                                     rai::Ptree& ptree)
+                                     rai::Ptree& ptree) const
 {
     ptree.put("to", key.to_.StringAccount());
     rai::Ptree token;
@@ -430,6 +459,22 @@ void rai::Token::MakeReceivablePtree(const rai::TokenReceivableKey& key,
         block->SerializeJson(block_ptree);
         ptree.put_child("source_block", block_ptree);
     }
+}
+
+void rai::Token::MakeAccountTokenInfoPtree(const rai::TokenKey& key,
+                                           const rai::TokenInfo& token,
+                                           const rai::AccountTokenInfo& info,
+                                           rai::Ptree& ptree)
+{
+    rai::Ptree token_ptree;
+    TokenKeyToPtree(key, token_ptree);
+    TokenInfoToPtree(token, token_ptree);
+    ptree.put_child("token", token_ptree);
+    ptree.put("balance", info.balance_.StringDec());
+    ptree.put("balance_formatted",
+              info.balance_.StringBalance(token.decimals_, token.symbol_));
+    ptree.put("head_height", std::to_string(info.head_));
+    ptree.put("token_block_count", std::to_string(info.blocks_));
 }
 
 std::vector<rai::BlockType> rai::Token::BlockTypes()
@@ -458,6 +503,8 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_PREVIOUS_TOKEN_BLOCKS);
     info.actions_.push_back(P::Action::TOKEN_RECEIVABLES);
     info.actions_.push_back(P::Action::TOKEN_INFO);
+    info.actions_.push_back(P::Action::TOKEN_MAX_ID);
+    info.actions_.push_back(P::Action::TOKEN_ID_INFO);
     // todo:
 
     return info;
@@ -582,9 +629,9 @@ rai::TokenError rai::Token::ProcessCreate_(
         UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    if (token_creation_observer_)
+    if (token_observer_)
     {
-        token_creation_observer_(key, info);
+        token_observer_(key, info);
     }
 
     return rai::ErrorCode::SUCCESS;
@@ -630,6 +677,7 @@ rai::TokenError rai::Token::ProcessMint_(
 
     rai::TokenValue total_supply(0);
     rai::TokenValue local_supply(0);
+    rai::TokenIdInfo token_id_info;
     if (mint->type_ == rai::TokenType::_20)
     {
         total_supply = info.total_supply_ + mint->value_;
@@ -691,7 +739,6 @@ rai::TokenError rai::Token::ProcessMint_(
             return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
         }
 
-        rai::TokenIdInfo token_id_info;
         error = ledger_.TokenIdInfoGet(transaction, key, mint->value_,
                                        token_id_info);
         if (!error && !token_id_info.burned_)
@@ -745,6 +792,11 @@ rai::TokenError rai::Token::ProcessMint_(
     error_code =
         UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
+
+    if (token_id_creation_observer_ && mint->type_ == rai::TokenType::_721)
+    {
+        token_id_creation_observer_(key, mint->value_, token_id_info);
+    }
 
     return rai::ErrorCode::SUCCESS;
 }
@@ -2794,6 +2846,7 @@ rai::ErrorCode rai::Token::UpdateLedgerCommon_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
+    std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>> pairs;
     for (const auto& token : tokens)
     {
         rai::AccountTokenInfo account_token_info;
@@ -2855,6 +2908,13 @@ rai::ErrorCode rai::Token::UpdateLedgerCommon_(
                 block->Hash().StringHex()));
             return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
         }
+
+        pairs.emplace_back(token, account_token_info);
+    }
+
+    if (account_observer_)
+    {
+        account_observer_(account, info, pairs);
     }
 
     return rai::ErrorCode::SUCCESS;
@@ -2936,6 +2996,11 @@ rai::ErrorCode rai::Token::UpdateLedgerBalance_(rai::Transaction& transaction,
                 "token.chain=",
                 token.chain_, ", token.address=", token.address_.StringHex()));
             return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+
+        if (token_observer_) 
+        {
+            token_observer_(token, info);
         }
     }
 
@@ -3020,6 +3085,11 @@ rai::ErrorCode rai::Token::UpdateLedgerSupplies_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
+    if (token_observer_)
+    {
+        token_observer_(token, info);
+    }
+
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -3047,6 +3117,10 @@ rai::ErrorCode rai::Token::UpdateLedgerTokenTransfer_(
             "token.chain=",
             token.chain_, ", token.address=", token.address_.StringHex()));
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+    if (token_observer_)
+    {
+        token_observer_(token, info);
     }
 
     rai::TokenTransfer transfer(token, timestamp, account, height);
@@ -3284,6 +3358,10 @@ rai::ErrorCode rai::Token::UpdateLedgerSwapIndex_(
                 "Token::UpdateLedgerSwapIndex_: put token info, token.chain=",
                 token.chain_, ", token.address=", token.address_.StringHex()));
             return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+        if (token_observer_)
+        {
+            token_observer_(token, info);
         }
     }
 

@@ -1,5 +1,5 @@
 #pragma once
-
+#include <boost/optional.hpp>
 #include <rai/common/errors.hpp>
 #include <rai/common/extensions.hpp>
 #include <rai/app/app.hpp>
@@ -10,6 +10,7 @@
 
 namespace rai
 {
+
 class TokenObservers
 {
 public:
@@ -20,9 +21,14 @@ public:
     rai::ObserverContainer<const rai::TokenReceivableKey&>
         received_;
     rai::ObserverContainer<const rai::TokenKey&, const rai::TokenInfo&>
-        token_creation_;
-    rai::ObserverContainer<const rai::TokenKey&, const rai::TokenInfo&>
-        token_total_supply_;
+        token_;
+    rai::ObserverContainer<const rai::TokenKey&, const rai::TokenValue&,
+                           const rai::TokenIdInfo&>
+        token_id_creation_;
+    rai::ObserverContainer<
+        const rai::Account&, const rai::AccountTokensInfo&,
+        const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&>
+        account_;
 };
 
 class TokenError
@@ -67,12 +73,15 @@ public:
     void Start() override;
     void Stop() override;
 
-    void TokenKeyToPtree(const rai::TokenKey&, rai::Ptree&);
-    void TokenInfoToPtree(const rai::TokenInfo&, rai::Ptree&);
+    void TokenKeyToPtree(const rai::TokenKey&, rai::Ptree&) const;
+    void TokenInfoToPtree(const rai::TokenInfo&, rai::Ptree&) const;
+    void TokenIdInfoToPtree(const rai::TokenIdInfo&, rai::Ptree&) const;
     void MakeReceivablePtree(const rai::TokenReceivableKey&,
                              const rai::TokenReceivable&, const rai::TokenInfo&,
-                             const std::shared_ptr<rai::Block>&, rai::Ptree&);
-    
+                             const std::shared_ptr<rai::Block>&,
+                             rai::Ptree&) const;
+    void MakeAccountTokenInfoPtree(const rai::TokenKey&, const rai::TokenInfo&,
+                                   const rai::AccountTokenInfo&, rai::Ptree&);
 
     static std::vector<rai::BlockType> BlockTypes();
     static rai::Provider::Info Provide();
@@ -203,8 +212,13 @@ private:
         receivable_observer_;
     std::function<void(const rai::TokenReceivableKey)> received_observer_;
     std::function<void(const rai::TokenKey&, const rai::TokenInfo&)>
-        token_creation_observer_;
-    std::function<void(const rai::TokenKey&, const rai::TokenInfo&)>
-        token_total_supply_observer_;
+        token_observer_;
+    std::function<void(const rai::TokenKey&, const rai::TokenValue&,
+                       const rai::TokenIdInfo&)>
+        token_id_creation_observer_;
+    std::function<void(
+        const rai::Account&, const rai::AccountTokensInfo&,
+        const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&)>
+        account_observer_;
 };
 }
