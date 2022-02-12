@@ -51,9 +51,17 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         TokenBlock();
     }
+    else if (action == "token_id_info")
+    {
+        TokenIdInfo();
+    }
     else if (action == "token_info")
     {
         TokenInfo();
+    }
+    else if (action == "token_max_id")
+    {
+        TokenMaxId();
     }
     else if (action == "token_receivables")
     {
@@ -157,9 +165,9 @@ void rai::TokenRpcHandler::AccountTokenInfo()
         return;
     }
 
+    rai::TokenKey key(chain, address);
     rai::TokenInfo token_info;
-    error = token_.ledger_.TokenInfoGet(
-        transaction, rai::TokenKey(chain, address), token_info);
+    error = token_.ledger_.TokenInfoGet(transaction, key, token_info);
     if (error)
     {
         response_.put(
@@ -170,17 +178,7 @@ void rai::TokenRpcHandler::AccountTokenInfo()
         return;
     }
 
-    response_.put("name", token_info.name_);
-    response_.put("symbol", token_info.symbol_);
-    response_.put("type", rai::TokenTypeToString(token_info.type_));
-    response_.put("decimals", token_info.decimals_);
-
-    response_.put("balance", info.balance_.StringDec());
-    response_.put(
-        "balance_formatted",
-        info.balance_.StringBalance(token_info.decimals_, token_info.symbol_));
-    response_.put("head_height", std::to_string(info.head_));
-    response_.put("token_block_count", std::to_string(info.blocks_));
+    token_.MakeAccountTokenInfoPtree(key, token_info, info, response_);
 }
 
 void rai::TokenRpcHandler::AccountTokensInfo()
@@ -229,9 +227,9 @@ void rai::TokenRpcHandler::AccountTokensInfo()
             return;
         }
 
+        rai::TokenKey key(chain, address);
         rai::TokenInfo token_info;
-        error = token_.ledger_.TokenInfoGet(
-            transaction, rai::TokenKey(chain, address), token_info);
+        error = token_.ledger_.TokenInfoGet(transaction, key, token_info);
         if (error)
         {
             response_.put(
@@ -242,24 +240,9 @@ void rai::TokenRpcHandler::AccountTokensInfo()
             return;
         }
 
-        rai::Ptree token;
-        token.put("chain", rai::ChainToString(chain));
-        token.put("address", rai::TokenAddressToString(chain, address));
-        token.put("address_raw", address.StringHex());
-        token.put("name", token_info.name_);
-        token.put("symbol", token_info.symbol_);
-        token.put("type", rai::TokenTypeToString(token_info.type_));
-        token.put("decimals", token_info.decimals_);
-
         rai::Ptree entry;
-        entry.put_child("token", token);
-        entry.put("balance", account_token_info.balance_.StringDec());
-        entry.put("balance_formatted",
-                  account_token_info.balance_.StringBalance(
-                      token_info.decimals_, token_info.symbol_));
-        entry.put("head_height", std::to_string(account_token_info.head_));
-        entry.put("token_block_count",
-                  std::to_string(account_token_info.blocks_));
+        token_.MakeAccountTokenInfoPtree(key, token_info, account_token_info,
+                                         entry);
         count++;
         tokens.push_back(std::make_pair("", entry));
     }
@@ -581,6 +564,37 @@ void rai::TokenRpcHandler::TokenBlock()
     response_.put("successor_height", std::to_string(successor_height));
 }
 
+void rai::TokenRpcHandler::TokenIdInfo()
+{
+    rai::Chain chain;
+    bool error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    rai::TokenKey key(chain, address);
+    token_.TokenKeyToPtree(key, response_);
+
+    rai::TokenValue id;
+    error = GetTokenId_(id);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("token_id", id.StringDec());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::TokenIdInfo info;
+    error = token_.ledger_.TokenIdInfoGet(transaction, key, id, info);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+    
+    token_.TokenIdInfoToPtree(info, response_);
+}
+
 void rai::TokenRpcHandler::TokenInfo()
 {
     rai::Chain chain;
@@ -607,6 +621,33 @@ void rai::TokenRpcHandler::TokenInfo()
     }
 
     token_.TokenInfoToPtree(info, response_);
+}
+
+void rai::TokenRpcHandler::TokenMaxId()
+{
+    rai::Chain chain;
+    bool error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("address", rai::TokenAddressToString(chain, address));
+    response_.put("address_raw", address.StringHex());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    rai::TokenValue id;
+    error = token_.ledger_.MaxTokenIdGet(transaction,
+                                         rai::TokenKey(chain, address), id);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+
+    response_.put("token_id", id.StringDec());
 }
 
 
@@ -714,6 +755,24 @@ bool rai::TokenRpcHandler::GetTokenAddress_(rai::Chain chain,
     if (error)
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ADDRESS;
+        return true;
+    }
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetTokenId_(rai::TokenValue& id)
+{
+    auto id_o = request_.get_optional<std::string>("token_id");
+    if (!id_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TOKEN_ID;
+        return true;
+    }
+
+    bool error = id.DecodeDec(*id_o);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TOKEN_ID;
         return true;
     }
     return false;

@@ -633,18 +633,25 @@ bool rai::TokenReceivable::Deserialize(rai::Stream& stream)
     return false;
 }
 
-rai::TokenIdInfo::TokenIdInfo() : burned_(false), transfers_(0)
+rai::TokenIdInfo::TokenIdInfo()
+    : burned_(false), unmapped_(false), wrapped_(false), transfers_(0)
 {
 }
 
 rai::TokenIdInfo::TokenIdInfo(const std::string& uri)
-    : burned_(false), transfers_(0), uri_(uri)
+    : burned_(false),
+      unmapped_(false),
+      wrapped_(false),
+      transfers_(0),
+      uri_(uri)
 {
 }
 
 void rai::TokenIdInfo::Serialize(rai::Stream& stream) const
 {
     rai::Write(stream, burned_);
+    rai::Write(stream, unmapped_);
+    rai::Write(stream, wrapped_);
     rai::Write(stream, transfers_);
     rai::Write(stream, uri_);
 }
@@ -653,6 +660,10 @@ bool rai::TokenIdInfo::Deserialize(rai::Stream& stream)
 {
     bool error = false;
     error = rai::Read(stream, burned_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, unmapped_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, wrapped_);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, transfers_);
     IF_ERROR_RETURN(error, true);
@@ -2583,6 +2594,38 @@ bool rai::Ledger::TokenIdInfoGet(rai::Transaction& transaction,
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
+}
+
+bool rai::Ledger::MaxTokenIdGet(rai::Transaction& transaction,
+                                const rai::TokenKey& token,
+                                rai::TokenValue& id) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        token.Serialize(stream);
+        rai::Write(stream, rai::TokenValue(0).bytes);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.token_id_info_, key);
+    auto data = store_it->first.Data();
+    auto size = store_it->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+
+    rai::TokenKey token_found;
+    rai::BufferStream stream(data, size);
+    bool error = token_found.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    if (token_found.chain_ != token.chain_
+        || token_found.address_ != token.address_)
+    {
+        return true;
+    }
+    return rai::Read(stream, id.bytes);
 }
 
 bool rai::Ledger::TokenHolderPut(rai::Transaction& transaction,

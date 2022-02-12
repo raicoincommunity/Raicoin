@@ -1417,7 +1417,7 @@ void rai::ExtensionTokenMint::SerializeJson(rai::Ptree& ptree) const
     }
 
     ptree.put("type", rai::TokenTypeToString(type_));
-    ptree.put("to", to_.StringHex());
+    ptree.put("to", to_.StringAccount());
     ptree.put("value", value_.StringDec());
 
     if (type_ == rai::TokenType::_721)
@@ -1438,7 +1438,7 @@ rai::ErrorCode rai::ExtensionTokenMint::DeserializeJson(
         
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO;
         std::string to = ptree.get<std::string>("to");
-        bool error = to_.DecodeHex(to);
+        bool error = to_.DecodeAccount(to);
         IF_ERROR_RETURN(error, error_code);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_VALUE;
@@ -1691,7 +1691,7 @@ void rai::ExtensionTokenSend::SerializeJson(rai::Ptree& ptree) const
     }
 
     token_.SerializeJson(ptree);
-    ptree.put("to", to_.StringHex());
+    ptree.put("to", to_.StringAccount());
     ptree.put("value", value_.StringDec());
 }
 
@@ -1705,7 +1705,7 @@ rai::ErrorCode rai::ExtensionTokenSend::DeserializeJson(const rai::Ptree& ptree)
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO;
         std::string to = ptree.get<std::string>("to");
-        bool error = to_.DecodeHex(to);
+        bool error = to_.DecodeAccount(to);
         IF_ERROR_RETURN(error, error_code);
         
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_VALUE;
@@ -3125,7 +3125,8 @@ void rai::ExtensionTokenUnmap::SerializeJson(rai::Ptree& ptree) const
     }
 
     token_.SerializeJson(ptree);
-    ptree.put("to", to_.StringHex());
+    ptree.put("to", rai::TokenAddressToString(token_.chain_, to_));
+    ptree.put("to_raw", to_.StringHex());
     ptree.put("value", value_.StringDec());
     ptree.put("extra_data", std::to_string(extra_data_));
 }
@@ -3139,13 +3140,22 @@ rai::ErrorCode rai::ExtensionTokenUnmap::DeserializeJson(const rai::Ptree& ptree
         IF_NOT_SUCCESS_RETURN(error_code);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO;
-        std::string to = ptree.get<std::string>("to");
-        bool error = to_.DecodeHex(to);
-        IF_ERROR_RETURN(error, error_code);
+        auto to_raw_o = ptree.get_optional<std::string>("to_raw");
+        if (to_raw_o)
+        {
+            bool error = to_.DecodeHex(*to_raw_o);
+            IF_ERROR_RETURN(error, error_code);
+        }
+        else
+        {
+            std::string to = ptree.get<std::string>("to");
+            bool error = rai::StringToTokenAddress(token_.chain_, to, to_);
+            IF_ERROR_RETURN(error, error_code);
+        }
         
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_VALUE;
         std::string value = ptree.get<std::string>("value");
-        error = value_.DecodeDec(value);
+        bool error = value_.DecodeDec(value);
         IF_ERROR_RETURN(error, error_code);
 
         error_code =
@@ -3229,7 +3239,8 @@ void rai::ExtensionTokenWrap::SerializeJson(rai::Ptree& ptree) const
 
     token_.SerializeJson(ptree);
     ptree.put("to_chain", rai::ChainToString(to_chain_));
-    ptree.put("to_account", to_account_.StringHex());
+    ptree.put("to_account", rai::TokenAddressToString(to_chain_, to_account_));
+    ptree.put("to_account_raw", to_account_.StringHex());
     ptree.put("value", value_.StringDec());
 }
 
@@ -3246,13 +3257,22 @@ rai::ErrorCode rai::ExtensionTokenWrap::DeserializeJson(const rai::Ptree& ptree)
         to_chain_ = rai::StringToChain(to_chain);
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TO_ACCOUNT;
-        std::string to_account = ptree.get<std::string>("to_account");
-        bool error = to_account_.DecodeHex(to_account);
-        IF_ERROR_RETURN(error, error_code);
+        auto to_raw_o = ptree.get_optional<std::string>("to_account_raw");
+        if (to_raw_o)
+        {
+            bool error = to_account_.DecodeHex(*to_raw_o);
+            IF_ERROR_RETURN(error, error_code);
+        }
+        else
+        {
+            std::string to = ptree.get<std::string>("to_account");
+            bool error = rai::StringToTokenAddress(to_chain_, to, to_account_);
+            IF_ERROR_RETURN(error, error_code);
+        }
 
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_VALUE;
         std::string value = ptree.get<std::string>("value");
-        error = value_.DecodeDec(value);
+        bool error = value_.DecodeDec(value);
         IF_ERROR_RETURN(error, error_code);
 
         return CheckData();

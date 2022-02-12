@@ -48,6 +48,8 @@ public:
         TOKEN_RECEIVABLES                   = 208,
         TOKEN_INFO                          = 209,
         TOKEN_RECEIVED                      = 210,
+        TOKEN_MAX_ID                        = 211,
+        TOKEN_ID_INFO                       = 212,
     };
     static std::string ToString(Action);
 

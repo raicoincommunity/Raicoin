@@ -297,6 +297,8 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_ADDRESS_RAW   = 348,
     RPC_MISS_FIELD_ADDRESS          = 349,
     RPC_INVALID_FIELD_ADDRESS       = 350,
+    RPC_MISS_FIELD_TOKEN_ID         = 351,
+    RPC_INVALID_FIELD_TOKEN_ID      = 352,
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,

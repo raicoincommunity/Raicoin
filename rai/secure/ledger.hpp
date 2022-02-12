@@ -281,6 +281,8 @@ public:
     bool Deserialize(rai::Stream&);
 
     bool burned_;
+    bool unmapped_;
+    bool wrapped_;
     uint64_t transfers_;
     std::string uri_;
 };
@@ -755,6 +757,8 @@ public:
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, rai::TokenIdInfo&);
+    bool MaxTokenIdGet(rai::Transaction&, const rai::TokenKey&,
+                       rai::TokenValue&) const;
     bool TokenHolderPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::Account&, const rai::TokenValue&);
     bool TokenHolderExist(rai::Transaction&, const rai::TokenKey&,
