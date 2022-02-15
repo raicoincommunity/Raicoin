@@ -122,6 +122,14 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_id_info";
         }
+        case rai::Provider::Action::TOKEN_ACCOUNT_TOKEN_IDS:
+        {
+            return "account_token_ids";
+        }
+        case rai::Provider::Action::TOKEN_ID_TRANSFER:
+        {
+            return "token_id_transfer";
+        }
         default:
         {
             return "";

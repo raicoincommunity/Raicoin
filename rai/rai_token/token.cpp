@@ -353,6 +353,22 @@ void rai::Token::Start()
         });
     };
 
+    token_id_transfer_observer_ =
+        [token](const rai::TokenKey& key, const rai::TokenValue& id,
+                const rai::TokenIdInfo& info, const rai::Account& account,
+                bool receive) {
+            auto token_s = token.lock();
+            if (token_s == nullptr) return;
+
+            token_s->Background([token, key, id, info, account, receive]() {
+                if (auto token_s = token.lock())
+                {
+                    token_s->observers_.token_id_transfer_.Notify(
+                        key, id, info, account, receive);
+                }
+            });
+        };
+
     account_observer_ =
         [token](
             const rai::Account& account, const rai::AccountTokensInfo& info,
@@ -505,6 +521,7 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_INFO);
     info.actions_.push_back(P::Action::TOKEN_MAX_ID);
     info.actions_.push_back(P::Action::TOKEN_ID_INFO);
+    info.actions_.push_back(P::Action::TOKEN_ACCOUNT_TOKEN_IDS);
     // todo:
 
     return info;
@@ -952,6 +969,12 @@ rai::TokenError rai::Token::ProcessBurn_(
         error_code = UpdateLedgerTokenIdTransfer_(
             transaction, key, burn->value_, block->Account(), block->Height());
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (token_id_transfer_observer_)
+        {
+            token_id_transfer_observer_(key, burn->value_, token_id_info,
+                                        block->Account(), false);
+        }
     }
     else
     {
@@ -1073,6 +1096,17 @@ rai::TokenError rai::Token::ProcessSend_(
                 transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
         }
 
+        rai::TokenIdInfo token_id_info;
+        error =
+            ledger_.TokenIdInfoGet(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessSend_: get token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+
         error = ledger_.AccountTokenIdDel(transaction, account_token_id);
         if (error)
         {
@@ -1094,6 +1128,12 @@ rai::TokenError rai::Token::ProcessSend_(
         error_code = UpdateLedgerReceivable_(transaction, receivable_key,
                                              receivable, info, block);
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (token_id_transfer_observer_)
+        {
+            token_id_transfer_observer_(key, token_id, token_id_info,
+                                        block->Account(), false);
+        }
     }
     else
     {
@@ -1260,13 +1300,24 @@ rai::TokenError rai::Token::ProcessReceive_(
         }
 
         rai::TokenValue token_id = receive->value_;
+        rai::TokenIdInfo token_id_info;
+        error =
+            ledger_.TokenIdInfoGet(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessReceive_: get token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+
         rai::AccountTokenId account_token_id(block->Account(), key, token_id);
         error = ledger_.AccountTokenIdPut(transaction, account_token_id,
                                           block->Height());
         if (error)
         {
             rai::Log::Error(rai::ToString(
-                "Token::ProcessSend_: put account token id, hash=",
+                "Token::ProcessReceive_: put account token id, hash=",
                 block->Hash().StringHex()));
             return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
         }
@@ -1274,6 +1325,12 @@ rai::TokenError rai::Token::ProcessReceive_(
         error_code = UpdateLedgerTokenIdTransfer_(
             transaction, key, token_id, block->Account(), block->Height());
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (token_id_transfer_observer_)
+        {
+            token_id_transfer_observer_(key, token_id, token_id_info,
+                                        block->Account(), true);
+        }
     }
     else
     {
@@ -1964,6 +2021,17 @@ rai::TokenError rai::Token::ProcessSwapTake_(
                 transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
         }
 
+        rai::TokenIdInfo token_id_info;
+        error =
+            ledger_.TokenIdInfoGet(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessSwapTake_: get token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+
         error = ledger_.AccountTokenIdDel(transaction, account_token_id);
         if (error)
         {
@@ -1978,6 +2046,12 @@ rai::TokenError rai::Token::ProcessSwapTake_(
         error_code = UpdateLedgerTokenIdTransfer_(
             transaction, key, token_id, block->Account(), block->Height());
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (token_id_transfer_observer_)
+        {
+            token_id_transfer_observer_(key, token_id, token_id_info,
+                                        block->Account(), false);
+        }
     }
     else
     {

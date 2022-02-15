@@ -16,6 +16,9 @@ public:
     void NotifyReceived(const rai::TokenReceivableKey&);
     void NotifyTokenIdInfo(const rai::TokenKey&, const rai::TokenValue&,
                            const rai::TokenIdInfo&);
+    void NotifyTokenIdTransfer(const rai::TokenKey&, const rai::TokenValue&,
+                               const rai::TokenIdInfo&, const rai::Account&,
+                               bool);
     void NotifyAccountTokensInfo(
         const rai::Account&, const rai::AccountTokensInfo&,
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&);
