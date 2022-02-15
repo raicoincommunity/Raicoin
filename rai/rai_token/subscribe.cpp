@@ -34,6 +34,13 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             NotifyTokenIdInfo(key, id, info);
         });
 
+    token_.observers_.token_id_transfer_.Add(
+        [this](const rai::TokenKey& key, const rai::TokenValue& id,
+               const rai::TokenIdInfo& info, const rai::Account& account,
+               bool receive) {
+            NotifyTokenIdTransfer(key, id, info, account, receive);
+        });
+
     token_.observers_.account_.Add(
         [this](
             const rai::Account& account, const rai::AccountTokensInfo& info,
@@ -88,6 +95,24 @@ void rai::TokenSubscriptions::NotifyTokenIdInfo(const rai::TokenKey& key,
     ptree.put("token_id", id.StringDec());
     token_.TokenIdInfoToPtree(info, ptree);
     Notify(key.address_, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyTokenIdTransfer(
+    const rai::TokenKey& key, const rai::TokenValue& id,
+    const rai::TokenIdInfo& info, const rai::Account& account, bool receive)
+{
+    using P = rai::Provider;
+    rai::Ptree ptree;
+    P::PutAction(ptree, P::Action::TOKEN_ID_TRANSFER);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT,
+                    key.address_.StringAccount());
+    ptree.put("token_id", id.StringDec());
+    ptree.put("account", account.StringAccount());
+    token_.TokenKeyToPtree(key, ptree);
+    ptree.put("receive", rai::BoolToString(receive));
+    token_.TokenIdInfoToPtree(info, ptree);
+    Notify(account, ptree);
 }
 
 void rai::TokenSubscriptions::NotifyAccountTokensInfo(

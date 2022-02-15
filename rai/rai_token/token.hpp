@@ -25,6 +25,9 @@ public:
     rai::ObserverContainer<const rai::TokenKey&, const rai::TokenValue&,
                            const rai::TokenIdInfo&>
         token_id_creation_;
+    rai::ObserverContainer<const rai::TokenKey&, const rai::TokenValue&,
+                           const rai::TokenIdInfo&, const rai::Account&, bool>
+        token_id_transfer_;
     rai::ObserverContainer<
         const rai::Account&, const rai::AccountTokensInfo&,
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&>
@@ -216,6 +219,9 @@ private:
     std::function<void(const rai::TokenKey&, const rai::TokenValue&,
                        const rai::TokenIdInfo&)>
         token_id_creation_observer_;
+    std::function<void(const rai::TokenKey&, const rai::TokenValue&,
+                       const rai::TokenIdInfo&, const rai::Account&, bool)>
+        token_id_transfer_observer_;
     std::function<void(
         const rai::Account&, const rai::AccountTokensInfo&,
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&)>

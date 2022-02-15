@@ -23,6 +23,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         AccountTokenInfo();
     }
+    else if (action == "account_token_ids")
+    {
+        AccountTokenIds();
+    }
     else if (action == "account_tokens_info")
     {
         AccountTokensInfo();
@@ -181,6 +185,77 @@ void rai::TokenRpcHandler::AccountTokenInfo()
     token_.MakeAccountTokenInfoPtree(key, token_info, info, response_);
 }
 
+void rai::TokenRpcHandler::AccountTokenIds()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    rai::TokenKey key(chain, address);
+    token_.TokenKeyToPtree(key, response_);
+
+    uint64_t count;
+    error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::TokenValue begin_id;
+    error = GetTokenId_(begin_id, "begin_id");
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::SUCCESS;
+        begin_id = 0;
+    }
+    rai::AccountTokenId begin(account, key, begin_id);
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree ids;
+    rai::Iterator i =
+        token_.ledger_.AccountTokenIdLowerBound(transaction, begin);
+    rai::Iterator n =
+        token_.ledger_.AccountTokenIdUpperBound(transaction, account, key);
+    for (; i != n && count > 0; ++i, --count)
+    {
+        rai::Ptree entry;
+        rai::AccountTokenId id;
+        uint64_t receive_at;
+        error = token_.ledger_.AccountTokenIdGet(i, id, receive_at);
+        if (error)
+        {
+            response_.put("error",
+                          "Failed to get account token id from ledger");
+            return;
+        }
+        entry.put("token_id", id.id_.StringDec());
+        entry.put("account", id.account_.StringAccount());
+        token_.TokenKeyToPtree(id.token_, entry);
+        entry.put("receive_at", std::to_string(receive_at));
+        rai::TokenIdInfo info;
+        error =
+            token_.ledger_.TokenIdInfoGet(transaction, id.token_, id.id_, info);
+        if (error)
+        {
+            response_.put("error", "Failed to get token id info from ledger");
+            return;
+        }
+        token_.TokenIdInfoToPtree(info, entry);
+
+        ids.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("ids", ids);
+}
+
 void rai::TokenRpcHandler::AccountTokensInfo()
 {
     rai::Account account;
@@ -290,6 +365,7 @@ void rai::TokenRpcHandler::NextAccountTokenLinks()
 
     uint64_t count;
     error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
     if (error || count == 0) count = 10;
     if (count > 100) count = 100;
 
@@ -358,6 +434,7 @@ void rai::TokenRpcHandler::NextTokenBlocks()
 
     uint64_t count;
     error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
     if (error || count == 0) count = 10;
     if (count > 100) count = 100;
 
@@ -425,6 +502,7 @@ void rai::TokenRpcHandler::PreviousAccountTokenLinks()
 
     uint64_t count;
     error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
     if (error || count == 0) count = 10;
     if (count > 100) count = 100;
 
@@ -492,6 +570,7 @@ void rai::TokenRpcHandler::PreviousTokenBlocks()
 
     uint64_t count;
     error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
     if (error || count == 0) count = 10;
     if (count > 100) count = 100;
 
@@ -760,9 +839,10 @@ bool rai::TokenRpcHandler::GetTokenAddress_(rai::Chain chain,
     return false;
 }
 
-bool rai::TokenRpcHandler::GetTokenId_(rai::TokenValue& id)
+bool rai::TokenRpcHandler::GetTokenId_(rai::TokenValue& id,
+                                       const std::string& key)
 {
-    auto id_o = request_.get_optional<std::string>("token_id");
+    auto id_o = request_.get_optional<std::string>(key);
     if (!id_o)
     {
         error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TOKEN_ID;

@@ -2253,6 +2253,33 @@ bool rai::Ledger::AccountTokenIdGet(rai::Transaction& transaction,
     return rai::Read(stream, receive_at);
 }
 
+bool rai::Ledger::AccountTokenIdGet(rai::Iterator& it,
+                                    rai::AccountTokenId& id,
+                                    uint64_t& receive_at) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = id.Deserialize(stream_key);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = rai::Read(stream_value, receive_at);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
 bool rai::Ledger::AccountTokenIdDel(rai::Transaction& transaction,
                                     const rai::AccountTokenId& token_id)
 {
@@ -2276,6 +2303,51 @@ bool rai::Ledger::AccountTokenIdExist(rai::Transaction& transaction,
 {
     uint64_t receive_at;
     return !AccountTokenIdGet(transaction, token_id, receive_at);
+}
+
+rai::Iterator rai::Ledger::AccountTokenIdLowerBound(
+    rai::Transaction& transaction, const rai::Account& account,
+    const rai::TokenKey& key) const
+{
+    return AccountTokenIdLowerBound(transaction,
+                                    rai::AccountTokenId(account, key, 0));
+}
+
+rai::Iterator rai::Ledger::AccountTokenIdLowerBound(
+    rai::Transaction& transaction, const rai::AccountTokenId& id) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        id.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.account_token_id_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::AccountTokenIdUpperBound(
+    rai::Transaction& transaction, const rai::Account& account,
+    const rai::TokenKey& key) const
+{
+    rai::Account account_l(account);
+    rai::TokenKey key_l(key);
+    uint32_t next_chain = static_cast<uint32_t>(key_l.chain_) + 1;
+    key_l.chain_ = static_cast<rai::Chain>(next_chain);
+    if (next_chain == 0)
+    {
+        key_l.address_ += 1;
+        if (key_l.address_.IsZero())
+        {
+            account_l += 1;
+            if (account_l.IsZero())
+            {
+                return rai::Iterator(rai::StoreIterator(nullptr));
+            }
+        }
+    }
+    return AccountTokenIdLowerBound(transaction, account_l, key_l);
 }
 
 bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
@@ -2625,7 +2697,10 @@ bool rai::Ledger::MaxTokenIdGet(rai::Transaction& transaction,
     {
         return true;
     }
-    return rai::Read(stream, id.bytes);
+    error = rai::Read(stream, id.bytes);
+    IF_ERROR_RETURN(error, true);
+    id = ~id;
+    return false;
 }
 
 bool rai::Ledger::TokenHolderPut(rai::Transaction& transaction,

@@ -723,9 +723,19 @@ public:
                            uint64_t);
     bool AccountTokenIdGet(rai::Transaction&, const rai::AccountTokenId&,
                            uint64_t&) const;
+    bool AccountTokenIdGet(rai::Iterator&, rai::AccountTokenId&,
+                           uint64_t&) const;
     bool AccountTokenIdDel(rai::Transaction&, const rai::AccountTokenId&);
     bool AccountTokenIdExist(rai::Transaction&,
                              const rai::AccountTokenId&) const;
+    rai::Iterator AccountTokenIdLowerBound(rai::Transaction&,
+                                           const rai::Account&,
+                                           const rai::TokenKey&) const;
+    rai::Iterator AccountTokenIdLowerBound(rai::Transaction&,
+                                           const rai::AccountTokenId&) const;
+    rai::Iterator AccountTokenIdUpperBound(rai::Transaction&,
+                                           const rai::Account&,
+                                           const rai::TokenKey&) const;
     bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
                        const rai::TokenBlock&);
     bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
