@@ -27,16 +27,20 @@ public:
     void NextTokenBlocks();
     void PreviousAccountTokenLinks();
     void PreviousTokenBlocks();
+    void ReceivableTokens();
     void TokenBlock();
     void TokenIdInfo();
     void TokenInfo();
     void TokenMaxId();
     void TokenReceivables();
+    void TokenReceivablesAll();
+    void TokenReceivablesSummary();
 
 private:
     bool GetChain_(rai::Chain&);
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);
     bool GetTokenId_(rai::TokenValue&, const std::string& = "token_id");
+    bool GetTokens_(std::vector<rai::TokenKey>&);
     bool PutTokenBlock_(rai::Transaction&, uint64_t, const rai::TokenBlock&,
                         rai::Ptree&);
 

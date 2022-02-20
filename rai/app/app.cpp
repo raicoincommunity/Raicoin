@@ -67,12 +67,14 @@ void rai::App::Start()
             std::chrono::seconds(5));
     Ongoing(std::bind(&rai::AppBootstrap::Run, &bootstrap_),
             std::chrono::seconds(3));
+    Ongoing(std::bind(&rai::AppBootstrap::UpdateSyncingStatus, &bootstrap_),
+            std::chrono::seconds(30));
     Ongoing(std::bind(&rai::App::Subscribe, this), std::chrono::seconds(300));
     Ongoing(std::bind(&rai::AppSubscriptions::Cutoff, &subscribe_),
             std::chrono::seconds(5));
     Ongoing(std::bind(&rai::BlockCache::Age, &block_cache_, 300),
             std::chrono::seconds(5));
-    Ongoing(std::bind(&rai::BlockWaiting::Age, &block_waiting_, 3600),
+    Ongoing(std::bind(&rai::BlockWaiting::Age, &block_waiting_, 7200),
             std::chrono::seconds(60));
 
     if (ws_server_)
@@ -287,8 +289,12 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_CONFIRMED_FORK:
+            {
+                break;
+            }
             case rai::ErrorCode::APP_PROCESS_EXIST:
             {
+                PullNextBlockAsync(block);
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_CONFIRMED:
@@ -655,7 +661,10 @@ void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
 
     if (*status_o == "miss")
     {
-        subscribe_.Synced(account);
+        if (account_synced_observer_)
+        {
+            account_synced_observer_(account);
+        }
         return;
     }
     else if (*status_o != "success")
@@ -1040,6 +1049,18 @@ void rai::App::RegisterObservers_()
             if (auto app_s = app.lock())
             {
                 app_s->observers_.block_rollback_.Notify(block);
+            }
+        });
+    };
+
+    account_synced_observer_ = [app](const rai::Account& account) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+
+        app_s->Background([app, account]() {
+            if (auto app_s = app.lock())
+            {
+                app_s->observers_.account_synced_.Notify(account);
             }
         });
     };

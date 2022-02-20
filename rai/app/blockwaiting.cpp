@@ -6,6 +6,7 @@ rai::BlockWaitingEntry::BlockWaitingEntry(
     const rai::Account& account, uint64_t height,
     const std::shared_ptr<rai::Block>& block, bool confirmed)
     : for_{account, height},
+      account_(block->Account()),
       hash_(block->Hash()),
       arrival_(std::chrono::steady_clock::now()),
       block_(block),
@@ -41,6 +42,13 @@ bool rai::BlockWaiting::Exists(const rai::Account& account,
     std::lock_guard<std::mutex> lock(mutex_);
     rai::AccountHeight key{account, height};
     return entries_.lower_bound(key) != entries_.upper_bound(key);
+}
+
+bool rai::BlockWaiting::IsAccountWaiting(const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto& index = entries_.get<rai::BlockWaitingByAccount>();
+    return index.lower_bound(account) != index.upper_bound(account);
 }
 
 void rai::BlockWaiting::Age(uint64_t seconds)
@@ -82,6 +90,21 @@ std::vector<rai::BlockWaitingEntry> rai::BlockWaiting::List() const
     for (auto i = entries_.begin(), n = entries_.end(); i != n; ++i)
     {
         result.push_back(*i);
+    }
+    return result;
+}
+
+std::vector<rai::AccountHeight> rai::BlockWaiting::WaitFor(
+    const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<rai::AccountHeight> result;
+    const auto& index = entries_.get<rai::BlockWaitingByAccount>();
+    auto i = index.lower_bound(account);
+    auto n = index.upper_bound(account);
+    for (; i != n; ++i)
+    {
+        result.push_back(i->for_);
     }
     return result;
 }

@@ -28,6 +28,7 @@ public:
     rai::ObserverContainer<rai::WebsocketStatus> gateway_status_;
     rai::ObserverContainer<const std::shared_ptr<rai::Block>&, bool> block_;
     rai::ObserverContainer<const std::shared_ptr<rai::Block>&> block_rollback_;
+    rai::ObserverContainer<const rai::Account&> account_synced_;
 };
 
 class AppTrace
@@ -170,6 +171,7 @@ private:
         block_observer_;
     std::function<void(const std::shared_ptr<rai::Block>&)>
         block_rollback_observer_;
+    std::function<void(const rai::Account&)> account_synced_observer_;
 
     std::condition_variable condition_;
     mutable std::mutex mutex_;

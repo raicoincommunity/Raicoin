@@ -51,6 +51,7 @@ public:
 
     void AddBlock(const std::shared_ptr<rai::Block>&);
     void DelBlock(const rai::BlockHash&);
+    void AgeVotes();
     bool ForkFound() const;
 
     rai::Account account_;
@@ -84,6 +85,24 @@ public:
     std::shared_ptr<rai::Block> block_;
 };
 
+class AccountWeight
+{
+public:
+    rai::Account account_;
+    rai::Amount weight_;
+};
+
+typedef boost::multi_index_container<
+    AccountWeight,
+    boost::multi_index::indexed_by<
+        boost::multi_index::hashed_unique<boost::multi_index::member<
+            AccountWeight, rai::Account, &AccountWeight::account_>>,
+        boost::multi_index::ordered_non_unique<
+            boost::multi_index::member<AccountWeight, rai::Amount,
+                                       &AccountWeight::weight_>,
+            std::greater<rai::Amount>>>>
+    AccountWeightContainer;
+
 class Node;
 class Elections
 {
@@ -105,6 +124,8 @@ public:
                          const std::shared_ptr<rai::Block>&,
                          const rai::Amount&);
     size_t Size() const;
+    void Weights(uint64_t, rai::Amount&, rai::Amount&,
+                 std::vector<rai::AccountWeight>&) const;
 
     static std::chrono::seconds constexpr FORK_ELECTION_DELAY =
         std::chrono::seconds(32);
@@ -144,6 +165,8 @@ private:
     void UpdateWeightInfo_(std::unique_lock<std::mutex>&);
     bool EnoughOnlineWeight_() const;
     bool EnoughVotingWeight_(const rai::Amount&) const;
+    const std::vector<rai::Account>& TopOnlineReps_(
+        std::unique_lock<std::mutex>&, uint64_t) const;
 
     rai::Node& node_;
     mutable std::mutex mutex_;
@@ -151,7 +174,9 @@ private:
     std::unordered_set<rai::Account> online_reps_;
     rai::Amount weight_total_;
     rai::Amount weight_online_;
-    std::unordered_map<rai::Account, rai::Amount> weights_;
+    rai::AccountWeightContainer weights_;
+    mutable std::unordered_map<uint64_t, std::vector<rai::Account>>
+        weights_top_;
 
     boost::multi_index_container<
         Election,

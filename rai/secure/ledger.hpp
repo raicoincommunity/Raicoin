@@ -59,6 +59,8 @@ public:
     Iterator(rai::Iterator&&);
 
     rai::Iterator& operator++();
+    rai::Iterator& operator=(rai::Iterator&&);
+    rai::Iterator& operator=(const rai::Iterator&) = delete;
     bool operator==(const rai::Iterator&) const;
     bool operator!=(const rai::Iterator&) const;
 
@@ -763,6 +765,12 @@ public:
                                            const rai::Account&) const;
     rai::Iterator TokenReceivableUpperBound(rai::Transaction&,
                                            const rai::Account&) const;
+    rai::Iterator TokenReceivableLowerBound(rai::Transaction&,
+                                            const rai::Account&,
+                                            const rai::TokenKey&) const;
+    rai::Iterator TokenReceivableUpperBound(rai::Transaction&,
+                                            const rai::Account&,
+                                            const rai::TokenKey&) const;
     bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,

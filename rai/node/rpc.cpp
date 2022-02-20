@@ -215,6 +215,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         ElectionInfo();
     }
+    else if (action == "election_weights")
+    {
+        ElectionWeights();
+    }
     else if (action == "elections")
     {
         Elections();
@@ -1228,6 +1232,55 @@ void rai::NodeRpcHandler::ElectionInfo()
     }
 
     response_.put_child("election", election);
+}
+
+void rai::NodeRpcHandler::ElectionWeights()
+{
+    uint64_t percent = 80;
+    auto percent_o = request_.get_optional<std::string>("percent");
+    if (percent_o)
+    {
+        bool error = rai::StringToUint(*percent_o, percent);
+        if (error)
+        {
+            percent = 80;
+        }
+    }
+
+    rai::Amount total;
+    rai::Amount online;
+    std::vector<rai::AccountWeight> list;
+    node_.elections_.Weights(percent, total, online, list);
+    rai::Ptree list_ptree;
+    for (const auto& i : list)
+    {
+        rai::Ptree entry;
+        entry.put("representative", i.account_.StringAccount());
+        entry.put("weight", i.weight_.StringDec());
+        entry.put("weight_in_rai", i.weight_.StringBalance(rai::RAI) + " RAI");
+        list_ptree.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("list", list_ptree);
+    response_.put("percent", std::to_string(percent));
+    response_.put("count", std::to_string(list.size()));
+    response_.put("total_weight", total.StringDec());
+    response_.put("total_weight_in_rai",
+                  total.StringBalance(rai::RAI) + " RAI");
+    response_.put("online_weight", online.StringDec());
+    response_.put("online_weight_in_rai",
+                  online.StringBalance(rai::RAI) + " RAI");
+    if (!total.IsZero())
+    {
+        rai::uint256_t rate = rai::uint256_t(online.Number()) * 10000
+                              / rai::uint256_t(total.Number());
+        std::string integer = rai::uint256_union(rate / 100).StringDec();
+        std::string decimals = rai::uint256_union(rate % 100).StringDec();
+        if (decimals.size() == 1)
+        {
+            decimals = "0" + decimals;
+        }
+        response_.put("online_rate", integer + "." + decimals + "%");
+    }
 }
 
 void rai::NodeRpcHandler::Elections()
