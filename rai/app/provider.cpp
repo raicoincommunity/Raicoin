@@ -130,6 +130,10 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_id_transfer";
         }
+        case rai::Provider::Action::TOKEN_RECEIVABLES_SUMMARY:
+        {
+            return "token_receivables_summary";
+        }
         default:
         {
             return "";

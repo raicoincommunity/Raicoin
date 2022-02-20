@@ -64,6 +64,10 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         BlockCount();
     }
+    else if (action == "bootstrap_status")
+    {
+        BootstrapStatus();
+    }
     else if (action == "clients")
     {
         Clients();
@@ -102,6 +106,10 @@ void rai::AppRpcHandler::ProcessImpl()
     else if (action == "subscriptions")
     {
         Subscriptions();
+    }
+    else if (action == "synchronizing_accounts")
+    {
+        SynchronizingAccounts();
     }
     else
     {
@@ -618,7 +626,6 @@ void rai::AppRpcHandler::ServiceSubscribe()
     response_.put("success", "");
 }
 
-
 void rai::AppRpcHandler::Stats()
 {
     boost::optional<std::string> type_o =
@@ -775,6 +782,25 @@ void rai::AppRpcHandler::SubscriptionCount()
 void rai::AppRpcHandler::SubscriptionAccountCount()
 {
     response_.put("count", std::to_string(app_.subscribe_.AccountSize()));
+}
+
+void rai::AppRpcHandler::SynchronizingAccounts()
+{
+    uint64_t count = 0;
+    bool error = GetCount_(count);
+    if (error || count == 0 || count > 100)
+    {
+        count = 1000;
+    }
+    
+    rai::Ptree accounts;
+    for (const auto& account : app_.bootstrap_.SyncingAccounts(count))
+    {
+        rai::Ptree entry;
+        entry.put("", account.StringAccount());
+        accounts.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("accounts", accounts);
 }
 
 bool rai::AppRpcHandler::GetService_(std::string& service)

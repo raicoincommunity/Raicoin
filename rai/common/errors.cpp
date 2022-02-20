@@ -1222,6 +1222,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid token_id field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_TOKENS:
+        {
+            return "[RPC] The tokens field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TOKENS:
+        {
+            return "[RPC] Invalid tokens field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";

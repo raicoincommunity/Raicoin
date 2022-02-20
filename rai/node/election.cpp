@@ -647,6 +647,28 @@ size_t rai::Elections::Size() const
     return elections_.size();
 }
 
+void rai::Elections::Weights(uint64_t percent, rai::Amount& total,
+                             rai::Amount& online,
+                             std::vector<rai::AccountWeight>& list) const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    total = weight_total_;
+    online = weight_online_;
+    std::vector<rai::Account> accounts = TopOnlineReps_(lock, percent);
+    for (const auto& account : accounts)
+    {
+        auto it = weights_.find(account);
+        if (it != weights_.end())
+        {
+            list.push_back(*it);
+        }
+        else
+        {
+            list.push_back(rai::AccountWeight{account, rai::Amount(0)});
+        }
+    }
+}
+
 void rai::Elections::AddBlock_(const rai::Election& election,
                                const std::shared_ptr<rai::Block>& block)
 {
@@ -865,16 +887,16 @@ rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election,
 
         if (vote.second.conflict_found_)
         {
-            result.conflict_ += it->second;
-            result.invalid_ += it->second;
+            result.conflict_ += it->weight_;
+            result.invalid_ += it->weight_;
             continue;
         }
 
         uint64_t factor = vote.second.WeightFactor(time_diff);
-        rai::uint256_t weight(it->second.Number());
+        rai::uint256_t weight(it->weight_.Number());
         weight = weight * factor / 100;
         rai::Amount adjust(static_cast<rai::uint128_t>(weight));
-        rai::Amount loss(it->second - adjust);
+        rai::Amount loss(it->weight_ - adjust);
 
         if (!adjust.IsZero())
         {
@@ -895,7 +917,7 @@ rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election,
         {
             continue;
         }
-        result.not_voting_ += it->second;
+        result.not_voting_ += it->weight_;
     }
 
     if (candidates.empty())
@@ -1051,13 +1073,14 @@ std::chrono::steady_clock::time_point rai::Elections::NextWakeup_(
 void rai::Elections::UpdateWeightInfo_(std::unique_lock<std::mutex>& lock)
 {
     uint64_t now = rai::CurrentTimestamp();
-    if (now < last_update_ + 3)
+    if (now < last_update_ + 10)
     {
         return;
     }
     last_update_ = now;
     lock.unlock();
 
+    rai::AccountWeightContainer weights;
     auto online_reps = node_.peers_.Accounts(false);
     rai::RepWeights rep_weights;
     node_.RepWeights(rep_weights);
@@ -1069,6 +1092,7 @@ void rai::Elections::UpdateWeightInfo_(std::unique_lock<std::mutex>& lock)
         if (it != rep_weights.weights_.end())
         {
             weight_online += it->second;
+            weights.insert(rai::AccountWeight{i, it->second});
         }
     }
 
@@ -1076,7 +1100,8 @@ void rai::Elections::UpdateWeightInfo_(std::unique_lock<std::mutex>& lock)
     online_reps_ = std::move(online_reps);
     weight_total_ = rep_weights.total_;
     weight_online_ = weight_online;
-    weights_ = std::move(rep_weights.weights_);
+    weights_.swap(weights);
+    weights_top_.clear();
 }
 
 bool rai::Elections::EnoughOnlineWeight_() const
@@ -1091,4 +1116,38 @@ bool rai::Elections::EnoughVotingWeight_(const rai::Amount& valid) const
     rai::uint256_t voting(valid.Number());
     rai::uint256_t total(weight_total_.Number());
     return voting * 100 > total * rai::CONFIRM_WEIGHT_PERCENTAGE;
+}
+
+const std::vector<rai::Account>& rai::Elections::TopOnlineReps_(
+    std::unique_lock<std::mutex>& lock, uint64_t percent) const
+{
+    if (percent == 0)
+    {
+        percent = 1;
+    }
+    if (percent > 100)
+    {
+        percent = 100;
+    }
+
+    auto it = weights_top_.find(percent);
+    if (it != weights_top_.end())
+    {
+        return it->second;
+    }
+    std::vector<rai::Account> accounts;
+    rai::uint256_t weight(0);
+    auto i = weights_.get<1>().begin();
+    auto n = weights_.get<1>().end();
+    for (; i != n; ++i)
+    {
+        accounts.push_back(i->account_);
+        weight += i->weight_.Number();
+        if (weight * 100 >= rai::uint256_t(weight_total_.Number()) * percent)
+        {
+            break;
+        }
+    }
+    weights_top_[percent] = std::move(accounts);
+    return weights_top_[percent];
 }

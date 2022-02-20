@@ -20,6 +20,8 @@ void rai::AppSubscriptionData::SerializeJson(rai::Ptree& ptree)
 
 rai::AppSubscriptions::AppSubscriptions(rai::App& app) : app_(app)
 {
+    app_.observers_.account_synced_.Add(
+        [this](const rai::Account& account) { Synced(account); });
 }
 
 void rai::AppSubscriptions::AfterSubscribe(
@@ -85,7 +87,6 @@ void rai::AppSubscriptions::Cutoff()
 
 void rai::AppSubscriptions::Synced(const rai::Account& account)
 {
-    std::vector<rai::UniqueId> clients;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = accounts_.find(account);

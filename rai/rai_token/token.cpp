@@ -522,6 +522,7 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_MAX_ID);
     info.actions_.push_back(P::Action::TOKEN_ID_INFO);
     info.actions_.push_back(P::Action::TOKEN_ACCOUNT_TOKEN_IDS);
+    info.actions_.push_back(P::Action::TOKEN_RECEIVABLES_SUMMARY);
     // todo:
 
     return info;

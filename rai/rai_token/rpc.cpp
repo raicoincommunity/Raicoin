@@ -71,6 +71,14 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         TokenReceivables();
     }
+    else if (action == "token_receivables_all")
+    {
+        TokenReceivablesAll();
+    }
+    else if (action == "token_receivables_summary")
+    {
+        TokenReceivablesSummary();
+    }
     else if (action == "stop")
     {
         if (!CheckLocal_())
@@ -729,12 +737,87 @@ void rai::TokenRpcHandler::TokenMaxId()
     response_.put("token_id", id.StringDec());
 }
 
-
 void rai::TokenRpcHandler::TokenReceivables()
 {
     rai::Account account;
     bool error = GetAccount_(account);
     IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t count = 0;
+    error = GetCount_(count);
+    IF_ERROR_RETURN_VOID(error);
+    if (count == 0) count = 100;
+    if (count > 1000) count = 1000;
+
+    std::vector<rai::TokenKey> tokens;
+    error = GetTokens_(tokens);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree receivables;
+    for (const auto& token : tokens)
+    {
+        rai::Iterator i = token_.ledger_.TokenReceivableLowerBound(
+            transaction, account, token);
+        rai::Iterator n = token_.ledger_.TokenReceivableUpperBound(
+            transaction, account, token);
+        for (; i != n && count > 0; ++i, --count)
+        {
+            rai::TokenReceivableKey key;
+            rai::TokenReceivable receivable;
+            error = token_.ledger_.TokenReceivableGet(i, key, receivable);
+            if (error)
+            {
+                response_.put("error", "Get token receivable info failed");
+                return;
+            }
+
+            rai::TokenInfo info;
+            error = token_.ledger_.TokenInfoGet(transaction, key.token_, info);
+            if (error)
+            {
+                response_.put(
+                    "error",
+                    rai::ToString("Get token info failed, token.chain=",
+                                  rai::ChainToString(key.token_.chain_),
+                                  ", token.address_raw=",
+                                  key.token_.address_.StringHex()));
+                return;
+            }
+
+            std::shared_ptr<rai::Block> block(nullptr);
+            if (rai::IsLocalSource(receivable.source_))
+            {
+                error =
+                    token_.ledger_.BlockGet(transaction, key.tx_hash_, block);
+                if (error)
+                {
+                    response_.put("error",
+                                  rai::ToString("Get block failed, hash=",
+                                                key.tx_hash_.StringHex()));
+                    return;
+                }
+            }
+
+            rai::Ptree entry;
+            token_.MakeReceivablePtree(key, receivable, info, block, entry);
+            receivables.push_back(std::make_pair("", entry));
+        }
+        if (count == 0) break;
+    }
+
+    response_.put_child("receivables", receivables);
+}
+
+void rai::TokenRpcHandler::TokenReceivablesAll()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
 
     uint64_t count = 0;
     error = GetCount_(count);
@@ -788,6 +871,42 @@ void rai::TokenRpcHandler::TokenReceivables()
         receivables.push_back(std::make_pair("", entry));
     }
     response_.put_child("receivables", receivables);
+}
+
+void rai::TokenRpcHandler::TokenReceivablesSummary()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree tokens;
+    rai::Iterator i =
+        token_.ledger_.TokenReceivableLowerBound(transaction, account);
+    rai::Iterator n =
+        token_.ledger_.TokenReceivableUpperBound(transaction, account);
+    while (i != n)
+    {
+        rai::TokenReceivableKey key;
+        rai::TokenReceivable receivable;
+        error = token_.ledger_.TokenReceivableGet(i, key, receivable);
+        if (error)
+        {
+            response_.put("error", "Get token receivable info failed");
+            return;
+        }
+        rai::Ptree entry;
+        token_.TokenKeyToPtree(key.token_, entry);
+        tokens.push_back(std::make_pair("", entry));
+
+        i = token_.ledger_.TokenReceivableUpperBound(transaction, account,
+                                                     key.token_);
+    }
+
+    response_.put_child("tokens", tokens);
 }
 
 bool rai::TokenRpcHandler::GetChain_(rai::Chain& chain)
@@ -855,6 +974,53 @@ bool rai::TokenRpcHandler::GetTokenId_(rai::TokenValue& id,
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TOKEN_ID;
         return true;
     }
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetTokens_(std::vector<rai::TokenKey>& tokens)
+{
+    try
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TOKENS;
+        auto tokens_o = request_.get_child_optional("tokens");
+        if (!tokens_o) return true;
+
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TOKENS;
+        size_t count = 0;
+        for (const auto& i : *tokens_o)
+        {
+            auto chain_o = i.second.get_optional<std::string>("chain");
+            if (!chain_o) return true;
+            rai::Chain chain = rai::StringToChain(*chain_o);
+            if (chain == rai::Chain::INVALID) return true;
+
+            rai::TokenAddress address;
+            auto address_raw_o =
+                i.second.get_optional<std::string>("address_raw");
+            if (address_raw_o)
+            {
+                bool error = address.DecodeHex(*address_raw_o);
+                IF_ERROR_RETURN(error, true);
+            }
+            else
+            {
+                auto address_o = i.second.get_optional<std::string>("address");
+                if (!address_o) return true;
+                bool error =
+                    rai::StringToTokenAddress(chain, *address_o, address);
+                IF_ERROR_RETURN(error, true);
+            }
+
+            tokens.emplace_back(chain, address);
+            ++count;
+            if (count >= 1000) break;
+        }
+    }
+    catch (...)
+    {
+        return true;
+    }
+    error_code_ = rai::ErrorCode::SUCCESS;
     return false;
 }
 

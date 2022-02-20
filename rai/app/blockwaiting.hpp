@@ -18,17 +18,22 @@ public:
                       const std::shared_ptr<rai::Block>&, bool);
 
     rai::AccountHeight for_;
+    rai::Account account_;
     rai::BlockHash hash_;
     std::chrono::steady_clock::time_point arrival_;
     std::shared_ptr<rai::Block> block_;
     bool confirmed_;
 };
 
-class BlockWaitingByArrival
+class BlockWaitingByAccount
 {
 };
 
 class BlockWaitingByHash
+{
+};
+
+class BlockWaitingByArrival
 {
 };
 
@@ -38,9 +43,11 @@ public:
     void Insert(const rai::Account&, uint64_t,
                 const std::shared_ptr<rai::Block>&, bool);
     bool Exists(const rai::Account&, uint64_t) const;
+    bool IsAccountWaiting(const rai::Account&) const;
     void Age(uint64_t);
     std::vector<rai::BlockWaitingEntry> Remove(const rai::Account&, uint64_t);
     std::vector<rai::BlockWaitingEntry> List() const;
+    std::vector<rai::AccountHeight> WaitFor(const rai::Account&) const;
     size_t Size() const;
 
 private:
@@ -51,6 +58,10 @@ private:
             boost::multi_index::ordered_non_unique<boost::multi_index::member<
                 BlockWaitingEntry, rai::AccountHeight,
                 &BlockWaitingEntry::for_>>,
+            boost::multi_index::ordered_non_unique<
+                boost::multi_index::tag<BlockWaitingByAccount>,
+                boost::multi_index::member<BlockWaitingEntry, rai::Account,
+                                           &BlockWaitingEntry::account_>>,
             boost::multi_index::hashed_unique<
                 boost::multi_index::tag<BlockWaitingByHash>,
                 boost::multi_index::member<BlockWaitingEntry, rai::BlockHash,

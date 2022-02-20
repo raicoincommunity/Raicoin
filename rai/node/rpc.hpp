@@ -66,6 +66,7 @@ public:
     void DelegatorList();
     void ElectionCount();
     void ElectionInfo();
+    void ElectionWeights();
     void Elections();
     void EventSubscribe();
     void EventUnsubscribe();

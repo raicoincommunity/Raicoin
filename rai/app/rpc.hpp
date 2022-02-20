@@ -44,6 +44,7 @@ public:
     void Subscriptions();
     void SubscriptionCount();
     void SubscriptionAccountCount();
+    void SynchronizingAccounts();
 
     rai::App& app_;
     rai::UniqueId uid_;

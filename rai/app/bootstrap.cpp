@@ -2,6 +2,7 @@
 
 #include <rai/common/util.hpp>
 #include <rai/app/app.hpp>
+std::chrono::seconds constexpr rai::AppBootstrap::BOOTSTRAP_INTERVAL;
 
 bool rai::AccountHead::DeserializeJson(const rai::Ptree& ptree)
 {
@@ -32,8 +33,11 @@ rai::AppBootstrap::AppBootstrap(rai::App& app)
       stopped_(false),
       running_(false),
       count_(0),
-      next_(0)
+      next_(0),
+      synced_(false)
 {
+    app_.observers_.account_synced_.Add(
+        [this](const rai::Account& account) { RemoveSyncingAccount(account); });
 }
 
 bool rai::AppBootstrap::Ready() const
@@ -67,8 +71,8 @@ void rai::AppBootstrap::Run()
     auto now = std::chrono::steady_clock::now();
     if (!running_)
     {
-        auto interval = std::chrono::seconds(300);
-        if (last_run_ + interval > now)
+        if (count_ >= rai::AppBootstrap::INITIAL_FULL_BOOTSTRAPS
+            && last_run_ + rai::AppBootstrap::BOOTSTRAP_INTERVAL > now)
         {
             return;
         }
@@ -112,34 +116,45 @@ void rai::AppBootstrap::Stop()
 void rai::AppBootstrap::Status(rai::Ptree& status) const
 {
     status.put("ready", rai::BoolToString(Ready()));
-    std::lock_guard<std::mutex> lock(mutex_);
-    status.put("running", rai::BoolToString(running_));
-    status.put("count", std::to_string(count_));
-    status.put("next", next_.StringHex());
+    status.put("synchronized", rai::BoolToString(synced_));
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status.put("running", rai::BoolToString(running_));
+        status.put("count", std::to_string(count_));
+        status.put("next", next_.StringHex());
 
-    auto now = std::chrono::steady_clock::now();
-    if (last_run_ == std::chrono::steady_clock::time_point())
-    {
-        status.put("last_run", "never");
-    }
-    else
-    {
-        auto last_run =
-            std::chrono::duration_cast<std::chrono::seconds>(now - last_run_)
-                .count();
-        status.put("last_run", std::to_string(last_run) + " seconds ago");
+        auto now = std::chrono::steady_clock::now();
+        if (last_run_ == std::chrono::steady_clock::time_point())
+        {
+            status.put("last_run", "never");
+        }
+        else
+        {
+            auto last_run = std::chrono::duration_cast<std::chrono::seconds>(
+                                now - last_run_)
+                                .count();
+            status.put("last_run", std::to_string(last_run) + " seconds ago");
+        }
+
+        if (last_request_ == std::chrono::steady_clock::time_point())
+        {
+            status.put("last_request", "never");
+        }
+        else
+        {
+            auto last_request =
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    now - last_request_)
+                    .count();
+            status.put("last_request",
+                       std::to_string(last_request) + " seconds ago");
+        }
     }
 
-    if (last_request_ == std::chrono::steady_clock::time_point())
     {
-        status.put("last_request", "never");
-    }
-    else
-    {
-        auto last_request =
-            std::chrono::duration_cast<std::chrono::seconds>(now - last_request_)
-                .count();
-        status.put("last_request", std::to_string(last_request) + " seconds ago");
+        std::lock_guard<std::mutex> lock(syncings_mutex_);
+        status.put("synchronizing_account_count",
+                   std::to_string(syncings_.size()));
     }
 }
 
@@ -177,12 +192,14 @@ void rai::AppBootstrap::ReceiveAccountHeadMessage(
     }
 
     bool ready = Ready();
+    bool syncing = false;
     {
         std::unique_lock<std::mutex> lock(mutex_);
         if (stopped_ || request_id != request_id_)
         {
             return;
         }
+        syncing = count_ < rai::AppBootstrap::INITIAL_FULL_BOOTSTRAPS;
 
         if (more)
         {
@@ -213,43 +230,11 @@ void rai::AppBootstrap::ReceiveAccountHeadMessage(
             heads.push_back(head);
         }
     }
-    ProcessAccountHeads_(heads);
+    ProcessAccountHeads(heads, syncing);
 }
 
-uint64_t rai::AppBootstrap::NewRequestId_(std::unique_lock<std::mutex>& lock)
-{
-    return ++request_id_;
-}
-
-void rai::AppBootstrap::SendRequest_(std::unique_lock<std::mutex>& lock)
-{
-    last_request_ = std::chrono::steady_clock::now();
-    uint64_t request_id = NewRequestId_(lock);
-    rai::Account next = next_;
-    lock.unlock();
-
-    rai::Ptree ptree;
-
-    if (count_ <= 3 || 0 == count_ % 12)
-    {
-        ptree.put("action", "account_heads");
-    }
-    else
-    {
-        ptree.put("action", "active_account_heads");
-    }
-    ptree.put("request_id", std::to_string(request_id));
-    ptree.put("next", next.StringAccount());
-    ptree.put("count", "1000");
-    ptree.put_child("account_types", app_.AccountTypes());
-
-    app_.SendToGateway(ptree);
-
-    lock.lock();
-}
-
-void rai::AppBootstrap::ProcessAccountHeads_(
-    const std::vector<rai::AccountHead>& heads)
+void rai::AppBootstrap::ProcessAccountHeads(
+    const std::vector<rai::AccountHead>& heads, bool syncing)
 {
     if (heads.empty())
     {
@@ -270,6 +255,10 @@ void rai::AppBootstrap::ProcessAccountHeads_(
         if (!account_exists)
         {
             app_.SyncAccountAsync(i.account_, 0);
+            if (syncing)
+            {
+                AddSyncingAccount(i.account_);
+            }
             continue;
         }
 
@@ -286,6 +275,10 @@ void rai::AppBootstrap::ProcessAccountHeads_(
         if (i.height_ > info.head_height_)
         {
             app_.SyncAccountAsync(i.account_, info.head_height_ + 1);
+            if (syncing)
+            {
+                AddSyncingAccount(i.account_);
+            }
             continue;
         }
 
@@ -296,5 +289,137 @@ void rai::AppBootstrap::ProcessAccountHeads_(
 
         // fork
         app_.block_confirm_.Add(i.account_, i.height_, i.head_);
+        if (syncing)
+        {
+            AddSyncingAccount(i.account_);
+        }
     }
+}
+
+void rai::AppBootstrap::AddSyncingAccount(const rai::Account& account)
+{
+    std::unique_lock<std::mutex> lock(syncings_mutex_);
+    syncings_.insert(account);
+}
+
+void rai::AppBootstrap::RemoveSyncingAccount(const rai::Account& account)
+{
+    std::unique_lock<std::mutex> lock(syncings_mutex_);
+    auto it = syncings_.find(account);
+    if (it != syncings_.end())
+    {
+        syncings_.erase(it);
+    }
+}
+
+void rai::AppBootstrap::UpdateSyncingStatus()
+{
+    if (synced_)
+    {
+        return;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (count_ < rai::AppBootstrap::FULL_BOOTSTRAP_INTERVAL)
+        {
+            return;
+        }
+        if (count_ == rai::AppBootstrap::FULL_BOOTSTRAP_INTERVAL && running_)
+        {
+            return;
+        }
+    }
+
+    std::unique_lock<std::mutex> lock(syncings_mutex_);
+    for (const auto& account : syncings_)
+    {
+        // Skip account which is waiting for any synced account
+        bool skip = false;
+        std::stack<rai::Account> stack;
+        std::unordered_set<rai::Account> set;
+        stack.push(account);
+        while (!stack.empty())
+        {
+            rai::Account top = stack.top();
+            if (set.find(top) != set.end())
+            {
+                skip = true;
+                break;
+            }
+            set.insert(top);
+            stack.pop();
+            auto wait_for = app_.block_waiting_.WaitFor(top);
+            for (const auto& i: wait_for)
+            {
+                if (syncings_.find(i.account_) != syncings_.end()) 
+                {
+                    stack.push(i.account_);
+                }
+                else
+                {
+                    skip = true;
+                    stack = std::stack<rai::Account>();
+                    break;
+                }
+            }
+        }
+
+        if (!skip)
+        {
+            return;
+        }
+    }
+
+    synced_ = true;
+}
+
+std::vector<rai::Account> rai::AppBootstrap::SyncingAccounts(size_t max) const
+{
+    std::vector<rai::Account> result;
+    size_t count = 0;
+    std::unique_lock<std::mutex> lock(syncings_mutex_);
+    for (const auto& account : syncings_)
+    {
+        if (count >= max)
+        {
+            break;
+        }
+        result.push_back(account);
+        ++count;
+    }
+    return result;
+}
+
+uint64_t rai::AppBootstrap::NewRequestId_(std::unique_lock<std::mutex>& lock)
+{
+    return ++request_id_;
+}
+
+void rai::AppBootstrap::SendRequest_(std::unique_lock<std::mutex>& lock)
+{
+    last_request_ = std::chrono::steady_clock::now();
+    uint64_t request_id = NewRequestId_(lock);
+    rai::Account next = next_;
+    lock.unlock();
+
+    rai::Ptree ptree;
+
+    if (count_ <= rai::AppBootstrap::INITIAL_FULL_BOOTSTRAPS
+        || 0 == count_ % rai::AppBootstrap::FULL_BOOTSTRAP_INTERVAL)
+    {
+        ptree.put("action", "account_heads");
+    }
+    else
+    {
+        ptree.put("action", "active_account_heads");
+    }
+    ptree.put("request_id", std::to_string(request_id));
+    ptree.put("next", next.StringAccount());
+    ptree.put("count", "1000");
+    ptree.put_child("account_types", app_.AccountTypes());
+
+    app_.SendToGateway(ptree);
+
+    lock.lock();
 }

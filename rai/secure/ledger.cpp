@@ -47,6 +47,11 @@ rai::Iterator& rai::Iterator::operator++()
     return *this;
 }
 
+rai::Iterator& rai::Iterator::operator=(rai::Iterator&& other)
+{
+    store_it_ = std::move(other.store_it_);
+}
+
 bool rai::Iterator::operator==(const rai::Iterator& other) const
 {
     return store_it_ == other.store_it_;
@@ -2614,6 +2619,48 @@ rai::Iterator rai::Ledger::TokenReceivableUpperBound(
     }
 
     return TokenReceivableLowerBound(transaction, account_next);
+}
+
+rai::Iterator rai::Ledger::TokenReceivableLowerBound(
+    rai::Transaction& transaction, const rai::Account& account,
+    const rai::TokenKey& token) const
+{
+    rai::TokenReceivableKey receivable_key(account, token, rai::Chain::INVALID,
+                                           rai::BlockHash(0));
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        receivable_key.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.token_receivable_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::TokenReceivableUpperBound(
+    rai::Transaction& transaction, const rai::Account& account,
+    const rai::TokenKey& token) const
+{
+    rai::Account account_l(account);
+    rai::TokenKey token_l(token);
+
+    do
+    {
+        uint32_t next_chain = static_cast<uint32_t>(token_l.chain_) + 1;
+        token_l.chain_ = static_cast<rai::Chain>(next_chain);
+        if (next_chain != 0) break;
+
+        token_l.address_ += 1;
+        if (!token_l.address_.IsZero()) break;
+
+        account_l += 1;
+        if (!account_l.IsZero()) break;
+
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    } while (0);
+
+    return TokenReceivableLowerBound(transaction, account_l, token_l);
 }
 
 bool rai::Ledger::TokenIdInfoPut(rai::Transaction& transaction,

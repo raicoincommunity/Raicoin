@@ -26,6 +26,8 @@ TEST(BlockWaiting, Basic)
     EXPECT_EQ(0, waiting.Size());
     waiting.Insert(account4, 1, block, true);
     EXPECT_EQ(1, waiting.Size());
+    EXPECT_EQ(true, waiting.IsAccountWaiting(account1));
+    EXPECT_EQ(false, waiting.IsAccountWaiting(account4));
 
     error_code = builder1.Send(block, rai::Account(1), 10 * rai::RAI,
                                rai::CurrentTimestamp());
@@ -43,6 +45,9 @@ TEST(BlockWaiting, Basic)
     EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
     waiting.Insert(account4, 3, block, true);
     EXPECT_EQ(4, waiting.Size());
+    EXPECT_EQ(true, waiting.IsAccountWaiting(account1));
+    EXPECT_EQ(true, waiting.IsAccountWaiting(account2));
+    EXPECT_EQ(false, waiting.IsAccountWaiting(account3));
 
     error_code =
         builder3.Receive(block, rai::BlockHash(3), 300 * rai::RAI,
@@ -152,6 +157,10 @@ TEST(BlockWaiting, Age)
                          rai::CurrentTimestamp() - 10, rai::CurrentTimestamp());
     EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
     waiting.Insert(account3, 1, block, true);
+    auto wait_for = waiting.WaitFor(block->Account());
+    EXPECT_EQ(1, wait_for.size());
+    EXPECT_EQ(account3, wait_for[0].account_);
+    EXPECT_EQ(1, wait_for[0].height_);
 
     error_code =
         builder2.Receive(block, rai::BlockHash(2), 200 * rai::RAI,
@@ -165,6 +174,8 @@ TEST(BlockWaiting, Age)
                                rai::CurrentTimestamp());
     EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
     waiting.Insert(account3, 3, block, false);
+    wait_for = waiting.WaitFor(block->Account());
+    EXPECT_EQ(2, wait_for.size());
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
