@@ -1181,6 +1181,13 @@ rai::TokenError rai::Token::ProcessReceive_(
     rai::Chain chain = rai::Chain::INVALID;
     if (rai::IsLocalSource(receive->source_))
     {
+        if (receive->from_ == block->Account()
+            && receive->block_height_ >= block->Height())
+        {
+            return UpdateLedgerCommon_(
+                transaction, block, rai::ErrorCode::TOKEN_RECEIVE_BLOCK_HEIGHT);
+        }
+
         std::shared_ptr<rai::Block> source_block(nullptr);
         error_code =
             WaitBlock(transaction, receive->from_, receive->block_height_,

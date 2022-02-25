@@ -316,7 +316,7 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       stopped_(ATOMIC_FLAG_INIT),
       block_processor_(*this),
       block_queries_(*this),
-      elections_(*this),
+      elections_(*this, config.election_concurrency_),
       syncer_(*this),
       bootstrap_(*this),
       bootstrap_listener_(*this, service, config.address_, config.port_),
@@ -449,33 +449,6 @@ void rai::Node::Start()
                 std::chrono::seconds(5));
     }
     std::cout << "Node start: " << account_.StringAccount() << std::endl;
-
-#if 0
-    std::cout << "Test peers\n";
-    rai::Proxy proxy(rai::Endpoint(rai::IP::from_string("3.3.3.3"), 7077), account_, rai::Account(0x666));
-    rai::Peer peer(rai::Account(0x666), rai::IP::from_string("1.1.1.1"), rai::Network::DEFAULT_PORT, rai::PROTOCOL_VERSION_USING, proxy);
-    peer.rep_weight_ = 256 * rai::RAI;
-    rai::Proxy proxy12(rai::Endpoint(rai::IP::from_string("3.3.3.4"), 7077), account_, rai::Account(0x666));
-    peer.SetProxy(proxy12);
-    peers_.Insert(peer);
-
-    rai::Proxy proxy2(rai::Endpoint(rai::IP::from_string("3.3.3.3"), 7077), account_, rai::Account(0x666));
-    rai::Peer peer2(rai::Account(0x667), rai::IP::from_string("1.1.1.0"), rai::Network::DEFAULT_PORT, rai::PROTOCOL_VERSION_USING, proxy2);
-    peer2.rep_weight_ = 256 * rai::RAI;
-    rai::Proxy proxy22(rai::Endpoint(rai::IP::from_string("3.3.3.4"), 7077), account_, rai::Account(0x666));
-    peer2.SetProxy(proxy22);
-    peers_.Insert(peer2);
-
-    rai::Peer peer3(rai::Account(0x668), rai::IP::from_string("2.1.1.0"), rai::Network::DEFAULT_PORT, rai::PROTOCOL_VERSION_USING);
-    peer3.rep_weight_ = 256 * rai::RAI;
-    rai::Proxy proxy31(rai::Endpoint(rai::IP::from_string("3.3.3.3"), 7077), account_, rai::Account(0x666));
-    peer3.SetProxy(proxy31);
-    rai::Proxy proxy32(rai::Endpoint(rai::IP::from_string("3.3.3.5"), 7077), account_, rai::Account(0x666));
-    peer3.SetProxy(proxy32);
-    peers_.Insert(peer3);
-
-    peers_.Dump();
-    #endif
 }
 
 void rai::Node::Stop()
@@ -1238,6 +1211,24 @@ void rai::Node::RequestConfirms(const std::shared_ptr<rai::Block>& block,
     });
 }
 
+void rai::Node::RequestConfirms(const std::shared_ptr<rai::Block>& block,
+                                std::vector<rai::Account>&& targets)
+{
+    std::weak_ptr<rai::Node> node_w(Shared());
+    Background([node_w, block, targets = std::move(targets)]() {
+        auto node(node_w.lock());
+        if (node)
+        {
+            std::vector<rai::Route> routes;
+            node->peers_.Routes(targets, routes);
+            for (const auto& route : routes)
+            {
+                node->RequestConfirm(route, block);
+            }
+        }
+    });
+}
+
 void rai::Node::HandshakeRequest(const rai::Cookie& cookie,
                                  const boost::optional<rai::Endpoint>& proxy)
 {
@@ -1927,7 +1918,7 @@ rai::Amount rai::Node::Supply()
 {
     rai::Amount total = RepWeightTotal();
     rai::Amount genesis = rai::GenesisBalance();
-    rai::Amount airdrop(genesis.Number() - rai::AIRDROP_ACCOUNTS);
+    rai::Amount airdrop(genesis.Number() - rai::RAI * rai::AIRDROP_ACCOUNTS);
     if (total <= airdrop)
     {
         return rai::Amount(0);

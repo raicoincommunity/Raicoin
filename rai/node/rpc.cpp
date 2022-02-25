@@ -219,6 +219,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         ElectionWeights();
     }
+    else if (action == "election_stats")
+    {
+        ElectionStats();
+    }
     else if (action == "elections")
     {
         Elections();
@@ -1214,7 +1218,11 @@ void rai::NodeRpcHandler::DelegatorList()
 
 void rai::NodeRpcHandler::ElectionCount()
 {
-    response_.put("count", std::to_string(node_.elections_.Size()));
+    size_t total, active, fork;
+    node_.elections_.Size(total, active, fork);
+    response_.put("total", std::to_string(total));
+    response_.put("active", std::to_string(active));
+    response_.put("fork", std::to_string(fork));
 }
 
 void rai::NodeRpcHandler::ElectionInfo()
@@ -1280,6 +1288,43 @@ void rai::NodeRpcHandler::ElectionWeights()
             decimals = "0" + decimals;
         }
         response_.put("online_rate", integer + "." + decimals + "%");
+    }
+}
+
+void rai::NodeRpcHandler::ElectionStats()
+{
+    rai::ElectionStats stats = node_.elections_.Stats();
+    rai::Ptree rounds;
+    for (const auto& i : stats.rounds_)
+    {
+        rai::Ptree entry;
+        entry.put(std::to_string(i.first), std::to_string(i.second));
+        rounds.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("confirmed_rounds", rounds);
+
+    rai::Ptree rounds_fork;
+    for (const auto& i : stats.rounds_fork_)
+    {
+        rai::Ptree entry;
+        entry.put(std::to_string(i.first), std::to_string(i.second));
+        rounds_fork.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("fork_confirmed_rounds", rounds_fork);
+
+    if (stats.slow_reps_enabled_)
+    {
+        rai::Ptree slow_reps;
+        for (const auto& i : stats.slow_reps_)
+        {
+            rai::Ptree entry;
+            entry.put("account", i.first.StringAccount());
+            entry.put("count", std::to_string(i.second));
+            rai::Amount weight = node_.RepWeight(i.first);
+            entry.put("weight", weight.StringBalance(rai::RAI) + " RAI");
+            slow_reps.push_back(std::make_pair("", entry));
+        }
+        response_.put_child("slow_representatives", slow_reps);
     }
 }
 

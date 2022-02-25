@@ -183,6 +183,7 @@ public:
     boost::optional<rai::Peer> RandomFullNodePeer(bool = true) const;
     void Routes(const std::unordered_set<rai::Account>&, bool,
                 std::vector<rai::Route>&);
+    void Routes(const std::vector<rai::Account>&, std::vector<rai::Route>&);
     size_t Size() const;
     size_t FullPeerSize() const;
     std::unordered_set<rai::Account> Accounts(bool) const;

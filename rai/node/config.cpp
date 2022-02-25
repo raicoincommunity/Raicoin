@@ -7,6 +7,7 @@ rai::NodeConfig::NodeConfig()
       port_(rai::Network::DEFAULT_PORT),
       io_threads_(std::max<uint32_t>(4, std::thread::hardware_concurrency())),
       daily_forward_times_(rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES),
+      election_concurrency_(rai::Elections::ELECTION_CONCURRENCY),
       enable_rich_list_(false),
       enable_delegator_list_(false)
 {
@@ -102,6 +103,13 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
             forward_times ? *forward_times
                           : rai::NodeConfig::DEFAULT_DAILY_FORWARD_TIMES;
 
+        error_code = rai::ErrorCode::JSON_CONFIG_ELECTION_CONCURRENCY;
+        auto election_concurrency =
+            ptree.get_optional<uint32_t>("election_concurrency");
+        election_concurrency_ = election_concurrency
+                                    ? *election_concurrency
+                                    : rai::Elections::ELECTION_CONCURRENCY;
+
         error_code = rai::ErrorCode::JSON_CONFIG_ENABLE_RICH_LIST;
         auto enable_rich_list_o = ptree.get_optional<bool>("enable_rich_list");
         if (enable_rich_list_o)
@@ -126,7 +134,7 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
 
 void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
 {
-    ptree.put("version", "4");
+    ptree.put("version", "5");
     ptree.put("address", address_.to_string());
     ptree.put("port", port_);
     ptree.put("io_threads", io_threads_);
@@ -144,6 +152,7 @@ void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
     ptree.put("callback_url", callback_url_.String());
     ptree.put("forward_reward_to", forward_reward_to_.StringAccount());
     ptree.put("daily_forward_times", std::to_string(daily_forward_times_));
+    ptree.put("election_concurrency", std::to_string(election_concurrency_));
     ptree.put("enable_rich_list", enable_rich_list_);
     ptree.put("enable_delegator_list", enable_delegator_list_);
 }
@@ -173,6 +182,12 @@ rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
             IF_NOT_SUCCESS_RETURN(error_code);
         }
         case 4:
+        {
+            upgraded = true;
+            error_code = UpgradeV4V5(ptree);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 5:
         {
             break;
         }
@@ -222,6 +237,15 @@ rai::ErrorCode rai::NodeConfig::UpgradeV3V4(rai::Ptree& ptree) const
     ptree.put("version", 4);
 
     ptree.put("address", address_.to_string());
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::NodeConfig::UpgradeV4V5(rai::Ptree& ptree) const
+{
+    ptree.put("version", 5);
+
+    ptree.put("election_concurrency", std::to_string(election_concurrency_));
 
     return rai::ErrorCode::SUCCESS;
 }

@@ -94,7 +94,7 @@ rai::BlockProcessor::~BlockProcessor()
 
 void rai::BlockProcessor::Add(const std::shared_ptr<rai::Block>& block)
 {
-    uint32_t priority = Priority_(block);
+    uint64_t priority = Priority_(block);
     auto now = std::chrono::steady_clock::now();
     OrderedKey key{priority, now};
     BlockInfo block_info{key, block->Hash(), block};
@@ -227,11 +227,12 @@ void rai::BlockProcessor::Status(rai::Ptree& status) const
     status.put("forced_count", std::to_string(blocks_forced_.size()));
 }
 
-uint32_t rai::BlockProcessor::Priority_(
+uint64_t rai::BlockProcessor::Priority_(
     const std::shared_ptr<rai::Block>& block)
 {
-    uint32_t max_priority = 100;
-    uint64_t now          = rai::CurrentTimestamp();
+    uint64_t constexpr max_priority =
+        rai::MAX_ACCOUNT_CREDIT * rai::TRANSACTIONS_PER_CREDIT;
+    uint64_t now = rai::CurrentTimestamp();
     if (now > block->Timestamp() + 3600)  // more than an hour ago
     {
         return max_priority;
@@ -242,14 +243,14 @@ uint32_t rai::BlockProcessor::Priority_(
         return max_priority / 2;
     }
 
-    uint16_t credit  = block->Credit();
-    uint32_t counter = block->Counter();
+    uint64_t credit  = block->Credit();
+    uint64_t counter = block->Counter();
     if (counter == 0 || credit == 0)
     {
         return max_priority;
     }
 
-    uint32_t total = credit * rai::TRANSACTIONS_PER_CREDIT;
+    uint64_t total = credit * rai::TRANSACTIONS_PER_CREDIT;
     if (counter > total)
     {
         return max_priority;
