@@ -758,6 +758,27 @@ void rai::Peers::Routes(const std::unordered_set<rai::Account>& filter,
     }
 }
 
+void rai::Peers::Routes(const std::vector<rai::Account>& accounts,
+                        std::vector<rai::Route>& routes)
+{
+    routes.reserve(accounts.size());
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& account : accounts)
+    {
+        auto it = peers_.find(account);
+        if (it != peers_.end())
+        {
+            routes.push_back(it->Route());
+            continue;
+        }
+        it = peers_low_weight_.find(account);
+        if (it != peers_low_weight_.end())
+        {
+            routes.push_back(it->Route());
+        }
+    }
+}
+
 size_t rai::Peers::Size() const
 {
     std::lock_guard<std::mutex> lock(mutex_);

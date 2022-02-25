@@ -1010,6 +1010,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse node address from config file";
         }
+        case rai::ErrorCode::JSON_CONFIG_ELECTION_CONCURRENCY:
+        {
+            return "Failed to parse election concurrency from config file";
+        }
         case rai::ErrorCode::RPC_GENERIC:
         {
             return "[RPC] Internal server error";

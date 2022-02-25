@@ -86,7 +86,7 @@ public:
     class OrderedKey
     {
     public:
-        uint32_t priority_;
+        uint64_t priority_;
         std::chrono::steady_clock::time_point arrival_;
 
         bool operator<(const OrderedKey& other) const
@@ -115,7 +115,7 @@ public:
         fork_observer_;
 
 private:
-    static uint32_t Priority_(const std::shared_ptr<rai::Block>&);
+    static uint64_t Priority_(const std::shared_ptr<rai::Block>&);
     uint64_t DynamicOpration_();
     void ProcessBlock_(const std::shared_ptr<rai::Block>&, bool);
     void ProcessBlockFork_(const std::shared_ptr<rai::Block>&,

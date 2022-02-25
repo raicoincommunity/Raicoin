@@ -164,6 +164,11 @@ void rai::Subscriptions::BlockConfirm(const std::shared_ptr<rai::Block>& block,
         uint64_t height = last_confirm_height == rai::Block::INVALID_HEIGHT
                               ? 0
                               : last_confirm_height + 1;
+        // Only check enough recent blocks to avoid overload
+        if (height + 1000 < block->Height())
+        {
+            height = block->Height() - 1000;
+        }
         rai::BlockHash successor(0);
         while (height <= block->Height())
         {

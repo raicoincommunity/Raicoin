@@ -83,7 +83,7 @@ rai::Election::Election()
       winner_(0),
       fork_broadcast_delay_(0),
       wakeup_(std::chrono::steady_clock::now()
-              + rai::Elections::NON_FORK_ELECTION_DELAY)
+              - rai::Elections::NON_FORK_ELECTION_DELAY) // wakeup immediately
 {
     fork_broadcast_delay_ = rai::random_pool.GenerateWord32(
         1, rai::Elections::FORK_ELECTION_DELAY.count() - 8);
@@ -118,17 +118,63 @@ void rai::Election::DelBlock(const rai::BlockHash& hash)
         return;
     }
 
-    if (it->second.refs_ <= 1)
+    if (it->second.refs_ == 0)
     {
-        blocks_.erase(it);
         return;
     }
     it->second.refs_ -= 1;
+
+    if (it->second.refs_ == 0 && blocks_.size() > 1)
+    {
+        blocks_.erase(it);
+    }
+}
+
+void rai::Election::PurgeOutdatedVotes()
+{
+    uint64_t time_diff = TimeDiff();
+    std::vector<rai::Account> accounts;
+    accounts.reserve(votes_.size());
+    for (const auto& i: votes_)
+    {
+        if (i.second.WeightFactor(time_diff) > 0)
+        {
+            continue;
+        }
+        if (conflicts_.find(i.first) != conflicts_.end())
+        {
+            continue;
+        }
+        DelBlock(i.second.last_vote_.hash_);
+        accounts.push_back(i.first);
+    }
+
+    for (const auto& account: accounts)
+    {
+        auto it = votes_.find(account);
+        if (it != votes_.end())
+        {
+            votes_.erase(it);
+        }
+    }
 }
 
 bool rai::Election::ForkFound() const
 {
     return fork_found_;
+}
+
+uint64_t rai::Election::TimeDiff() const
+{
+    if (ForkFound())
+    {
+        return rai::Elections::FORK_ELECTION_INTERVAL.count()
+               * rai::FORK_ELECTION_ROUNDS_THRESHOLD;
+    }
+    else
+    {
+        return rai::Elections::FORK_ELECTION_DELAY.count();
+    }
 }
 
 rai::ElectionStatus::ElectionStatus()
@@ -143,10 +189,51 @@ rai::ElectionStatus::ElectionStatus()
 {
 }
 
-rai::Elections::Elections(rai::Node& node)
+rai::ElectionStats::ElectionStats(): slow_reps_enabled_(false)
+{
+}
+
+void rai::ElectionStats::IncRounds(uint32_t round)
+{
+    if (rounds_.find(round) == rounds_.end())
+    {
+        rounds_[round] = 1;
+    }
+    else
+    {
+        rounds_[round] += 1;
+    }
+}
+
+void rai::ElectionStats::IncRoundsFork(uint32_t round)
+{
+    if (rounds_fork_.find(round) == rounds_fork_.end())
+    {
+        rounds_fork_[round] = 1;
+    }
+    else
+    {
+        rounds_fork_[round] += 1;
+    }
+}
+
+void rai::ElectionStats::IncSlowReps(const rai::Account& rep)
+{
+    if (slow_reps_.find(rep) == slow_reps_.end())
+    {
+        slow_reps_[rep] = 1;
+    }
+    else
+    {
+        slow_reps_[rep] += 1;
+    }
+}
+
+rai::Elections::Elections(rai::Node& node, size_t concurrency)
     : node_(node),
       last_update_(0),
       stopped_(false),
+      concurrency_(concurrency),
       thread_([this]() { this->Run(); })
 
 {
@@ -191,7 +278,7 @@ void rai::Elections::Add(const std::vector<std::shared_ptr<rai::Block>>& blocks)
             }
             else if (it->height_ > height)
             {
-                elections_.erase(it);
+                Erase_(*it);
             }
             else
             {
@@ -211,10 +298,9 @@ void rai::Elections::Add(const std::vector<std::shared_ptr<rai::Block>>& blocks)
             election.AddBlock(i);
         }
         elections_.insert(election);
-        if (!election.ForkFound())
+        if (election.ForkFound())
         {
-            node_.RequestConfirms(blocks[0],
-                                  std::unordered_set<rai::Account>());
+            TryConcurrency_(election);
         }
     }
 
@@ -270,33 +356,45 @@ bool rai::Elections::Get(const rai::Account& account, rai::Ptree& ptree) const
 
     rai::Ptree weights;
     weights.put("total", weight_total_.StringBalance(rai::RAI) + " RAI(100%)");
-    uint32_t online_percentage = static_cast<uint32_t>(
-        rai::uint256_t(weight_online_.Number()) * 100 / weight_total_.Number());
+
+    uint32_t online_percentage = 0;
+    uint32_t valid_percentage = 0;
+    uint32_t invalid_percentage = 0;
+    uint32_t conflict_percentage = 0;
+    uint32_t not_voting_percentage = 0;
+    if (!weight_total_.IsZero())
+    {
+        online_percentage =
+            static_cast<uint32_t>(rai::uint256_t(weight_online_.Number()) * 100
+                                  / weight_total_.Number());
+        valid_percentage =
+            static_cast<uint32_t>(rai::uint256_t(status.valid_.Number()) * 100
+                                  / weight_total_.Number());
+        invalid_percentage =
+            static_cast<uint32_t>(rai::uint256_t(status.invalid_.Number()) * 100
+                                  / weight_total_.Number());
+        conflict_percentage =
+            static_cast<uint32_t>(rai::uint256_t(status.conflict_.Number())
+                                  * 100 / weight_total_.Number());
+        not_voting_percentage =
+            static_cast<uint32_t>(rai::uint256_t(status.not_voting_.Number())
+                                  * 100 / weight_total_.Number());
+    }
+
     weights.put("online", weight_online_.StringBalance(rai::RAI) + " RAI("
                               + std::to_string(online_percentage) + "%)");
 
-    uint32_t valid_percentage = static_cast<uint32_t>(
-        rai::uint256_t(status.valid_.Number()) * 100 / weight_total_.Number());
     weights.put("voting_valid", status.valid_.StringBalance(rai::RAI) + " RAI("
                                     + std::to_string(valid_percentage) + "%)");
 
-    uint32_t invalid_percentage =
-        static_cast<uint32_t>(rai::uint256_t(status.invalid_.Number()) * 100
-                              / weight_total_.Number());
     weights.put("voting_invalid",
                 status.invalid_.StringBalance(rai::RAI) + " RAI("
                     + std::to_string(invalid_percentage) + "%)");
 
-    uint32_t conflict_percentage =
-        static_cast<uint32_t>(rai::uint256_t(status.conflict_.Number()) * 100
-                              / weight_total_.Number());
     weights.put("voting_conflict",
                 status.conflict_.StringBalance(rai::RAI) + " RAI("
                     + std::to_string(conflict_percentage) + "%)");
 
-    uint32_t not_voting_percentage =
-        static_cast<uint32_t>(rai::uint256_t(status.not_voting_.Number()) * 100
-                              / weight_total_.Number());
     weights.put("online_not_voting",
                 status.not_voting_.StringBalance(rai::RAI) + " RAI("
                     + std::to_string(not_voting_percentage) + "%)");
@@ -418,13 +516,28 @@ void rai::Elections::Stop()
 void rai::Elections::ProcessElection(const rai::Election& election,
                                      std::unique_lock<std::mutex>& lock)
 {
+    PurgeOutdatedVotes_(election);
+    if (TryConcurrency_(election))
+    {
+        ModifyWins_(election, 0);
+        ModifyConfirms_(election, 0);
+        ModifyRounds_(election, 0);
+        ModifyRoundsFork_(election, 0);
+        ModifyBroadcast_(election, true);
+        uint64_t delay = rai::Random(1, election.TimeDiff());
+        ModifyWakeup_(election, std::chrono::steady_clock::now()
+                                    + std::chrono::seconds(delay));
+
+        return;
+    }
+
     rai::ElectionStatus status = Tally_(election);
     if (status.error_)
     {
         rai::Stats::Add(rai::ErrorCode::ELECTION_TALLY,
                         "account=", election.account_.StringAccount(),
                         ", height=", election.height_);
-        elections_.erase(election.account_);
+        Erase_(election);
         return;
     }
 
@@ -433,14 +546,15 @@ void rai::Elections::ProcessElection(const rai::Election& election,
         if (status.confirm_)
         {
             node_.ForceConfirmBlock(status.block_);
-            elections_.erase(election.account_);
+            stats_.IncRounds(election.rounds_);
+            Erase_(election);;
             return;
         }
 
         if (election.broadcast_)
         {
             ModifyBroadcast_(election, false);
-            RequestConfirms_(election);
+            RequestConfirms_(lock, election);
             ModifyWakeup_(election, std::chrono::steady_clock::now()
                                         + std::chrono::seconds(1));
         }
@@ -496,7 +610,8 @@ void rai::Elections::ProcessElection(const rai::Election& election,
     if (election.confirms_ >= rai::FORK_ELECTION_ROUNDS_THRESHOLD)
     {
         node_.ForceConfirmBlock(status.block_);
-        elections_.erase(election.account_);
+        stats_.IncRoundsFork(election.rounds_);
+        Erase_(election);
         return;
     }
     else if (election.wins_ == rai::FORK_ELECTION_ROUNDS_THRESHOLD)
@@ -506,7 +621,7 @@ void rai::Elections::ProcessElection(const rai::Election& election,
 
     if (election.rounds_fork_ > rai::FORK_ELECTION_ROUNDS_THRESHOLD)
     {
-        RequestConfirms_(election);
+        RequestConfirms_(lock, election);
     }
 
     ModifyWakeup_(election, NextWakeup_(election));
@@ -641,17 +756,20 @@ void rai::Elections::ProcessConflict(
     }
 }
 
-size_t rai::Elections::Size() const
+void rai::Elections::Size(size_t& total, size_t& active, size_t& fork) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    return elections_.size();
+    total = elections_.size();
+    active = actives_.size();
+    fork = forks_.size();
 }
 
 void rai::Elections::Weights(uint64_t percent, rai::Amount& total,
                              rai::Amount& online,
-                             std::vector<rai::AccountWeight>& list) const
+                             std::vector<rai::AccountWeight>& list)
 {
     std::unique_lock<std::mutex> lock(mutex_);
+    UpdateWeightInfo_(lock);
     total = weight_total_;
     online = weight_online_;
     std::vector<rai::Account> accounts = TopOnlineReps_(lock, percent);
@@ -669,14 +787,34 @@ void rai::Elections::Weights(uint64_t percent, rai::Amount& total,
     }
 }
 
+rai::ElectionStats rai::Elections::Stats() const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    return stats_;
+}
+
+void rai::Elections::Erase_(const rai::Election& election)
+{
+    rai::Account account = election.account_;
+    elections_.erase(account);
+    actives_.erase(account);
+    forks_.erase(account);
+}
+
 void rai::Elections::AddBlock_(const rai::Election& election,
                                const std::shared_ptr<rai::Block>& block)
 {
     auto it = elections_.find(election.account_);
     if (it != elections_.end())
     {
-        elections_.modify(
-            it, [&block](rai::Election& data) { data.AddBlock(block); });
+        elections_.modify(it, [this, &block](rai::Election& data) {
+            bool forked = data.ForkFound();
+            data.AddBlock(block);
+            if (!forked && data.ForkFound())
+            {
+                TryConcurrency_(data);
+            }
+        });
     }
 }
 
@@ -857,23 +995,10 @@ bool rai::Elections::CheckConflict_(const rai::Vote& first,
 
 rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election) const
 {
-    if (election.ForkFound())
-    {
-        return Tally_(election, rai::Elections::FORK_ELECTION_INTERVAL.count()
-                                    * rai::FORK_ELECTION_ROUNDS_THRESHOLD);
-    }
-    else
-    {
-        return Tally_(election, rai::Elections::FORK_ELECTION_DELAY.count());
-    }
-}
-
-rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election,
-                                           uint64_t time_diff) const
-{
     rai::ElectionStatus result;
     std::unordered_set<rai::Account> reps_not_voting(online_reps_);
     std::unordered_map<rai::BlockHash, rai::Amount> candidates;
+    uint64_t time_diff = election.TimeDiff();
 
     for (const auto& vote : election.votes_)
     {
@@ -964,7 +1089,8 @@ rai::ElectionStatus rai::Elections::Tally_(const rai::Election& election,
     return result;
 }
 
-void rai::Elections::RequestConfirms_(const rai::Election& election)
+void rai::Elections::RequestConfirms_(std::unique_lock<std::mutex>& lock,
+                                      const rai::Election& election)
 {
     auto it = election.blocks_.begin();
     if (it == election.blocks_.end())
@@ -974,16 +1100,44 @@ void rai::Elections::RequestConfirms_(const rai::Election& election)
     }
 
     uint64_t now = rai::CurrentTimestamp();
-    std::unordered_set<rai::Account> reps;
+    std::unordered_set<rai::Account> filter;
     for (const auto& vote : election.votes_)
     {
-        if (vote.second.last_vote_.timestamp_ >= now - 5)
+        if (vote.second.conflict_found_
+            || vote.second.last_vote_.timestamp_
+                   >= now - rai::MIN_CONFIRM_INTERVAL)
         {
-            reps.insert(vote.first);
+            filter.insert(vote.first);
         }
     }
 
-    node_.RequestConfirms(it->second.block_, std::move(reps));
+    if (election.rounds_ >= 3)
+    {
+        node_.RequestConfirms(it->second.block_, std::move(filter));
+    }
+    else
+    {
+        uint64_t percent = 95;
+        const std::vector<rai::Account>& reps = TopOnlineReps_(lock, percent);
+        std::vector<rai::Account> targets;
+        targets.reserve(reps.size());
+        for (const auto& rep : reps)
+        {
+            if (filter.find(rep) == filter.end())
+            {
+                targets.push_back(rep);
+                if (stats_.slow_reps_enabled_ && election.rounds_ > 0)
+                {
+                    auto it = weights_.find(rep);
+                    if (it->weight_ > rai::RAI * 200000)
+                    {
+                        stats_.IncSlowReps(rep);
+                    }
+                }
+            }
+        }
+        node_.RequestConfirms(it->second.block_, std::move(targets));
+    }
 }
 
 void rai::Elections::BroadcastConfirms_(const rai::Election& election)
@@ -1068,6 +1222,50 @@ std::chrono::steady_clock::time_point rai::Elections::NextWakeup_(
         delay = rai::Random(1, delay);
     }
     return now + std::chrono::seconds(delay);
+}
+
+void rai::Elections::PurgeOutdatedVotes_(const rai::Election& election)
+{
+    auto it = elections_.find(election.account_);
+    if (it != elections_.end())
+    {
+        elections_.modify(
+            it, [](rai::Election& data) { data.PurgeOutdatedVotes(); });
+    }
+}
+
+bool rai::Elections::TryConcurrency_(const rai::Election& election)
+{
+    rai::Account account = election.account_;
+    if (election.ForkFound())
+    {
+        actives_.erase(account);
+        if (forks_.find(account) != forks_.end())
+        {
+            return false;
+        }
+        forks_.insert(account);
+        if (forks_.size() > rai::Elections::FORK_CONCURRENCY)
+        {
+            forks_.erase(std::prev(forks_.end()));
+        }
+        return forks_.find(account) == forks_.end();
+    }
+    else
+    {
+        forks_.erase(account);
+        if (actives_.find(account) != actives_.end())
+        {
+            return false;
+        }
+
+        if (actives_.size() >= concurrency_)
+        {
+            return true;
+        }
+        actives_.insert(account);
+        return false;
+    }
 }
 
 void rai::Elections::UpdateWeightInfo_(std::unique_lock<std::mutex>& lock)

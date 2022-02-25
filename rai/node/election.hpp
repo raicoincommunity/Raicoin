@@ -10,6 +10,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 
 
 namespace rai
@@ -51,8 +52,9 @@ public:
 
     void AddBlock(const std::shared_ptr<rai::Block>&);
     void DelBlock(const rai::BlockHash&);
-    void AgeVotes();
+    void PurgeOutdatedVotes();
     bool ForkFound() const;
+    uint64_t TimeDiff() const;
 
     rai::Account account_;
     uint64_t height_;
@@ -103,11 +105,24 @@ typedef boost::multi_index_container<
             std::greater<rai::Amount>>>>
     AccountWeightContainer;
 
+class ElectionStats
+{
+public:
+    ElectionStats();
+    void IncRounds(uint32_t);
+    void IncRoundsFork(uint32_t);
+    void IncSlowReps(const rai::Account&);
+    std::unordered_map<uint32_t, uint64_t> rounds_;
+    std::unordered_map<uint32_t, uint64_t> rounds_fork_;
+    std::unordered_map<rai::Account, uint64_t> slow_reps_;
+    bool slow_reps_enabled_;
+};
+
 class Node;
 class Elections
 {
 public:
-    Elections(rai::Node&);
+    Elections(rai::Node&, size_t = rai::Elections::ELECTION_CONCURRENCY);
     ~Elections();
     void Add(const std::shared_ptr<rai::Block>&);
     void Add(const std::vector<std::shared_ptr<rai::Block>>&);
@@ -123,9 +138,10 @@ public:
                          const std::shared_ptr<rai::Block>&,
                          const std::shared_ptr<rai::Block>&,
                          const rai::Amount&);
-    size_t Size() const;
+    void Size(size_t&, size_t&, size_t&) const;
     void Weights(uint64_t, rai::Amount&, rai::Amount&,
-                 std::vector<rai::AccountWeight>&) const;
+                 std::vector<rai::AccountWeight>&);
+    rai::ElectionStats Stats() const;
 
     static std::chrono::seconds constexpr FORK_ELECTION_DELAY =
         std::chrono::seconds(32);
@@ -135,8 +151,11 @@ public:
         std::chrono::seconds(1);
     static std::chrono::seconds constexpr NON_FORK_ELECTION_INTERVAL =
         std::chrono::seconds(1);
+    static size_t constexpr FORK_CONCURRENCY = 4;
+    static size_t constexpr ELECTION_CONCURRENCY = 16;
 
 private:
+    void Erase_(const rai::Election&);
     void AddBlock_(const rai::Election&, const std::shared_ptr<rai::Block>&);
     void DelBlock_(const rai::Election&, const rai::BlockHash&);
     bool GetBlock_(const rai::Election&, const rai::BlockHash&,
@@ -157,11 +176,12 @@ private:
                        const std::chrono::steady_clock::time_point&);
     bool CheckConflict_(const rai::Vote&, const rai::Vote&) const;
     rai::ElectionStatus Tally_(const rai::Election&) const;
-    rai::ElectionStatus Tally_(const rai::Election&, uint64_t) const;
-    void RequestConfirms_(const rai::Election&);
+    void RequestConfirms_(std::unique_lock<std::mutex>&, const rai::Election&);
     void BroadcastConfirms_(const rai::Election&);
     std::chrono::steady_clock::time_point NextWakeup_(
         const rai::Election&) const;
+    void PurgeOutdatedVotes_(const rai::Election&);
+    bool TryConcurrency_(const rai::Election&);
     void UpdateWeightInfo_(std::unique_lock<std::mutex>&);
     bool EnoughOnlineWeight_() const;
     bool EnoughVotingWeight_(const rai::Amount&) const;
@@ -187,6 +207,11 @@ private:
                 Election, std::chrono::steady_clock::time_point,
                 &Election::wakeup_>>>>
         elections_;
+
+    size_t concurrency_;
+    std::set<rai::Account> actives_;
+    std::set<rai::Account> forks_;
+    ElectionStats stats_;
     bool stopped_;
 
     std::condition_variable condition_;

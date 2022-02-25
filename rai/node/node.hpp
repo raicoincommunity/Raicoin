@@ -218,6 +218,8 @@ public:
     void RequestConfirm(const rai::Route&, const std::shared_ptr<rai::Block>&);
     void RequestConfirms(const std::shared_ptr<rai::Block>&,
                          std::unordered_set<rai::Account>&&);
+    void RequestConfirms(const std::shared_ptr<rai::Block>&,
+                         std::vector<rai::Account>&&);
     void HandshakeRequest(const rai::Cookie&,
                           const boost::optional<rai::Endpoint>&);
     void HandshakeResponse(const rai::Endpoint&, const rai::uint256_union&,

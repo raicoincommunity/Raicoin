@@ -244,6 +244,7 @@ enum class ErrorCode : int
     JSON_CONFIG_APP_WS_ENABLE            = 295,
     JSON_CONFIG_APP                      = 296,
     JSON_CONFIG_NODE_ADDRESS             = 297,
+    JSON_CONFIG_ELECTION_CONCURRENCY     = 298,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                     = 300,

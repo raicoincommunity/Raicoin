@@ -67,6 +67,7 @@ public:
     void ElectionCount();
     void ElectionInfo();
     void ElectionWeights();
+    void ElectionStats();
     void Elections();
     void EventSubscribe();
     void EventUnsubscribe();

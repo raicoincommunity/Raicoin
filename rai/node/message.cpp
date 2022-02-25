@@ -548,7 +548,7 @@ rai::ErrorCode rai::PublishMessage::Deserialize(rai::Stream& stream)
     }
 
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-    // verify in 
+    // verify in rai::Node::ReceiveBlock
     block_ = DeserializeBlockUnverify(error_code, stream);
     return error_code;
 }
