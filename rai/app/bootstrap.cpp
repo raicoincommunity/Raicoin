@@ -79,7 +79,8 @@ void rai::AppBootstrap::Run()
         last_run_ = now;
         running_ = true;
         next_ = rai::Account(0);
-        count_++;
+        ++count_;
+        ++request_id_;
     }
 
     auto retry = std::chrono::seconds(5);
@@ -88,7 +89,7 @@ void rai::AppBootstrap::Run()
         return;
     }
 
-    SendRequest_(lock);
+    SendRequest_(lock, false);
 }
 
 void rai::AppBootstrap::Reset()
@@ -391,15 +392,15 @@ std::vector<rai::Account> rai::AppBootstrap::SyncingAccounts(size_t max) const
     return result;
 }
 
-uint64_t rai::AppBootstrap::NewRequestId_(std::unique_lock<std::mutex>& lock)
-{
-    return ++request_id_;
-}
-
-void rai::AppBootstrap::SendRequest_(std::unique_lock<std::mutex>& lock)
+void rai::AppBootstrap::SendRequest_(std::unique_lock<std::mutex>& lock,
+                                     bool inc_request_id)
 {
     last_request_ = std::chrono::steady_clock::now();
-    uint64_t request_id = NewRequestId_(lock);
+    if (inc_request_id)
+    {
+        ++request_id_;
+    }
+    uint64_t request_id = request_id_;
     rai::Account next = next_;
     lock.unlock();
 

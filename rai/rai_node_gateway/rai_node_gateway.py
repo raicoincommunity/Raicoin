@@ -45,7 +45,9 @@ try:
         sys.exit(0)
     LISTEN_HOST = str(ipaddress.ip_address(options.host))
     LISTEN_PORT = int(options.port)
-    LOG_FILE = options.log_file
+    if not os.path.exists('log'):
+        os.makedirs('log')
+    LOG_FILE = f'log/{options.log_file}'
     server_desc = f'on {LISTEN_HOST} port {LISTEN_PORT}'
     print(f'Starting Raicoin Node Gateway {server_desc}')
     LIMIT = int(options.limit)
@@ -334,7 +336,7 @@ async def destroy_node(r: web.Request, node_id):
             break
     
     message = {'notify':'node_offline', 'main':'true' if main else 'false'}
-    await send_to_clients(message)
+    await send_to_clients(json.dumps(message))
 
 async def node_handler(r : web.Request):
     ip = UTIL.get_request_ip(r)

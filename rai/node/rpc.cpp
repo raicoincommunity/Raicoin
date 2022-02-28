@@ -223,6 +223,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         ElectionStats();
     }
+    else if (action == "election_active_forks")
+    {
+        ElectionActiveForks();
+    }
     else if (action == "elections")
     {
         Elections();
@@ -1326,6 +1330,20 @@ void rai::NodeRpcHandler::ElectionStats()
         }
         response_.put_child("slow_representatives", slow_reps);
     }
+}
+
+void rai::NodeRpcHandler::ElectionActiveForks()
+{
+    std::vector<rai::AccountHeight> forks = node_.elections_.ActiveForks();
+    rai::Ptree forks_ptree;
+    for (const auto& fork : forks)
+    {
+        rai::Ptree entry;
+        entry.put("account", fork.account_.StringAccount());
+        entry.put("height", std::to_string(fork.height_));
+        forks_ptree.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("forks", forks_ptree);
 }
 
 void rai::NodeRpcHandler::Elections()

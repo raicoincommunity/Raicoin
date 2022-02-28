@@ -107,7 +107,7 @@ void rai::BlockQueries::ProcessQuery(rai::BlockQuery& query)
     if (query.count_ == 0)
     {
         SendQuery_(query);
-        UpdateWakeup_(query);
+        UpdateWakeup(query);
         Insert(query);
         return;
     }
@@ -146,7 +146,7 @@ void rai::BlockQueries::ProcessQuery(rai::BlockQuery& query)
     if (!finish)
     {
         SendQuery_(query);
-        UpdateWakeup_(query);
+        UpdateWakeup(query);
         Insert(query);
     }
 }
@@ -222,7 +222,7 @@ void rai::BlockQueries::ProcessQueryAck(
     if (!finish)
     {
         SendQuery_(query);
-        UpdateWakeup_(query);
+        UpdateWakeup(query);
         Insert(query);
     }
 }
@@ -298,6 +298,20 @@ void rai::BlockQueries::QueryByPrevious(const rai::Account& account,
     rai::BlockQuery query(Sequence(), rai::QueryBy::PREVIOUS, account, height,
                           hash, false, true, from, callback);
     Insert(query);
+}
+
+void rai::BlockQueries::UpdateWakeup(rai::BlockQuery& query) const
+{
+    uint32_t max_doubles           = Size() >= 256 ? 8 : 4;
+    uint32_t delay                 = 1 << max_doubles;
+    uint32_t delay_double_interval = 3;
+    uint32_t doubles               = query.count_ / delay_double_interval;
+    if (doubles < max_doubles)
+    {
+        delay = 1 << doubles;
+    }
+    query.wakeup_ =
+        std::chrono::steady_clock::now() + std::chrono::seconds(delay);
 }
 
 void rai::BlockQueries::Run()
@@ -407,18 +421,4 @@ void rai::BlockQueries::SendQuery_(rai::BlockQuery& query)
     query.ack_.clear();
     query.ack_.push_back(rai::QueryAck());
     ++query.count_;
-}
-
-void rai::BlockQueries::UpdateWakeup_(rai::BlockQuery& query) const
-{
-    uint32_t max_doubles           = 8;
-    uint32_t delay                 = 1 << max_doubles;
-    uint32_t delay_double_interval = 3;
-    uint32_t doubles               = query.count_ / delay_double_interval;
-    if (doubles < max_doubles)
-    {
-        delay = 1 << doubles;
-    }
-    query.wakeup_ =
-        std::chrono::steady_clock::now() + std::chrono::seconds(delay);
 }

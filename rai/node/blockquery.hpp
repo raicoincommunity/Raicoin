@@ -95,6 +95,7 @@ public:
     void QueryByPrevious(const rai::Account&, uint64_t, const rai::BlockHash&,
                          const std::vector<rai::QueryFrom>&,
                          const rai::QueryCallback&);
+    void UpdateWakeup(rai::BlockQuery&) const;
     void Run();
     void Stop();
     uint64_t Sequence();
@@ -102,7 +103,6 @@ public:
 
 private:
     void SendQuery_(rai::BlockQuery&);
-    void UpdateWakeup_(rai::BlockQuery&) const;
 
     rai::Node& node_;
     mutable std::mutex mutex_; 

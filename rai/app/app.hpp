@@ -29,6 +29,7 @@ public:
     rai::ObserverContainer<const std::shared_ptr<rai::Block>&, bool> block_;
     rai::ObserverContainer<const std::shared_ptr<rai::Block>&> block_rollback_;
     rai::ObserverContainer<const rai::Account&> account_synced_;
+    rai::ObserverContainer<bool> node_offline_;
 };
 
 class AppTrace
@@ -99,6 +100,7 @@ public:
     void ReceiveBlockConfirmAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>&);
     void ReceiveBlockRollbackNotify(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveNodeOfflineNotify(const std::shared_ptr<rai::Ptree>&);
     void SendToClient(const rai::Ptree&, const rai::UniqueId&);
     void SendToGateway(const rai::Ptree&);
     void Subscribe();
@@ -122,7 +124,7 @@ public:
 
     static size_t constexpr MAX_ACTIONS = 32 * 1024;
     static size_t constexpr MAX_BLOCK_CACHE_SIZE = 100 * 1024;
-    static uint64_t constexpr BLOCKS_QUERY_COUNT = 100;
+    static uint64_t constexpr BLOCKS_QUERY_COUNT = 20;
 
     boost::asio::io_service& service_;
     rai::Alarm& alarm_;
@@ -172,6 +174,7 @@ private:
     std::function<void(const std::shared_ptr<rai::Block>&)>
         block_rollback_observer_;
     std::function<void(const rai::Account&)> account_synced_observer_;
+    std::function<void(bool)> node_offline_observer_;
 
     std::condition_variable condition_;
     mutable std::mutex mutex_;
