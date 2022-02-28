@@ -68,6 +68,7 @@ public:
     void ElectionInfo();
     void ElectionWeights();
     void ElectionStats();
+    void ElectionActiveForks();
     void Elections();
     void EventSubscribe();
     void EventUnsubscribe();

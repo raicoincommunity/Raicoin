@@ -142,6 +142,7 @@ public:
     void Weights(uint64_t, rai::Amount&, rai::Amount&,
                  std::vector<rai::AccountWeight>&);
     rai::ElectionStats Stats() const;
+    std::vector<rai::AccountHeight> ActiveForks() const;
 
     static std::chrono::seconds constexpr FORK_ELECTION_DELAY =
         std::chrono::seconds(32);

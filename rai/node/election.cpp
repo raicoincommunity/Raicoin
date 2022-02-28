@@ -793,6 +793,22 @@ rai::ElectionStats rai::Elections::Stats() const
     return stats_;
 }
 
+std::vector<rai::AccountHeight> rai::Elections::ActiveForks() const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    std::vector<rai::AccountHeight> result;
+    for (const auto& account : forks_)
+    {
+        const auto it = elections_.find(account);
+        if (it == elections_.end())
+        {
+            continue;
+        }
+        result.push_back(rai::AccountHeight{account, it->height_});
+    }
+    return result;
+}
+
 void rai::Elections::Erase_(const rai::Election& election)
 {
     rai::Account account = election.account_;

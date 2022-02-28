@@ -46,8 +46,7 @@ public:
     static uint32_t constexpr INITIAL_FULL_BOOTSTRAPS = 3;
 
 private:
-    uint64_t NewRequestId_(std::unique_lock<std::mutex>&);
-    void SendRequest_(std::unique_lock<std::mutex>&);
+    void SendRequest_(std::unique_lock<std::mutex>&, bool = true);
 
     mutable std::mutex mutex_;
     bool stopped_;

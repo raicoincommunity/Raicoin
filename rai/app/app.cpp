@@ -543,6 +543,10 @@ void rai::App::ReceiveGatewayMessage(const std::shared_ptr<rai::Ptree>& message)
         {
             ReceiveBlockRollbackNotify(message);
         }
+        else if (notify == "node_offline")
+        {
+            ReceiveNodeOfflineNotify(message);
+        }
     }
 }
 
@@ -721,6 +725,26 @@ void rai::App::ReceiveBlockRollbackNotify(
     }
 
     QueueBlockRollback(block);
+}
+
+void rai::App::ReceiveNodeOfflineNotify(
+    const std::shared_ptr<rai::Ptree>& message)
+{
+    auto main_o = message->get_optional<std::string>("main");
+    if (!main_o)
+    {
+        return;
+    }
+    bool main;
+    bool error = rai::StringToBool(*main_o, main);
+    if (error)
+    {
+        return;
+    }
+    if (node_offline_observer_)
+    {
+        node_offline_observer_(main);
+    }
 }
 
 void rai::App::SendToClient(const rai::Ptree& message, const rai::UniqueId& uid)
@@ -1065,6 +1089,18 @@ void rai::App::RegisterObservers_()
         });
     };
 
+    node_offline_observer_ = [app](bool main) {
+        auto app_s = app.lock();
+        if (app_s == nullptr) return;
+
+        app_s->Background([app, main]() {
+            if (auto app_s = app.lock())
+            {
+                app_s->observers_.node_offline_.Notify(main);
+            }
+        });
+    };
+
     observers_.gateway_status_.Add([this](rai::WebsocketStatus status) {
         if (status == rai::WebsocketStatus::CONNECTED)
         {
@@ -1078,6 +1114,13 @@ void rai::App::RegisterObservers_()
         else
         {
             std::cout << "node gateway disconnected\n";
+        }
+    });
+
+    observers_.node_offline_.Add([this](bool main) {
+        if (main)
+        {
+            Subscribe();
         }
     });
 }
