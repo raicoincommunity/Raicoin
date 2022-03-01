@@ -47,6 +47,8 @@ public:
     void OnSend(uint32_t, const boost::system::error_code&, size_t);
     void OnReceive(uint32_t, const boost::system::error_code&, size_t);
     void Close();
+    size_t Size() const;
+    bool Busy() const;
     rai::WebsocketStatus Status() const;
 
     std::function<void(rai::WebsocketStatus)> status_observer_;

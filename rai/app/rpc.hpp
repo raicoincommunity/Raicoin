@@ -30,12 +30,14 @@ public:
     void BlockCacheCount();
     void BlockConfirmCount();
     void BlockCount();
+    void BlockQuerierStatus();
     void BlockQuery();
     void BlockQueryByPrevious();
     void BlockQueryByHash();
     void BlockQueryByHeight();
     void BootstrapStatus();
     void Clients();
+    void GatewayQueueSize();
     void ServiceSubscribe();
     void Stats();
     void StatsVerbose();

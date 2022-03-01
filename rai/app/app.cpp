@@ -27,6 +27,7 @@ rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
       bootstrap_(*this),
       block_confirm_(*this),
       provider_info_(provider_info),
+      block_queries_(*this),
       stopped_(false),
       thread_([this]() { Run(); })
 {
@@ -105,6 +106,8 @@ void rai::App::Stop()
         ws_server_->Stop();
     }
 
+    block_queries_.Stop();
+    block_confirm_.Stop();
     alarm_.Stop();
     gateway_ws_->Close();
     std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -134,10 +137,26 @@ void rai::App::Run()
 
 bool rai::App::Busy() const
 {
-    std::unique_lock<std::mutex> lock(mutex_);
-    return actions_.size() > 100000;
-}
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (actions_.size() > 100000)
+        {
+            return true;
+        }
+    }
 
+    if (gateway_ws_ && gateway_ws_->Busy())
+    {
+        return true;
+    }
+
+    if (block_queries_.Busy())
+    {
+        return true;
+    }
+
+    return false;
+}
 
 void rai::App::Ongoing(const std::function<void()>& process,
                        const std::chrono::seconds& delay)
@@ -656,9 +675,27 @@ void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
         return;
     }
 
+    auto account_height_o = message->get_optional<std::string>("request_id");
+    if (!account_height_o)
+    {
+        return;
+    }
+    std::string account_height = *account_height_o;
+    if (account_height.size() <= 65 || account_height[64] != ':')
+    {
+        return;
+    }
+
     rai::Account account;
-    auto account_o = message->get_optional<std::string>("request_id");
-    if (!account_o || account.DecodeAccount(*account_o))
+    bool error = account.DecodeAccount(account_height.substr(0, 64));
+    if (error)
+    {
+        return;
+    }
+
+    uint64_t height = 0;
+    error = rai::StringToUint(account_height.substr(65), height);
+    if (error)
     {
         return;
     }
@@ -669,13 +706,15 @@ void rai::App::ReceiveBlocksQueryAck(const std::shared_ptr<rai::Ptree>& message)
         {
             account_synced_observer_(account);
         }
+        block_queries_.Remove(account, height);
         return;
     }
     else if (*status_o != "success")
     {
         return;
     }
-
+    block_queries_.Remove(account, height);
+    
     auto blocks_o = message->get_child_optional("blocks");
     if (!blocks_o || blocks_o->empty())
     {
@@ -778,6 +817,26 @@ void rai::App::SendToGateway(const rai::Ptree& message)
     gateway_ws_->Send(message);
 }
 
+void rai::App::SendBlocksQuery(const rai::Account& account, uint64_t height,
+                               uint64_t count)
+{
+    rai::Ptree ptree;
+
+    ptree.put("action", "blocks_query");
+    ptree.put("account", account.StringAccount());
+    ptree.put("height", std::to_string(height));
+
+    if (BlockCacheFull())
+    {
+        count = 1;
+    }
+    ptree.put("count", std::to_string(count));
+    ptree.put("request_id",
+              account.StringAccount() + ":" + std::to_string(height));
+
+    SendToGateway(ptree);
+}
+
 void rai::App::Subscribe()
 {
     SubscribeBlockAppend();
@@ -832,20 +891,7 @@ void rai::App::SyncAccount(const rai::Account& account)
 void rai::App::SyncAccount(const rai::Account& account, uint64_t height,
                            uint64_t count)
 {
-    rai::Ptree ptree;
-
-    ptree.put("action", "blocks_query");
-    ptree.put("account", account.StringAccount());
-    ptree.put("height", std::to_string(height));
-
-    if (BlockCacheFull())
-    {
-        count = 1;
-    }
-    ptree.put("count", std::to_string(count));
-    ptree.put("request_id", account.StringAccount());
-
-    SendToGateway(ptree);
+    block_queries_.Add(account, height, count);
 }
 
 void rai::App::SyncAccountAsync(const rai::Account& account)

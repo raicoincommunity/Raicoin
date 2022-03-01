@@ -322,11 +322,11 @@ void rai::AppBootstrap::UpdateSyncingStatus()
 
     {
         std::unique_lock<std::mutex> lock(mutex_);
-        if (count_ < rai::AppBootstrap::FULL_BOOTSTRAP_INTERVAL)
+        if (count_ < rai::AppBootstrap::INITIAL_FULL_BOOTSTRAPS)
         {
             return;
         }
-        if (count_ == rai::AppBootstrap::FULL_BOOTSTRAP_INTERVAL && running_)
+        if (count_ == rai::AppBootstrap::INITIAL_FULL_BOOTSTRAPS && running_)
         {
             return;
         }
