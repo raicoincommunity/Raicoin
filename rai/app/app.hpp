@@ -18,6 +18,7 @@
 #include <rai/app/rpc.hpp>
 #include <rai/app/provider.hpp>
 #include <rai/app/blockwaiting.hpp>
+#include <rai/app/blockquery.hpp>
 
 namespace rai
 {
@@ -103,6 +104,7 @@ public:
     void ReceiveNodeOfflineNotify(const std::shared_ptr<rai::Ptree>&);
     void SendToClient(const rai::Ptree&, const rai::UniqueId&);
     void SendToGateway(const rai::Ptree&);
+    void SendBlocksQuery(const rai::Account&, uint64_t, uint64_t);
     void Subscribe();
     void SubscribeBlockAppend();
     void SubscribeBlockRollbacK();
@@ -124,7 +126,7 @@ public:
 
     static size_t constexpr MAX_ACTIONS = 32 * 1024;
     static size_t constexpr MAX_BLOCK_CACHE_SIZE = 100 * 1024;
-    static uint64_t constexpr BLOCKS_QUERY_COUNT = 20;
+    static uint64_t constexpr BLOCKS_QUERY_COUNT = 100;
 
     boost::asio::io_service& service_;
     rai::Alarm& alarm_;
@@ -145,6 +147,7 @@ public:
     rai::Provider::Info provider_info_;
     std::vector<std::string> provider_actions_;
     rai::BlockWaiting block_waiting_;
+    rai::AppBlockQueries block_queries_;
 
 protected:
     template <typename Derived>

@@ -64,6 +64,10 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         BlockCount();
     }
+    else if (action == "block_querier_status")
+    {
+        BlockQuerierStatus();
+    }
     else if (action == "bootstrap_status")
     {
         BootstrapStatus();
@@ -71,6 +75,10 @@ void rai::AppRpcHandler::ProcessImpl()
     else if (action == "clients")
     {
         Clients();
+    }
+    else if (action == "gateway_queue_size")
+    {
+        GatewayQueueSize();
     }
     else if (action == "service_subscribe")
     {
@@ -357,6 +365,11 @@ void rai::AppRpcHandler::BlockCount()
     response_.put("count", count);
 }
 
+void rai::AppRpcHandler::BlockQuerierStatus()
+{
+    response_.put("size", std::to_string(app_.block_queries_.Size()));
+    response_.put("busy", rai::BoolToString(app_.block_queries_.Busy()));
+}
 
 void rai::AppRpcHandler::BlockQuery()
 {
@@ -581,6 +594,16 @@ void rai::AppRpcHandler::Clients()
         }
     }
     response_.put_child("clients", clients);
+}
+
+void rai::AppRpcHandler::GatewayQueueSize()
+{
+    size_t size = 0;
+    if (app_.gateway_ws_)
+    {
+        size = app_.gateway_ws_->Size();
+    }
+    response_.put("size", std::to_string(size));
 }
 
 void rai::AppRpcHandler::ServiceSubscribe()

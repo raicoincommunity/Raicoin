@@ -358,6 +358,17 @@ void rai::WebsocketClient::Close()
     CloseStream_();
 }
 
+size_t rai::WebsocketClient::Size() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return send_queue_.size();
+}
+
+bool rai::WebsocketClient::Busy() const
+{
+    return Size() >= rai::WebsocketClient::MAX_QUEUE_SIZE / 2;
+}
+
 rai::WebsocketStatus rai::WebsocketClient::Status() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
