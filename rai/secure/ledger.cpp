@@ -50,6 +50,7 @@ rai::Iterator& rai::Iterator::operator++()
 rai::Iterator& rai::Iterator::operator=(rai::Iterator&& other)
 {
     store_it_ = std::move(other.store_it_);
+    return *this;
 }
 
 bool rai::Iterator::operator==(const rai::Iterator& other) const
