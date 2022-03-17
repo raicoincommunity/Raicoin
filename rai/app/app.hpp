@@ -63,9 +63,9 @@ public:
     virtual rai::ErrorCode PreBlockAppend(rai::Transaction&,
                                           const std::shared_ptr<rai::Block>&,
                                           bool) = 0;
-    virtual rai::ErrorCode AfterBlockAppend(rai::Transaction&,
-                                            const std::shared_ptr<rai::Block>&,
-                                            bool) = 0;
+    virtual rai::ErrorCode AfterBlockAppend(
+        rai::Transaction&, const std::shared_ptr<rai::Block>&, bool,
+        std::vector<std::function<void()>>&) = 0;
     virtual rai::ErrorCode PreBlockRollback(
         rai::Transaction&, const std::shared_ptr<rai::Block>&) = 0;
     virtual rai::ErrorCode AfterBlockRollback(
@@ -167,8 +167,10 @@ protected:
 private:
     void RegisterObservers_();
     rai::ErrorCode AppendBlock_(rai::Transaction&,
-                                const std::shared_ptr<rai::Block>&, bool);
-    rai::ErrorCode RollbackBlock_(rai::Transaction&, const std::shared_ptr<rai::Block>&);
+                                const std::shared_ptr<rai::Block>&, bool,
+                                std::vector<std::function<void()>>&);
+    rai::ErrorCode RollbackBlock_(rai::Transaction&,
+                                  const std::shared_ptr<rai::Block>&);
     bool GetHeadBlock_(rai::Transaction&, const rai::Account&,
                        std::shared_ptr<rai::Block>&);
 

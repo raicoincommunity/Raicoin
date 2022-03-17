@@ -302,6 +302,16 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_TOKEN_ID      = 352,
     RPC_MISS_FIELD_TOKENS           = 353,
     RPC_INVALID_FIELD_TOKENS        = 354,
+    RPC_MISS_FIELD_BY               = 355,
+    RPC_INVALID_FIELD_BY            = 356,
+    RPC_MISS_FIELD_FROM_TOKEN       = 357,
+    RPC_INVALID_FIELD_FROM_TOKEN    = 358,
+    RPC_MISS_FIELD_TO_TOKEN         = 359,
+    RPC_INVALID_FIELD_TO_TOKEN      = 360,
+    RPC_INVALID_FIELD_LIMIT_BY      = 361,
+    RPC_MISS_FIELD_LIMIT_VALUE      = 362,
+    RPC_INVALID_FIELD_LIMIT_VALUE   = 363,
+
 
     // Block process errors: 400 ~ 499
     BLOCK_PROCESS_GENERIC                     = 400,
@@ -489,6 +499,8 @@ enum class ErrorCode : int
     TOKEN_SWAP_MISS                     = 878,
     TOKEN_SWAP_ACCOUNT_NOT_MAKER        = 879,
     TOKEN_SWAP_TAKE_NACK_HEIGHT         = 880,
+    TOKEN_LEDGER_OUTDATED               = 881,
+
 
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAX_OFFER       = 1000,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_TIMEOUT         = 1001,

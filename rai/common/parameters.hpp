@@ -86,6 +86,7 @@ uint64_t constexpr MAX_TIMESTAMP_DIFF      = 300;
 uint64_t constexpr MIN_CONFIRM_INTERVAL    = 10;
 uint32_t constexpr TRANSACTIONS_PER_CREDIT = 20;
 uint32_t constexpr ORDERS_PER_CREDIT       = 1;
+uint64_t constexpr SWAPS_PER_CREDIT        = 1;
 uint16_t constexpr MAX_ACCOUNT_CREDIT      = 65535;
 uint32_t constexpr MAX_ACCOUNT_DAILY_TRANSACTIONS =
     MAX_ACCOUNT_CREDIT * TRANSACTIONS_PER_CREDIT;

@@ -31,6 +31,10 @@ void rai::Transaction::Abort()
     mdb_transaction_.Abort();
 }
 
+rai::Iterator::Iterator() : store_it_(nullptr)
+{
+}
+
 rai::Iterator::Iterator(rai::StoreIterator&& store_it)
     : store_it_(std::move(store_it))
 {
@@ -875,9 +879,9 @@ rai::OrderIndex::OrderIndex(rai::Chain chain_offer,
                             const rai::Account& maker, uint64_t height)
     : token_offer_(chain_offer, address_offer),
       type_offer_(rai::TokenType::_721),
-      id_offer_(id_offer),
       token_want_(chain_want, address_want),
       type_want_(rai::TokenType::_721),
+      id_offer_(id_offer),
       id_want_(id_want),
       rate_(rate),
       maker_(maker),
@@ -885,13 +889,38 @@ rai::OrderIndex::OrderIndex(rai::Chain chain_offer,
 {
 }
 
+rai::OrderIndex::OrderIndex(const rai::TokenKey& token_offer,
+                            rai::TokenType type_offer,
+                            const rai::TokenKey& token_want,
+                            rai::TokenType type_want)
+    : OrderIndex(token_offer, type_offer, token_want, type_want, 0)
+{
+}
+
+rai::OrderIndex::OrderIndex(const rai::TokenKey& token_offer,
+                            rai::TokenType type_offer,
+                            const rai::TokenKey& token_want,
+                            rai::TokenType type_want,
+                            const rai::TokenValue& id_offer)
+    : token_offer_(token_offer),
+      type_offer_(type_offer),
+      token_want_(token_want),
+      type_want_(type_want),
+      id_offer_(id_offer),
+      id_want_(0),
+      rate_(0),
+      maker_(0),
+      height_(0)
+{
+}
+
 void rai::OrderIndex::Serialize(rai::Stream& stream) const
 {
     token_offer_.Serialize(stream);
     rai::Write(stream, type_offer_);
-    rai::Write(stream, id_offer_.bytes);
     token_want_.Serialize(stream);
     rai::Write(stream, type_want_);
+    rai::Write(stream, id_offer_.bytes);
     rai::Write(stream, id_want_.bytes);
     rai::Write(stream, rate_.bytes);
     rai::Write(stream, maker_.bytes);
@@ -905,11 +934,11 @@ bool rai::OrderIndex::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, type_offer_);
     IF_ERROR_RETURN(error, true);
-    error = rai::Read(stream, id_offer_.bytes);
-    IF_ERROR_RETURN(error, true);
     error = token_want_.Deserialize(stream);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, type_want_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, id_offer_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, id_want_.bytes);
     IF_ERROR_RETURN(error, true);
@@ -934,7 +963,8 @@ rai::OrderInfo::OrderInfo()
       max_offer_(0),
       left_(0),
       finished_height_(rai::Block::INVALID_HEIGHT),
-      finished_by_(rai::OrderInfo::FinishedBy::INVALID)
+      finished_by_(rai::OrderInfo::FinishedBy::INVALID),
+      hash_(0)
 {
 }
 
@@ -945,7 +975,8 @@ rai::OrderInfo::OrderInfo(const rai::Account& main_account,
                           const rai::TokenAddress& address_want,
                           rai::TokenType type_want,
                           const rai::TokenValue& value_offer,
-                          const rai::TokenValue& value_want, uint64_t timeout)
+                          const rai::TokenValue& value_want, uint64_t timeout,
+                          const rai::BlockHash& hash)
     : main_(main_account),
       token_offer_(chain_offer, address_offer),
       type_offer_(type_offer),
@@ -958,7 +989,8 @@ rai::OrderInfo::OrderInfo(const rai::Account& main_account,
       left_(0),
       timeout_(timeout),
       finished_height_(rai::Block::INVALID_HEIGHT),
-      finished_by_(rai::OrderInfo::FinishedBy::INVALID)
+      finished_by_(rai::OrderInfo::FinishedBy::INVALID),
+      hash_(hash)
 {
 }
 
@@ -968,7 +1000,8 @@ rai::OrderInfo::OrderInfo(
     rai::Chain chain_want, const rai::TokenAddress& address_want,
     rai::TokenType type_want, const rai::TokenValue& value_offer,
     const rai::TokenValue& value_want, const rai::TokenValue& min_offer,
-    const rai::TokenValue& max_offer, uint64_t timeout)
+    const rai::TokenValue& max_offer, uint64_t timeout,
+    const rai::BlockHash& hash)
     : main_(main_account),
       token_offer_(chain_offer, address_offer),
       type_offer_(type_offer),
@@ -981,7 +1014,8 @@ rai::OrderInfo::OrderInfo(
       left_(max_offer),
       timeout_(timeout),
       finished_height_(rai::Block::INVALID_HEIGHT),
-      finished_by_(rai::OrderInfo::FinishedBy::INVALID)
+      finished_by_(rai::OrderInfo::FinishedBy::INVALID),
+      hash_(hash)
 {
 }
 
@@ -1000,6 +1034,7 @@ void rai::OrderInfo::Serialize(rai::Stream& stream) const
     rai::Write(stream, timeout_);
     rai::Write(stream, finished_height_);
     rai::Write(stream, finished_by_);
+    rai::Write(stream, hash_.bytes);
 }
 
 bool rai::OrderInfo::Deserialize(rai::Stream& stream)
@@ -1030,6 +1065,8 @@ bool rai::OrderInfo::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, finished_height_);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, finished_by_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, hash_.bytes);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -3038,6 +3075,90 @@ bool rai::Ledger::OrderIndexDel(rai::Transaction& transaction,
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     return store_.Del(transaction.mdb_transaction_, store_.order_index_, key,
                       nullptr);
+}
+
+bool rai::Ledger::OrderIndexGet(const rai::Iterator& it,
+                                rai::OrderIndex& index) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = index.Deserialize(stream_key);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::OrderIndexLowerBound(
+    rai::Transaction& transaction, const rai::TokenKey& token_offer,
+    rai::TokenType type_offer, const rai::TokenKey& token_want,
+    rai::TokenType type_want) const
+{
+    return OrderIndexLowerBound(transaction, token_offer, type_offer,
+                                token_want, type_want, 0);
+}
+
+rai::Iterator rai::Ledger::OrderIndexUpperBound(
+    rai::Transaction& transaction, const rai::TokenKey& token_offer,
+    rai::TokenType type_offer, const rai::TokenKey& token_want,
+    rai::TokenType type_want) const
+{
+    uint8_t type = static_cast<uint8_t>(type_want) + 1;
+    return OrderIndexLowerBound(transaction, token_offer, type_offer,
+                                token_want, static_cast<rai::TokenType>(type));
+}
+
+rai::Iterator rai::Ledger::OrderIndexLowerBound(
+    rai::Transaction& transaction, const rai::TokenKey& token_offer,
+    rai::TokenType type_offer, const rai::TokenKey& token_want,
+    rai::TokenType type_want, const rai::TokenValue& id_offer) const
+{
+    rai::OrderIndex index(token_offer, type_offer, token_want, type_want,
+                          id_offer);
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.order_index_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::OrderIndexUpperBound(
+    rai::Transaction& transaction, const rai::TokenKey& token_offer,
+    rai::TokenType type_offer, const rai::TokenKey& token_want,
+    rai::TokenType type_want, const rai::TokenValue& id_offer) const
+{
+    rai::TokenValue id(id_offer);
+    id += 1;
+    if (!id.IsZero())
+    {
+        return OrderIndexLowerBound(transaction, token_offer, type_offer,
+                                    token_want, type_want, id);
+    }
+
+    return OrderIndexUpperBound(transaction, token_offer, type_offer,
+                                token_want, type_want);
+}
+
+bool rai::Ledger::OrderCount(rai::Transaction& transaction, size_t& count) const
+{
+    MDB_stat stat;
+    auto ret =
+        mdb_stat(transaction.mdb_transaction_, store_.order_info_, &stat);
+    if (ret != MDB_SUCCESS)
+    {
+        return true;
+    }
+
+    count = stat.ms_entries;
+    return false;
 }
 
 bool rai::Ledger::SwapInfoPut(rai::Transaction& transaction,

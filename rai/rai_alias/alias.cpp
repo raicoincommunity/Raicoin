@@ -42,7 +42,7 @@ rai::ErrorCode rai::Alias::PreBlockAppend(
 
 rai::ErrorCode rai::Alias::AfterBlockAppend(
     rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
-    bool confirmed)
+    bool confirmed, std::vector<std::function<void()>>& observers)
 {
     if (block->Extensions().empty())
     {

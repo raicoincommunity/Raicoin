@@ -32,6 +32,7 @@ public:
         const rai::Account&, const rai::AccountTokensInfo&,
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&>
         account_;
+    rai::ObserverContainer<const rai::Account&, uint64_t> order_;
 };
 
 class TokenError
@@ -56,16 +57,17 @@ public:
     rai::ErrorCode PreBlockAppend(rai::Transaction&,
                                   const std::shared_ptr<rai::Block>&,
                                   bool) override;
-    rai::ErrorCode AfterBlockAppend(rai::Transaction&,
-                                    const std::shared_ptr<rai::Block>&,
-                                    bool) override;
+    rai::ErrorCode AfterBlockAppend(
+        rai::Transaction&, const std::shared_ptr<rai::Block>&, bool,
+        std::vector<std::function<void()>>&) override;
     rai::ErrorCode PreBlockRollback(
         rai::Transaction&, const std::shared_ptr<rai::Block>&) override;
     rai::ErrorCode AfterBlockRollback(
         rai::Transaction&, const std::shared_ptr<rai::Block>&) override;
     rai::ErrorCode Process(rai::Transaction&,
                            const std::shared_ptr<rai::Block>&,
-                           const rai::Extensions&);
+                           const rai::Extensions&,
+                           std::vector<std::function<void()>>&);
     std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
         const rai::UniqueId&, bool, const std::string&,
         const std::function<void(const rai::Ptree&)>&) override;
@@ -75,6 +77,7 @@ public:
 
     void Start() override;
     void Stop() override;
+    rai::ErrorCode UpgradeLedgerV1V2(rai::Transaction&);
 
     void TokenKeyToPtree(const rai::TokenKey&, rai::Ptree&) const;
     void TokenInfoToPtree(const rai::TokenInfo&, rai::Ptree&) const;
@@ -84,8 +87,12 @@ public:
                              const std::shared_ptr<rai::Block>&,
                              rai::Ptree&) const;
     void MakeAccountTokenInfoPtree(const rai::TokenKey&, const rai::TokenInfo&,
-                                   const rai::AccountTokenInfo&, rai::Ptree&);
-
+                                   const rai::AccountTokenInfo&,
+                                   rai::Ptree&) const;
+    bool MakeOrderPtree(rai::Transaction&, const rai::Account&, uint64_t,
+                        std::string&, rai::Ptree&) const;
+    bool MakeAccountSwapInfoPtree(rai::Transaction&, const rai::Account&,
+                                  std::string&, rai::Ptree&) const;
     static std::vector<rai::BlockType> BlockTypes();
     static rai::Provider::Info Provide();
 
@@ -98,7 +105,7 @@ public:
     rai::TokenSubscriptions subscribe_;
 
 private:
-    static uint32_t constexpr CURRENT_LEDGER_VERSION = 1;
+    static uint32_t constexpr CURRENT_LEDGER_VERSION = 2;
     rai::ErrorCode InitLedger_();
     rai::TokenError ProcessCreate_(rai::Transaction&,
                                    const std::shared_ptr<rai::Block>&,
@@ -209,6 +216,12 @@ private:
                                const rai::Account&) const;
     rai::OrderIndex MakeOrderIndex_(const rai::OrderInfo&, const rai::Account&,
                                     uint64_t) const;
+    void MakeOrderPtree_(const rai::Account&, uint64_t, const rai::OrderInfo&,
+                         const rai::AccountSwapInfo&, uint16_t,
+                         rai::Ptree&) const;
+    void MakeAccountSwapInfoPtree_(const rai::Account&,
+                                   const rai::AccountSwapInfo&, uint16_t,
+                                   rai::Ptree&) const;
     std::function<void(const rai::TokenReceivableKey&,
                        const rai::TokenReceivable&, const rai::TokenInfo&,
                        const std::shared_ptr<rai::Block>&)>
@@ -226,5 +239,6 @@ private:
         const rai::Account&, const rai::AccountTokensInfo&,
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&)>
         account_observer_;
+    std::function<void(const rai::Account&, uint64_t)> order_observer_;
 };
 }
