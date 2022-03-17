@@ -1234,6 +1234,42 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid tokens field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_BY:
+        {
+            return "[RPC] The by filed is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_BY:
+        {
+            return "[RPC] Invalid by field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_FROM_TOKEN:
+        {
+            return "[RPC] The from_token field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_FROM_TOKEN:
+        {
+            return "[RPC] Invalid from_token field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_TO_TOKEN:
+        {
+            return "[RPC] The to_token field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TO_TOKEN:
+        {
+            return "[RPC] Invalid to_token field";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_LIMIT_BY:
+        {
+            return "[RPC] Invalid limit_by field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_LIMIT_VALUE:
+        {
+            return "[RPC] The limit_value field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_LIMIT_VALUE:
+        {
+            return "[RPC] Invalid limit_value field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";
@@ -1934,6 +1970,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_SWAP_TAKE_NACK_HEIGHT:
         {
             return "Invalid take nack height";
+        }
+        case rai::ErrorCode::TOKEN_LEDGER_OUTDATED:
+        {
+            return "The ledger is outdated, please remove token_data.ldb and retry";
         }
         default:
         {

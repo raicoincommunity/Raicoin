@@ -15,7 +15,11 @@ void rai::TokenRpcHandler::ProcessImpl()
 {
     std::string action = request_.get<std::string>("action");
 
-    if (action == "account_token_link")
+    if (action == "account_swap_info")
+    {
+        AccountSwapInfo();
+    }
+    else if (action == "account_token_link")
     {
         AccountTokenLink();
     }
@@ -43,6 +47,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         NextTokenBlocks();
     }
+    else if (action == "order_count")
+    {
+        OrderCount();
+    }
     else if (action == "previous_account_token_links")
     {
         PreviousAccountTokenLinks();
@@ -50,6 +58,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     else if (action == "previous_token_blocks")
     {
         PreviousTokenBlocks();
+    }
+    else if (action == "search_orders")
+    {
+        SearchOrders();
     }
     else if (action == "token_block")
     {
@@ -96,6 +108,25 @@ void rai::TokenRpcHandler::Stop()
 {
     token_.Stop();
     response_.put("success", "");
+}
+
+void rai::TokenRpcHandler::AccountSwapInfo()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    std::string error_info;
+    error = token_.MakeAccountSwapInfoPtree(transaction, account, error_info,
+                                            response_);
+    if (error)
+    {
+        response_.put("error", error_info);
+    }
 }
 
 void rai::TokenRpcHandler::AccountTokenLink()
@@ -485,6 +516,22 @@ void rai::TokenRpcHandler::NextTokenBlocks()
     response_.put_child("token_blocks", token_blocks);
 }
 
+void rai::TokenRpcHandler::OrderCount()
+{
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    size_t count = 0;
+    bool error = token_.ledger_.OrderCount(transaction, count);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::UNEXPECTED;
+        return;
+    }
+
+    response_.put("count", count);
+}
+
 void rai::TokenRpcHandler::PreviousAccountTokenLinks()
 {
     rai::Account account;
@@ -620,6 +667,222 @@ void rai::TokenRpcHandler::PreviousTokenBlocks()
     }
 
     response_.put_child("token_blocks", token_blocks);
+}
+
+void rai::TokenRpcHandler::SearchOrders()
+{
+    auto by_o = request_.get_optional<std::string>("by");
+    if (!by_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_BY;
+        return;
+    }
+
+    if (*by_o == "id")
+    {
+        SearchOrdersById();
+    }
+    else if (*by_o == "pair")
+    {
+        SearchOrdersByPair();
+    }
+    else
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_BY;
+    }
+}
+
+void rai::TokenRpcHandler::SearchOrdersById()
+{
+    rai::BlockHash hash;
+    bool error = GetHash_(hash);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("hash", hash.StringHex());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    std::shared_ptr<rai::Block> block;
+    bool error = token_.ledger_.BlockGet(transaction, hash, block);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+    rai::Account account = block->Account();
+
+    std::string error_info;
+    rai::Ptree order;
+    error = token_.MakeOrderPtree(transaction, block->Account(),
+                                  block->Height(), error_info, order);
+    if (error)
+    {
+        response_.put("error", error_info);
+        return;
+    }
+
+    rai::Ptree orders;
+    orders.push_back(std::make_pair("", order));
+    response_.put_child("orders", orders);
+}
+
+void rai::TokenRpcHandler::SearchOrdersByPair()
+{
+    rai::TokenKey from_token;
+    rai::TokenType from_type;
+    bool error = GetToken_(
+        "from_token", rai::ErrorCode::RPC_MISS_FIELD_FROM_TOKEN,
+        rai::ErrorCode::RPC_INVALID_FIELD_FROM_TOKEN, from_token, from_type);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put_child("from_token", request_.get_child("from_token"));
+
+    rai::TokenKey to_token;
+    rai::TokenType to_type;
+    error = GetToken_("to_token", rai::ErrorCode::RPC_MISS_FIELD_TO_TOKEN,
+                      rai::ErrorCode::RPC_INVALID_FIELD_TO_TOKEN, to_token,
+                      to_type);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put_child("to_token", request_.get_child("to_token"));
+
+    std::string limit_by;
+    auto limit_by_o = request_.get_optional<std::string>("limit_by");
+    if (limit_by_o)
+    {
+        limit_by = *limit_by_o;
+        response_.put("limit_by", limit_by);
+    }
+
+    if (limit_by != "" && limit_by != "from_token" && limit_by != "to_token")
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_LIMIT_BY;
+        return;
+    }
+
+    rai::TokenValue limit_value;
+    if (limit_by != "")
+    {
+        auto limit_value_o = request_.get_optional<std::string>("limit_value");
+        if (!limit_value_o)
+        {
+            error_code_ = rai::ErrorCode::RPC_MISS_FIELD_LIMIT_VALUE;
+            return;
+        }
+        response_.put("limit_value", *limit_value_o);
+        error = limit_value.DecodeDec(*limit_value_o);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_LIMIT_VALUE;
+            return;
+        }
+    }
+
+    uint64_t count;
+    error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Iterator i, n;
+    if (limit_by == "from_token" && from_type == rai::TokenType::_721)
+    {
+        i = token_.ledger_.OrderIndexLowerBound(
+            transaction, from_token, from_type, to_token, to_type, limit_value);
+        n = token_.ledger_.OrderIndexUpperBound(
+            transaction, from_token, from_type, to_token, to_type, limit_value);
+    }
+    else
+    {
+        i = token_.ledger_.OrderIndexLowerBound(transaction, from_token,
+                                                from_type, to_token, to_type);
+        n = token_.ledger_.OrderIndexUpperBound(transaction, from_token,
+                                                from_type, to_token, to_type);
+    }
+
+    rai::Ptree orders;
+    for (; i != n && count > 0; ++i)
+    {
+        rai::OrderIndex index;
+        error = token_.ledger_.OrderIndexGet(i, index);
+        if (error)
+        {
+            response_.put("error", "Failed to get order index from ledger");
+            return;
+        }
+
+        rai::OrderInfo info;
+        error = token_.ledger_.OrderInfoGet(transaction, index.maker_,
+                                            index.height_, info);
+        if (error)
+        {
+            response_.put("error", "Failed to get order info from ledger");
+            return;
+        }
+
+        if (limit_by == "from_token")
+        {
+            if (from_type == rai::TokenType::_721
+                || to_type == rai::TokenType::_721)
+            {
+                if (info.value_offer_ != limit_value)
+                {
+                    continue;
+                }
+            }
+            else if (from_type == rai::TokenType::_20
+                     && to_type == rai::TokenType::_20)
+            {
+                if (info.left_ != limit_value
+                    && (limit_value < info.min_offer_
+                        || limit_value > info.left_))
+                {
+                    continue;
+                }
+            }
+        }
+        else if (limit_by == "to_token")
+        {
+            if (from_type == rai::TokenType::_721
+                || to_type == rai::TokenType::_721)
+            {
+                if (info.value_want_ != limit_value)
+                {
+                    continue;
+                }
+            }
+            else if (from_type == rai::TokenType::_20
+                     && to_type == rai::TokenType::_20)
+            {
+                rai::uint512_t value_offer_s(info.value_offer_.Number());
+                rai::uint512_t value_want_s(info.value_want_.Number());
+                rai::uint512_t limit_value_s(limit_value.Number());
+                rai::uint512_t min_offer_s(info.min_offer_.Number());
+                rai::uint512_t left_s(info.left_.Number());
+                limit_value_s = limit_value_s * value_offer_s / value_want_s;
+                if (left_s != limit_value_s
+                    && (limit_value_s < min_offer_s || limit_value_s > left_s))
+                {
+                    continue;
+                }
+            }
+        }
+
+        std::string error_info;
+        rai::Ptree order;
+        error = token_.MakeOrderPtree(transaction, index.maker_, index.height_,
+                                      error_info, order);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+        orders.push_back(std::make_pair("", order));
+        --count;
+    }
+
+    response_.put_child("orders", orders);
 }
 
 void rai::TokenRpcHandler::TokenBlock()
@@ -829,8 +1092,10 @@ void rai::TokenRpcHandler::TokenReceivablesAll()
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
     rai::Ptree receivables;
-    rai::Iterator i = token_.ledger_.TokenReceivableLowerBound(transaction, account);
-    rai::Iterator n = token_.ledger_.TokenReceivableUpperBound(transaction, account);
+    rai::Iterator i =
+        token_.ledger_.TokenReceivableLowerBound(transaction, account);
+    rai::Iterator n =
+        token_.ledger_.TokenReceivableUpperBound(transaction, account);
     for (; i != n && count > 0; ++i, --count)
     {
         rai::TokenReceivableKey key;
@@ -1014,6 +1279,59 @@ bool rai::TokenRpcHandler::GetTokens_(std::vector<rai::TokenKey>& tokens)
             tokens.emplace_back(chain, address);
             ++count;
             if (count >= 1000) break;
+        }
+    }
+    catch (...)
+    {
+        return true;
+    }
+    error_code_ = rai::ErrorCode::SUCCESS;
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetToken_(const std::string& key,
+                                     rai::ErrorCode missing,
+                                     rai::ErrorCode invalid,
+                                     rai::TokenKey& token,
+                                     rai::TokenType& type)
+{
+    try
+    {
+        error_code_ = missing;
+        auto token_o = request_.get_child_optional(key);
+        if (!token_o) return true;
+
+        error_code_ = invalid;
+        auto chain_o = token_o->get_optional<std::string>("chain");
+        if (!chain_o) return true;
+        rai::Chain chain = rai::StringToChain(*chain_o);
+        if (chain == rai::Chain::INVALID) return true;
+
+        rai::TokenAddress address;
+        auto address_raw_o = token_o->get_optional<std::string>("address_raw");
+        if (address_raw_o)
+        {
+            bool error = address.DecodeHex(*address_raw_o);
+            IF_ERROR_RETURN(error, true);
+        }
+        else
+        {
+            auto address_o = token_o->get_optional<std::string>("address");
+            if (!address_o) return true;
+            bool error = rai::StringToTokenAddress(chain, *address_o, address);
+            IF_ERROR_RETURN(error, true);
+        }
+        token = rai::TokenKey(chain, address);
+
+        auto type_o = token_o->get_optional<std::string>("type");
+        if (!type_o)
+        {
+            return true;
+        }
+        type = rai::StringToTokenType(*type_o);
+        if (type == rai::TokenType::INVALID)
+        {
+            return true;
         }
     }
     catch (...)

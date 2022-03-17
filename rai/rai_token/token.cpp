@@ -40,6 +40,11 @@ rai::ErrorCode rai::Token::PreBlockAppend(
         return rai::ErrorCode::SUCCESS;
     }
 
+    if (block->Opcode() == rai::BlockOpcode::CREDIT)
+    {
+        return rai::ErrorCode::APP_PROCESS_CONFIRM_REQUIRED;
+    }
+
     do
     {
         if (block->Extensions().empty())
@@ -77,7 +82,7 @@ rai::ErrorCode rai::Token::PreBlockAppend(
 
 rai::ErrorCode rai::Token::AfterBlockAppend(
     rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
-    bool confirmed)
+    bool confirmed, std::vector<std::function<void()>>& observers)
 {
     do
     {
@@ -109,7 +114,7 @@ rai::ErrorCode rai::Token::AfterBlockAppend(
         error_code = Process(transaction, block, extensions);
         IF_NOT_SUCCESS_RETURN(error_code);
     } while (0);
-    
+
     rai::Account account = block->Account();
     uint64_t height = block->Height();
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
@@ -170,9 +175,10 @@ rai::ErrorCode rai::Token::AfterBlockRollback(
     return rai::ErrorCode::SUCCESS;
 }
 
-rai::ErrorCode rai::Token::Process(rai::Transaction& transaction,
-                                   const std::shared_ptr<rai::Block>& block,
-                                   const rai::Extensions& extensions)
+rai::ErrorCode rai::Token::Process(
+    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
+    const rai::Extensions& extensions,
+    std::vector<std::function<void()>>& observers)
 {
     rai::Account account = block->Account();
     uint64_t height = block->Height();
@@ -385,6 +391,18 @@ void rai::Token::Start()
             });
         };
 
+    order_observer_ = [token](const rai::Account& account, uint64_t height) {
+        auto token_s = token.lock();
+        if (token_s == nullptr) return;
+
+        token_s->Background([token, account, height]() {
+            if (auto token_s = token.lock())
+            {
+                token_s->observers_.order_.Notify(account, height);
+            }
+        });
+    };
+
     App::Start();
 }
 
@@ -401,6 +419,24 @@ void rai::Token::Stop()
     }
 
     App::Stop();
+}
+
+rai::ErrorCode rai::Token::UpgradeLedgerV1V2(rai::Transaction& transaction)
+{
+    size_t count;
+    bool error = ledger_.OrderCount(transaction, count);
+    if (error || count != 0)
+    {
+        return rai::ErrorCode::TOKEN_LEDGER_OUTDATED;
+    }
+
+    error = ledger_.VersionPut(transaction, 2);
+    if (error)
+    {
+        return rai::ErrorCode::LEDGER_VERSION_PUT;
+    }
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 void rai::Token::TokenKeyToPtree(const rai::TokenKey& key,
@@ -480,7 +516,7 @@ void rai::Token::MakeReceivablePtree(const rai::TokenReceivableKey& key,
 void rai::Token::MakeAccountTokenInfoPtree(const rai::TokenKey& key,
                                            const rai::TokenInfo& token,
                                            const rai::AccountTokenInfo& info,
-                                           rai::Ptree& ptree)
+                                           rai::Ptree& ptree) const
 {
     rai::Ptree token_ptree;
     TokenKeyToPtree(key, token_ptree);
@@ -491,6 +527,83 @@ void rai::Token::MakeAccountTokenInfoPtree(const rai::TokenKey& key,
               info.balance_.StringBalance(token.decimals_, token.symbol_));
     ptree.put("head_height", std::to_string(info.head_));
     ptree.put("token_block_count", std::to_string(info.blocks_));
+}
+
+bool rai::Token::MakeOrderPtree(rai::Transaction& transaction,
+                                const rai::Account& account, uint64_t height,
+                                std::string& error_info,
+                                rai::Ptree& ptree) const
+{
+    rai::OrderInfo order_info;
+    bool error = ledger_.OrderInfoGet(transaction, account, height, order_info);
+    if (error)
+    {
+        error_info = "missing";
+        return true;
+    }
+
+    rai::AccountInfo account_info;
+    error = ledger_.AccountInfoGet(transaction, account, account_info);
+    if (error)
+    {
+        error_info = "Failed to get account info";
+        return true;
+    }
+
+    std::shared_ptr<rai::Block> head;
+    error = ledger_.BlockGet(transaction, account_info.head_, head);
+    if (error)
+    {
+        error_info = "Failed to get head block";
+        return true;
+    }
+
+    rai::AccountSwapInfo account_swap_info;
+    error = ledger_.AccountSwapInfoGet(transaction, account,
+                                              account_swap_info);
+    if (error)
+    {
+        error_info = "Failed to get account swap info";
+        return true;
+    }
+
+    MakeOrderPtree_(account, height, order_info, account_swap_info,
+                    head->Credit(), ptree);
+
+    return false;
+}
+
+bool rai::Token::MakeAccountSwapInfoPtree(rai::Transaction& transaction,
+                                          const rai::Account& account,
+                                          std::string& error_info,
+                                          rai::Ptree& ptree) const
+{
+    rai::AccountSwapInfo swap_info;
+    bool error = ledger_.AccountSwapInfoGet(transaction, account, swap_info);
+    if (error)
+    {
+        error_info = "missing";
+        return true;
+    }
+
+    rai::AccountInfo account_info;
+    error = ledger_.AccountInfoGet(transaction, account, account_info);
+    if (error)
+    {
+        error_info = "Failed to get account info";
+        return true;
+    }
+
+    std::shared_ptr<rai::Block> head;
+    error = ledger_.BlockGet(transaction, account_info.head_, head);
+    if (error || head == nullptr)
+    {
+        error_info = "Failed to get acccount info";
+        return true;
+    }
+
+    MakeAccountSwapInfoPtree_(account, swap_info, head->Credit(), ptree);
+    return false;
 }
 
 std::vector<rai::BlockType> rai::Token::BlockTypes()
@@ -540,7 +653,7 @@ rai::ErrorCode rai::Token::InitLedger_()
     {
         error =
             ledger_.VersionPut(transaction, rai::Token::CURRENT_LEDGER_VERSION);
-        IF_ERROR_RETURN(error, rai::ErrorCode::TOKEN_LEDGER_PUT);
+        IF_ERROR_RETURN(error, rai::ErrorCode::LEDGER_VERSION_PUT);
         return rai::ErrorCode::SUCCESS;
     }
 
@@ -548,6 +661,23 @@ rai::ErrorCode rai::Token::InitLedger_()
     {
         std::cout << "[Error] Ledger version=" << version << std::endl;
         return rai::ErrorCode::LEDGER_VERSION;
+    }
+
+    switch (version)
+    {
+        case 1:
+        {
+            error_code = UpgradeLedgerV1V2(transaction);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 2:
+        {
+            break;
+        }
+        default:
+        {
+            return rai::ErrorCode::UNEXPECTED;
+        }
     }
 
     return rai::ErrorCode::SUCCESS;
@@ -1554,7 +1684,7 @@ rai::TokenError rai::Token::ProcessSwapMake_(
                 main_account, offer.chain_, offer.address_, offer.type_,
                 want.chain_, want.address_, want.type_, make->value_offer_,
                 make->value_want_, make->min_offer_, make->max_offer_,
-                make->timeout_);
+                make->timeout_, block->Hash());
             rai::SwapRate rate(make->value_offer_, make->value_want_);
             order_index = rai::OrderIndex(offer.chain_, offer.address_,
                                           want.chain_, want.address_, rate,
@@ -1571,7 +1701,7 @@ rai::TokenError rai::Token::ProcessSwapMake_(
             order_info = rai::OrderInfo(
                 main_account, offer.chain_, offer.address_, offer.type_,
                 want.chain_, want.address_, want.type_, make->value_offer_,
-                make->value_want_, make->timeout_);
+                make->value_want_, make->timeout_, block->Hash());
             rai::SwapRate rate(make->value_offer_, 1);
             order_index = rai::OrderIndex(
                 offer.chain_, offer.address_, want.chain_, want.address_,
@@ -1595,10 +1725,10 @@ rai::TokenError rai::Token::ProcessSwapMake_(
                 transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
         }
 
-        order_info = rai::OrderInfo(main_account, offer.chain_, offer.address_,
-                                    offer.type_, want.chain_, want.address_,
-                                    want.type_, make->value_offer_,
-                                    make->value_want_, make->timeout_);
+        order_info = rai::OrderInfo(
+            main_account, offer.chain_, offer.address_, offer.type_,
+            want.chain_, want.address_, want.type_, make->value_offer_,
+            make->value_want_, make->timeout_, block->Hash());
         if (make->token_want_.type_ == rai::TokenType::_721)
         {
             rai::SwapRate rate(1, 1);
@@ -3609,4 +3739,55 @@ rai::OrderIndex rai::Token::MakeOrderIndex_(const rai::OrderInfo& info,
     {
         return rai::OrderIndex();
     }
+}
+
+void rai::Token::MakeOrderPtree_(const rai::Account& account, uint64_t height,
+                                 const rai::OrderInfo& order_info,
+                                 const rai::AccountSwapInfo& account_swap_info,
+                                 uint16_t credit, rai::Ptree& ptree) const
+{
+    rai::Ptree maker;
+    MakeAccountSwapInfoPtree_(account, account_swap_info, credit, maker);
+    ptree.put_child("maker", maker);
+    ptree.put("order_height", std::to_string(height));
+    ptree.put("main_account", order_info.main_.StringAccount());
+    rai::Ptree token_offer;
+    TokenKeyToPtree(order_info.token_offer_, token_offer);
+    token_offer.put("type", rai::TokenTypeToString(order_info.type_offer_));
+    ptree.put_child("token_offer", token_offer);
+    rai::Ptree token_want;
+    TokenKeyToPtree(order_info.token_want_, token_want);
+    token_want.put("type", rai::TokenTypeToString(order_info.type_want_));
+    ptree.put_child("token_want", token_want);
+    ptree.put("value_offer", order_info.value_offer_.StringDec());
+    ptree.put("value_want", order_info.value_want_.StringDec());
+    ptree.put("left_offer", order_info.left_.StringDec());
+    ptree.put("timeout", std::to_string(order_info.timeout_));
+    std::string finished_by = "invalid";
+    if (order_info.finished_by_ == rai::OrderInfo::FinishedBy::CANCEL)
+    {
+        finished_by = "cancel";
+    }
+    else if (order_info.finished_by_ == rai::OrderInfo::FinishedBy::FULFILL)
+    {
+        finished_by = "fullfil";
+    }
+    ptree.put("finished_by", finished_by);
+    ptree.put("finished_height", std::to_string(order_info.finished_height_));
+    ptree.put("hash", order_info.hash_.StringHex());
+}
+
+void rai::Token::MakeAccountSwapInfoPtree_(const rai::Account& account,
+                                           const rai::AccountSwapInfo& info,
+                                           uint16_t credit,
+                                           rai::Ptree& ptree) const
+{
+    ptree.put("account", account.StringAccount());
+    ptree.put("active_orders", std::to_string(info.active_orders_));
+    ptree.put("total_orders", std::to_string(info.total_orders_));
+    ptree.put("active_swaps", std::to_string(info.active_swaps_));
+    ptree.put("total_swaps", std::to_string(info.total_swaps_));
+    ptree.put("credit", std::to_string(credit));
+    ptree.put("limited", rai::BoolToString(credit * rai::SWAPS_PER_CREDIT
+                                           <= info.active_swaps_));
 }

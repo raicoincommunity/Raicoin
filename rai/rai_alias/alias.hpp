@@ -28,9 +28,9 @@ public:
     rai::ErrorCode PreBlockAppend(rai::Transaction&,
                                   const std::shared_ptr<rai::Block>&,
                                   bool) override;
-    rai::ErrorCode AfterBlockAppend(rai::Transaction&,
-                                    const std::shared_ptr<rai::Block>&,
-                                    bool) override;
+    rai::ErrorCode AfterBlockAppend(
+        rai::Transaction&, const std::shared_ptr<rai::Block>&, bool,
+        std::vector<std::function<void()>>&) override;
     rai::ErrorCode PreBlockRollback(
         rai::Transaction&, const std::shared_ptr<rai::Block>&) override;
     rai::ErrorCode AfterBlockRollback(

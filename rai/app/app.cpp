@@ -222,6 +222,7 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
         return;
     }
 
+    std::vector<std::function<void()>> observers;
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     {
         rai::Transaction transaction(error_code, ledger_, true);
@@ -232,7 +233,7 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             return;
         }
 
-        error_code = AppendBlock_(transaction, block, confirmed);
+        error_code = AppendBlock_(transaction, block, confirmed, observers);
         switch (error_code)
         {
             case rai::ErrorCode::SUCCESS:
@@ -372,6 +373,10 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
         if (block_observer_)
         {
             block_observer_(block, confirmed);
+        }
+        for (const auto& observer : observers)
+        {
+            observer();
         }
     }
 }
@@ -1171,9 +1176,9 @@ void rai::App::RegisterObservers_()
     });
 }
 
-rai::ErrorCode rai::App::AppendBlock_(rai::Transaction& transaction,
-                                      const std::shared_ptr<rai::Block>& block,
-                                      bool confirmed)
+rai::ErrorCode rai::App::AppendBlock_(
+    rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
+    bool confirmed, std::vector<std::function<void()>>& observers)
 {
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::AccountInfo info;
@@ -1200,7 +1205,7 @@ rai::ErrorCode rai::App::AppendBlock_(rai::Transaction& transaction,
         error = ledger_.BlockPut(transaction, block->Hash(), *block);
         IF_ERROR_RETURN(error, rai::ErrorCode::APP_PROCESS_LEDGER_BLOCK_PUT);
 
-        error_code = AfterBlockAppend(transaction, block, confirmed);
+        error_code = AfterBlockAppend(transaction, block, confirmed, observers);
         return error_code;
     }
 
@@ -1235,7 +1240,7 @@ rai::ErrorCode rai::App::AppendBlock_(rai::Transaction& transaction,
         IF_ERROR_RETURN(error,
                         rai::ErrorCode::APP_PROCESS_LEDGER_SUCCESSOR_SET);
 
-        error_code = AfterBlockAppend(transaction, block, confirmed);
+        error_code = AfterBlockAppend(transaction, block, confirmed, observers);
         return error_code;
     }
     else if (height >= info.tail_height_)

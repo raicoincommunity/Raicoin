@@ -54,6 +54,7 @@ private:
 class Iterator
 {
 public:
+    Iterator();
     Iterator(rai::StoreIterator&&);
     Iterator(const rai::Iterator&) = delete;
     Iterator(rai::Iterator&&);
@@ -358,6 +359,10 @@ public:
     OrderIndex(rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
                rai::Chain, const rai::TokenAddress&, const rai::TokenValue&,
                const rai::SwapRate&, const rai::Account&, uint64_t);
+    OrderIndex(const rai::TokenKey&, rai::TokenType, const rai::TokenKey&,
+               rai::TokenType);
+    OrderIndex(const rai::TokenKey&, rai::TokenType, const rai::TokenKey&,
+               rai::TokenType, const rai::TokenValue&);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
@@ -379,11 +384,12 @@ public:
     OrderInfo(const rai::Account&, rai::Chain, const rai::TokenAddress&,
               rai::TokenType, rai::Chain, const rai::TokenAddress&,
               rai::TokenType, const rai::TokenValue&, const rai::TokenValue&,
-              uint64_t);
+              uint64_t, const rai::BlockHash&);
     OrderInfo(const rai::Account&, rai::Chain, const rai::TokenAddress&,
               rai::TokenType, rai::Chain, const rai::TokenAddress&,
               rai::TokenType, const rai::TokenValue&, const rai::TokenValue&,
-              const rai::TokenValue&, const rai::TokenValue&, uint64_t);
+              const rai::TokenValue&, const rai::TokenValue&, uint64_t,
+              const rai::BlockHash&);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
     bool Finished() const;
@@ -409,6 +415,7 @@ public:
     uint64_t timeout_;
     uint64_t finished_height_;
     FinishedBy finished_by_;
+    rai::BlockHash hash_;
 };
 
 class OrderSwapIndex
@@ -800,6 +807,22 @@ public:
                       rai::OrderInfo&) const;
     bool OrderIndexPut(rai::Transaction&, const rai::OrderIndex&);
     bool OrderIndexDel(rai::Transaction&, const rai::OrderIndex&);
+    bool OrderIndexGet(const rai::Iterator&, rai::OrderIndex&) const;
+    rai::Iterator OrderIndexLowerBound(rai::Transaction&, const rai::TokenKey&,
+                                       rai::TokenType, const rai::TokenKey&,
+                                       rai::TokenType) const;
+    rai::Iterator OrderIndexUpperBound(rai::Transaction&, const rai::TokenKey&,
+                                       rai::TokenType, const rai::TokenKey&,
+                                       rai::TokenType) const;
+    rai::Iterator OrderIndexLowerBound(rai::Transaction&, const rai::TokenKey&,
+                                       rai::TokenType, const rai::TokenKey&,
+                                       rai::TokenType,
+                                       const rai::TokenValue&) const;
+    rai::Iterator OrderIndexUpperBound(rai::Transaction&, const rai::TokenKey&,
+                                       rai::TokenType, const rai::TokenKey&,
+                                       rai::TokenType,
+                                       const rai::TokenValue&) const;
+    bool OrderCount(rai::Transaction&, size_t&) const;
     bool SwapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
                      const rai::SwapInfo&);
     bool SwapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
