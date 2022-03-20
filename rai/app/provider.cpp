@@ -35,10 +35,30 @@ std::string rai::Provider::ToString(Filter filter)
         {
             return "account";
         }
+        case rai::Provider::Filter::APP_TOPIC:
+        {
+            return "topic";
+        }
         default:
         {
             return "";
         }
+    }
+}
+
+rai::Provider::Filter rai::Provider::ToFilter(const std::string& str)
+{
+    if (str == "account")
+    {
+        return rai::Provider::Filter::APP_ACCOUNT;
+    }
+    else if (str == "topic")
+    {
+        return rai::Provider::Filter::APP_TOPIC;
+    }
+    else
+    {
+        return rai::Provider::Filter::INVALID;
     }
 }
 
@@ -57,6 +77,10 @@ std::string rai::Provider::ToString(Action action)
         case rai::Provider::Action::APP_ACCOUNT_SYNC:
         {
             return "account_synchronize";
+        }
+        case rai::Provider::Action::APP_ACCOUNT_HEAD:
+        {
+            return "account_head";
         }
         case rai::Provider::Action::ALIAS_QUERY:
         {
@@ -133,6 +157,18 @@ std::string rai::Provider::ToString(Action action)
         case rai::Provider::Action::TOKEN_RECEIVABLES_SUMMARY:
         {
             return "token_receivables_summary";
+        }
+        case rai::Provider::Action::TOKEN_SWAP_INFO:
+        {
+            return "swap_info";
+        }
+        case rai::Provider::Action::TOKEN_ORDER_INFO:
+        {
+            return "order_info";
+        }
+        case rai::Provider::Action::TOKEN_ACCOUNT_SWAP_INFO:
+        {
+            return "account_swap_info";
         }
         default:
         {

@@ -22,9 +22,11 @@ public:
     {
         INVALID         = 0,
         APP_ACCOUNT     = 1,
+        APP_TOPIC       = 2,
 
     };
     static std::string ToString(Filter);
+    static Filter ToFilter(const std::string&);
     static void PutFilter(rai::Ptree&, Filter, const std::string&);
 
     enum class Action
@@ -32,6 +34,7 @@ public:
         INVALID                 = 0,
         APP_SERVICE_SUBSCRIBE   = 1,
         APP_ACCOUNT_SYNC        = 2,
+        APP_ACCOUNT_HEAD        = 3,
 
         ALIAS_QUERY             = 100,
         ALIAS_SEARCH            = 101,
@@ -53,6 +56,10 @@ public:
         TOKEN_ACCOUNT_TOKEN_IDS             = 213,
         TOKEN_ID_TRANSFER                   = 214,
         TOKEN_RECEIVABLES_SUMMARY           = 245,
+        TOKEN_SWAP_INFO                     = 246,
+        TOKEN_ORDER_INFO                    = 247,
+        TOKEN_ACCOUNT_SWAP_INFO             = 248,
+
     };
     static std::string ToString(Action);
 

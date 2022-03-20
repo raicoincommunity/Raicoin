@@ -1237,6 +1237,42 @@ bool rai::SwapInfo::Deserialize(rai::Stream& stream)
     return false;
 }
 
+std::string rai::SwapInfo::StatusToString(rai::SwapInfo::Status status)
+{
+    using S = rai::SwapInfo::Status;
+    switch (status)
+    {
+        case S::INQUIRY:
+        {
+            return "inquiry";
+        }
+        case S::INQUIRY_ACK:
+        {
+            return "inquiry_ack";
+        }
+        case S::INQUIRY_NACK:
+        {
+            return "inquiry_nack";
+        }
+        case S::TAKE:
+        {
+            return "take";
+        }
+        case S::TAKE_ACK:
+        {
+            return "take_ack";
+        }
+        case S::TAKE_NACK:
+        {
+            return "take_nack";
+        }
+        default:
+        {
+            return "invalid";
+        }
+    }
+}
+
 rai::AccountSwapInfo::AccountSwapInfo()
     : active_orders_(0),
       total_orders_(0),

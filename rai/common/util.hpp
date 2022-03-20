@@ -380,6 +380,14 @@ public:
 bool CheckUtf8(const std::vector<uint8_t>&, bool&);
 bool CheckUtf8(const std::string&, bool&);
 
+class Serializer
+{
+public:
+    virtual void Serialize(rai::Stream&) const = 0;
+
+    virtual ~Serializer() = default;
+};
+
 }  // namespace rai
 
 #define IF_ERROR_RETURN(error, ret) \

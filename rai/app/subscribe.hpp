@@ -73,8 +73,10 @@ public:
     void Cutoff();
     void Synced(const rai::Account&);
     void Notify(const rai::Account&, const rai::Ptree&);
+    void Notify(const std::vector<rai::Account>&, const rai::Ptree&);
     void NotifyAccountSynced(const rai::Account&);
     rai::ErrorCode Subscribe(const rai::Account&, const rai::UniqueId&);
+    bool Subscribed(const rai::Account&) const;
     void Unsubscribe(const rai::UniqueId&);
     size_t Size() const;
     size_t Size(const rai::UniqueId&) const;

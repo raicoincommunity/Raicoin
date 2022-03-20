@@ -28,6 +28,7 @@ rai::App::App(rai::ErrorCode& error_code, boost::asio::io_service& service,
       block_confirm_(*this),
       provider_info_(provider_info),
       block_queries_(*this),
+      topics_(*this),
       stopped_(false),
       thread_([this]() { Run(); })
 {

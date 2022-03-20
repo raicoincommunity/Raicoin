@@ -46,6 +46,22 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             const rai::Account& account, const rai::AccountTokensInfo& info,
             const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&
                 pairs) { NotifyAccountTokensInfo(account, info, pairs); });
+
+    token_.observers_.swap_.Add(
+        [this](const rai::Account& account, uint64_t height) {
+            NotifySwapInfo(account, height);
+        });
+
+    token_.observers_.order_.Add(
+        [this](const rai::Account& account, uint64_t height) {
+            NotifyOrderInfo(account, height);
+        });
+
+    token_.observers_.account_swap_info_.Add(
+        [this](const rai::Account& account) {
+            NotifyAccountSwapInfo(account);
+        });
+
     // todo:
 }
 
@@ -53,6 +69,8 @@ void rai::TokenSubscriptions::NotifyTokenInfo(const rai::TokenKey& key,
                                               const rai::TokenInfo& info)
 {
     if (!rai::IsRaicoin(key.chain_)) return;
+    if (!Subscribed(key.address_)) return;
+
     using P = rai::Provider;
     rai::Ptree ptree;
     P::PutAction(ptree, P::Action::TOKEN_INFO);
@@ -66,6 +84,8 @@ void rai::TokenSubscriptions::NotifyTokenInfo(const rai::TokenKey& key,
 
 void rai::TokenSubscriptions::NotifyReceived(const rai::TokenReceivableKey& key)
 {
+    if (!Subscribed(key.to_)) return;
+
     using P = rai::Provider;
     rai::Ptree ptree;
     P::PutAction(ptree, P::Action::TOKEN_RECEIVED);
@@ -85,6 +105,8 @@ void rai::TokenSubscriptions::NotifyTokenIdInfo(const rai::TokenKey& key,
                                                 const rai::TokenIdInfo& info)
 {
     if (!rai::IsRaicoin(key.chain_)) return;
+    if (!Subscribed(key.address_)) return;
+
     using P = rai::Provider;
     rai::Ptree ptree;
     P::PutAction(ptree, P::Action::TOKEN_ID_INFO);
@@ -101,6 +123,8 @@ void rai::TokenSubscriptions::NotifyTokenIdTransfer(
     const rai::TokenKey& key, const rai::TokenValue& id,
     const rai::TokenIdInfo& info, const rai::Account& account, bool receive)
 {
+    if (!Subscribed(account)) return;
+
     using P = rai::Provider;
     rai::Ptree ptree;
     P::PutAction(ptree, P::Action::TOKEN_ID_TRANSFER);
@@ -119,9 +143,12 @@ void rai::TokenSubscriptions::NotifyAccountTokensInfo(
     const rai::Account& account, const rai::AccountTokensInfo& info,
     const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>& pairs)
 {
+    if (!Subscribed(account)) return;
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, token_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
     using P = rai::Provider;
     rai::Ptree ptree;
     P::PutAction(ptree, P::Action::TOKEN_ACCOUNT_TOKENS_INFO);
@@ -155,5 +182,82 @@ void rai::TokenSubscriptions::NotifyAccountTokensInfo(
     }
     ptree.put_child("tokens", tokens);
     ptree.put("token_count", std::to_string(count));
+    Notify(account, ptree);
+}
+
+void rai::TokenSubscriptions::NotifySwapInfo(const rai::Account& account,
+                                             uint64_t height)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::SwapInfo swap_info;
+    bool error =
+        token_.ledger_.SwapInfoGet(transaction, account, height, swap_info);
+    IF_ERROR_RETURN_VOID(error);
+    rai::Account maker(swap_info.maker_);
+    if (!Subscribed(account) && !Subscribed(maker))
+    {
+        return;
+    }
+
+    rai::Ptree ptree;
+    std::string error_info;
+    error =
+        token_.MakeSwapPtree(transaction, account, height, error_info, ptree);
+    IF_ERROR_RETURN_VOID(error);
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_SWAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, maker.StringAccount());
+
+    Notify({account, maker}, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyOrderInfo(const rai::Account& account,
+                                              uint64_t height)
+{
+    if (!Subscribed(account)) return;
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::Ptree ptree;
+    std::string error_info;
+    bool error =
+        token_.MakeOrderPtree(transaction, account, height, error_info, ptree);
+    IF_ERROR_RETURN_VOID(error);
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_ORDER_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
+    Notify(account, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyAccountSwapInfo(const rai::Account& account)
+{
+    if (!Subscribed(account)) return;
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::Ptree ptree;
+    std::string error_info;
+    bool error = token_.MakeAccountSwapInfoPtree(transaction, account,
+                                                 error_info, ptree);
+    IF_ERROR_RETURN_VOID(error);
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_ACCOUNT_SWAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
     Notify(account, ptree);
 }

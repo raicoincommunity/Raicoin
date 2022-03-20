@@ -27,12 +27,14 @@ public:
     void NextAccountTokenLinks();
     void NextTokenBlocks();
     void OrderCount();
+    void OrderInfo();
     void PreviousAccountTokenLinks();
     void PreviousTokenBlocks();
     void ReceivableTokens();
     void SearchOrders();
     void SearchOrdersById();
     void SearchOrdersByPair();
+    void SwapInfo();
     void TokenBlock();
     void TokenIdInfo();
     void TokenInfo();

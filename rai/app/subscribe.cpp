@@ -1,5 +1,6 @@
 #include <rai/app/subscribe.hpp>
 
+#include <set>
 #include <rai/app/app.hpp>
 
 std::chrono::seconds constexpr rai::AppSubscriptions::CUTOFF_TIME;
@@ -127,6 +128,31 @@ void rai::AppSubscriptions::Notify(const rai::Account& account,
     }
 }
 
+void rai::AppSubscriptions::Notify(const std::vector<rai::Account>& accounts,
+                                   const rai::Ptree& notify)
+{
+    std::set<rai::UniqueId> clients;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& account : accounts)
+        {
+            std::pair<rai::AppSubscriptionContainer::iterator,
+                      rai::AppSubscriptionContainer::iterator>
+                it_pair =
+                    subscriptions_.equal_range(boost::make_tuple(account));
+            for (auto& i = it_pair.first; i != it_pair.second; ++i)
+            {
+                clients.insert(i->uid_);
+            }
+        }
+    }
+
+    for (const auto& i : clients)
+    {
+        app_.SendToClient(notify, i);
+    }
+}
+
 void rai::AppSubscriptions::NotifyAccountSynced(const rai::Account& account)
 {
     using P = rai::Provider;
@@ -183,6 +209,12 @@ rai::ErrorCode rai::AppSubscriptions::Subscribe(const rai::Account& account,
     }
 
     return rai::ErrorCode::SUCCESS;
+}
+
+bool rai::AppSubscriptions::Subscribed(const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return accounts_.find(account) != accounts_.end();
 }
 
 void rai::AppSubscriptions::Unsubscribe(const rai::UniqueId& uid)

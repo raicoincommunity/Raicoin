@@ -19,6 +19,8 @@ add_library (app
 	provider.hpp
 	rpc.cpp
 	rpc.hpp
+	topic.cpp
+	topic.hpp
 )
 
 target_link_libraries (app

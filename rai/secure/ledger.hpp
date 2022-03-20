@@ -470,6 +470,8 @@ public:
         MAX
     };
 
+    static std::string StatusToString(Status);
+
     Status status_;
     rai::Account maker_;
     uint64_t order_height_;

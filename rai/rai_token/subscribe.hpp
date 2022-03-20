@@ -22,6 +22,9 @@ public:
     void NotifyAccountTokensInfo(
         const rai::Account&, const rai::AccountTokensInfo&,
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&);
+    void NotifySwapInfo(const rai::Account&, uint64_t);
+    void NotifyOrderInfo(const rai::Account&, uint64_t);
+    void NotifyAccountSwapInfo(const rai::Account&);
 
     rai::Token& token_;
 };

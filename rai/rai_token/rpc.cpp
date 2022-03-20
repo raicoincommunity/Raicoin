@@ -51,6 +51,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         OrderCount();
     }
+    else if (action == "order_info")
+    {
+        OrderInfo();
+    }
     else if (action == "previous_account_token_links")
     {
         PreviousAccountTokenLinks();
@@ -62,6 +66,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     else if (action == "search_orders")
     {
         SearchOrders();
+    }
+    else if (action == "swap_info")
+    {
+        SwapInfo();
     }
     else if (action == "token_block")
     {
@@ -532,6 +540,33 @@ void rai::TokenRpcHandler::OrderCount()
     response_.put("count", count);
 }
 
+void rai::TokenRpcHandler::OrderInfo()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    std::string error_info;
+    rai::Ptree order;
+    error =
+        token_.MakeOrderPtree(transaction, account, height, error_info, order);
+    if (error)
+    {
+        response_.put("error", error_info);
+        return;
+    }
+    response_.put_child("order", order);
+}
+
 void rai::TokenRpcHandler::PreviousAccountTokenLinks()
 {
     rai::Account account;
@@ -703,7 +738,7 @@ void rai::TokenRpcHandler::SearchOrdersById()
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
     std::shared_ptr<rai::Block> block;
-    bool error = token_.ledger_.BlockGet(transaction, hash, block);
+    error = token_.ledger_.BlockGet(transaction, hash, block);
     if (error)
     {
         response_.put("error", "missing");
@@ -757,6 +792,10 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_LIMIT_BY;
         return;
     }
+    auto include_inactive_o =
+        request_.get_optional<std::string>("include_inactive");
+    bool include_inactive =
+        include_inactive_o && *include_inactive_o != "false";
 
     rai::TokenValue limit_value;
     if (limit_by != "")
@@ -801,6 +840,7 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
                                                 from_type, to_token, to_type);
     }
 
+    uint64_t now = rai::CurrentTimestamp();
     rai::Ptree orders;
     for (; i != n && count > 0; ++i)
     {
@@ -819,6 +859,32 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
         {
             response_.put("error", "Failed to get order info from ledger");
             return;
+        }
+
+        if (!include_inactive)
+        {
+            rai::AccountInfo account_info;
+            error = token_.ledger_.AccountInfoGet(transaction, index.maker_,
+                                                  account_info);
+            if (error)
+            {
+                response_.put("error",
+                              "Failed to get account info from ledger");
+                return;
+            }
+
+            std::shared_ptr<rai::Block> head;
+            error =
+                token_.ledger_.BlockGet(transaction, account_info.head_, head);
+            if (error || head == nullptr)
+            {
+                response_.put("error", "Failed to get head block from ledger");
+                return;
+            }
+            if (head->Timestamp() + rai::MAKER_KEEPLIVE_INTERVAL < now)
+            {
+                continue;
+            }
         }
 
         if (limit_by == "from_token")
@@ -883,6 +949,33 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
     }
 
     response_.put_child("orders", orders);
+}
+
+void rai::TokenRpcHandler::SwapInfo()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    std::string error_info;
+    rai::Ptree swap;
+    error =
+        token_.MakeSwapPtree(transaction, account, height, error_info, swap);
+    if (error)
+    {
+        response_.put("error", error_info);
+        return;
+    }
+    response_.put_child("swap", swap);
 }
 
 void rai::TokenRpcHandler::TokenBlock()
