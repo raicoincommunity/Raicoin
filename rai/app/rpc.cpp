@@ -22,6 +22,10 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         AccountCount();
     }
+    else if (action == "account_head")
+    {
+        AccountHead();
+    }
     else if (action == "account_info")
     {
         AccountInfo();
@@ -119,6 +123,14 @@ void rai::AppRpcHandler::ProcessImpl()
     {
         SynchronizingAccounts();
     }
+    else if (action == "topics")
+    {
+        Topics();
+    }
+    else if (action == "topic_count")
+    {
+        TopicCount();
+    }
     else
     {
         error_code_ = rai::ErrorCode::RPC_UNKNOWN_ACTION;
@@ -154,6 +166,41 @@ void rai::AppRpcHandler::AccountCount()
     }
 
     response_.put("count", count);
+}
+
+void rai::AppRpcHandler::AccountHead()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, app_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::AccountInfo info;
+    error = app_.ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        response_.put("error", "The account does not exist");
+        return;
+    }
+
+    response_.put("hash", info.head_.StringHex());
+
+    std::shared_ptr<rai::Block> head_block(nullptr);
+    error = app_.ledger_.BlockGet(transaction, info.head_, head_block);
+    if (error || head_block == nullptr)
+    {
+        error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+        return;
+    }
+
+    rai::Ptree head_ptree;
+    head_block->SerializeJson(head_ptree);
+    response_.add_child("block", head_ptree);
+    response_.put("confirmed",
+                  rai::BoolToString(info.Confirmed(head_block->Height())));
 }
 
 void rai::AppRpcHandler::AccountInfo()
@@ -629,22 +676,43 @@ void rai::AppRpcHandler::ServiceSubscribe()
         return;
     }
 
-    if (filters[0].first != P::ToString(P::Filter::APP_ACCOUNT))
+    P::Filter filter = P::ToFilter(filters[0].first);
+    if (filter == P::Filter::INVALID)
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
         return;
     }
 
-    rai::Account account;
-    error = account.DecodeAccount(filters[0].second);
-    if (error)
+    if (filter == P::Filter::APP_ACCOUNT)
     {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+        rai::Account account;
+        error = account.DecodeAccount(filters[0].second);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+            return;
+        }
+
+        error_code_ = app_.subscribe_.Subscribe(account, uid_);
+        IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    }
+    else if (filter == P::Filter::APP_TOPIC)
+    {
+        rai::Topic topic;
+        error = topic.DecodeHex(filters[0].second);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_FILTERS;
+            return;
+        }
+        error_code_ = app_.topics_.Subscribe(topic, uid_);
+        IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+    }
+    else
+    {
+        response_.put("error", "Unknown filter");
         return;
     }
-
-    error_code_ = app_.subscribe_.Subscribe(account, uid_);
-    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
     response_.put("success", "");
 }
@@ -762,7 +830,7 @@ void rai::AppRpcHandler::Subscription()
 
 void rai::AppRpcHandler::Subscriptions()
 {
-    auto uid_o = request_.get_optional<std::string>("uid");
+    auto uid_o = request_.get_optional<std::string>("client_id");
     if (uid_o)
     {
         rai::UniqueId uid;
@@ -824,6 +892,48 @@ void rai::AppRpcHandler::SynchronizingAccounts()
         accounts.push_back(std::make_pair("", entry));
     }
     response_.put_child("accounts", accounts);
+}
+
+void rai::AppRpcHandler::Topics()
+{
+    auto uid_o = request_.get_optional<std::string>("client_id");
+    if (uid_o)
+    {
+        rai::UniqueId uid;
+        bool error = uid.DecodeHex(*uid_o);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CLIENT_ID;
+            return;
+        }
+
+        app_.topics_.JsonByUid(uid, response_);
+    }
+    else
+    {
+        app_.topics_.Json(response_);
+    }
+}
+
+void rai::AppRpcHandler::TopicCount()
+{
+    auto client_id_o = request_.get_optional<std::string>("client_id");
+    if (client_id_o)
+    {
+        rai::UniqueId client_id;
+        bool error = client_id.DecodeHex(*client_id_o);
+        if (error)
+        {
+            error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CLIENT_ID;
+            return;
+        }
+
+        response_.put("count", std::to_string(app_.topics_.Size(client_id)));
+    }
+    else
+    {
+        response_.put("count", std::to_string(app_.topics_.Size()));
+    }
 }
 
 bool rai::AppRpcHandler::GetService_(std::string& service)

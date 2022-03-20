@@ -8,6 +8,8 @@ add_executable (rai_token
 	rpc.hpp
 	subscribe.cpp
 	subscribe.hpp
+	topic.cpp
+	topic.hpp
 )
 
 target_link_libraries (rai_token

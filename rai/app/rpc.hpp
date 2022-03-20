@@ -21,6 +21,7 @@ public:
     void ExtraCheck(const std::string&) override;
 
     void AccountCount();
+    void AccountHead();
     void AccountInfo();
     void AccountSync();
     void AppActionCount();
@@ -47,6 +48,8 @@ public:
     void SubscriptionCount();
     void SubscriptionAccountCount();
     void SynchronizingAccounts();
+    void Topics();
+    void TopicCount();
 
     rai::App& app_;
     rai::UniqueId uid_;

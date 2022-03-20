@@ -42,11 +42,12 @@ rai::WebsocketClient::~WebsocketClient()
 }
 
 void rai::WebsocketClient::OnResolve(
+    uint32_t session_id,
     const boost::system::error_code& ec,
     boost::asio::ip::tcp::resolver::iterator results)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stopped_)
+    if (stopped_ || session_id != session_id_)
     {
         return;
     }
@@ -67,7 +68,7 @@ void rai::WebsocketClient::OnResolve(
         std::shared_ptr<rai::WssStream> stream(wss_stream_);
         boost::asio::async_connect(
             wss_stream_->lowest_layer(), results,
-            [client_w, stream](
+            [client_w, stream, session_id](
                 const boost::system::error_code& ec,
                 boost::asio::ip::tcp::resolver::iterator iterator) {
                 auto client = client_w.lock();
@@ -76,7 +77,7 @@ void rai::WebsocketClient::OnResolve(
                     return;
                 }
 
-                client->OnConnect(ec);
+                client->OnConnect(session_id, ec);
             });
     }
     else
@@ -84,7 +85,7 @@ void rai::WebsocketClient::OnResolve(
         std::shared_ptr<rai::WsStream> stream(ws_stream_);
         boost::asio::async_connect(
             ws_stream_->lowest_layer(), results,
-            [client_w, stream](
+            [client_w, stream, session_id](
                 const boost::system::error_code& ec,
                 boost::asio::ip::tcp::resolver::iterator iterator) {
                 auto client = client_w.lock();
@@ -93,15 +94,16 @@ void rai::WebsocketClient::OnResolve(
                     return;
                 }
 
-                client->OnConnect(ec);
+                client->OnConnect(session_id, ec);
             });
     }
 }
 
-void rai::WebsocketClient::OnConnect(const boost::system::error_code& ec)
+void rai::WebsocketClient::OnConnect(uint32_t session_id,
+                                     const boost::system::error_code& ec)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stopped_)
+    if (stopped_ || session_id != session_id_)
     {
         return;
     }
@@ -138,14 +140,15 @@ void rai::WebsocketClient::OnConnect(const boost::system::error_code& ec)
         std::shared_ptr<rai::WssStream> stream(wss_stream_);
         wss_stream_->next_layer().async_handshake(
             boost::asio::ssl::stream_base::client,
-            [client_w, stream](const boost::system::error_code& ec) {
+            [client_w, stream,
+             session_id](const boost::system::error_code& ec) {
                 auto client = client_w.lock();
                 if (!client)
                 {
                     return;
                 }
 
-                client->OnSslHandshake(ec);
+                client->OnSslHandshake(session_id, ec);
             });
     }
     else
@@ -153,22 +156,24 @@ void rai::WebsocketClient::OnConnect(const boost::system::error_code& ec)
         std::shared_ptr<rai::WsStream> stream(ws_stream_);
         ws_stream_->async_handshake(
             host_, path_,
-            [client_w, stream](const boost::system::error_code& ec) {
+            [client_w, stream,
+             session_id](const boost::system::error_code& ec) {
                 auto client = client_w.lock();
                 if (!client)
                 {
                     return;
                 }
 
-                client->OnWebsocketHandshake(ec);
+                client->OnWebsocketHandshake(session_id, ec);
             });
     }
 }
 
-void rai::WebsocketClient::OnSslHandshake(const boost::system::error_code& ec)
+void rai::WebsocketClient::OnSslHandshake(uint32_t session_id,
+                                          const boost::system::error_code& ec)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stopped_)
+    if (stopped_ || session_id != session_id_)
     {
         return;
     }
@@ -186,22 +191,23 @@ void rai::WebsocketClient::OnSslHandshake(const boost::system::error_code& ec)
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     std::shared_ptr<rai::WssStream> stream(wss_stream_);
     wss_stream_->async_handshake(
-        host_, path_, [client_w, stream](const boost::system::error_code& ec) {
+        host_, path_,
+        [client_w, stream, session_id](const boost::system::error_code& ec) {
             auto client = client_w.lock();
             if (!client)
             {
                 return;
             }
 
-            client->OnWebsocketHandshake(ec);
+            client->OnWebsocketHandshake(session_id, ec);
         });
 }
 
 void rai::WebsocketClient::OnWebsocketHandshake(
-    const boost::system::error_code& ec)
+    uint32_t session_id, const boost::system::error_code& ec)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stopped_)
+    if (stopped_ || session_id != session_id_)
     {
         return;
     }
@@ -409,10 +415,11 @@ void rai::WebsocketClient::Run()
     session_id_++;
     sending_ = false;
 
+    uint32_t session_id(session_id_);
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     boost::asio::ip::tcp::resolver::query query(host_, std::to_string(port_));
     resolver_.async_resolve(
-        query, [client_w](const boost::system::error_code& ec,
+        query, [client_w, session_id](const boost::system::error_code& ec,
                           boost::asio::ip::tcp::resolver::iterator results) {
             auto client = client_w.lock();
             if (!client)
@@ -420,7 +427,7 @@ void rai::WebsocketClient::Run()
                 return;
             }
 
-            client->OnResolve(ec, results);
+            client->OnResolve(session_id, ec, results);
         });
 }
 

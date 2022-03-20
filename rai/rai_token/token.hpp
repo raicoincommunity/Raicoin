@@ -7,6 +7,7 @@
 #include <rai/rai_token/config.hpp>
 #include <rai/rai_token/subscribe.hpp>
 #include <rai/rai_token/rpc.hpp>
+#include <rai/rai_token/topic.hpp>
 
 namespace rai
 {
@@ -33,6 +34,8 @@ public:
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&>
         account_;
     rai::ObserverContainer<const rai::Account&, uint64_t> order_;
+    rai::ObserverContainer<const rai::Account&, uint64_t> swap_;
+    rai::ObserverContainer<const rai::Account&> account_swap_info_;
 };
 
 class TokenError
@@ -91,6 +94,8 @@ public:
                                    rai::Ptree&) const;
     bool MakeOrderPtree(rai::Transaction&, const rai::Account&, uint64_t,
                         std::string&, rai::Ptree&) const;
+    bool MakeSwapPtree(rai::Transaction&, const rai::Account&, uint64_t,
+                       std::string&, rai::Ptree&) const;
     bool MakeAccountSwapInfoPtree(rai::Transaction&, const rai::Account&,
                                   std::string&, rai::Ptree&) const;
     static std::vector<rai::BlockType> BlockTypes();
@@ -103,6 +108,7 @@ public:
     std::shared_ptr<rai::Rpc> rpc_;
     std::shared_ptr<rai::OngoingServiceRunner> runner_;
     rai::TokenSubscriptions subscribe_;
+    rai::TokenTopics token_topics_;
 
 private:
     static uint32_t constexpr CURRENT_LEDGER_VERSION = 2;
@@ -124,37 +130,48 @@ private:
                                     const rai::ExtensionToken&);
     rai::TokenError ProcessSwap_(rai::Transaction&,
                                  const std::shared_ptr<rai::Block>&,
-                                 const rai::ExtensionToken&);
+                                 const rai::ExtensionToken&,
+                                 std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapConfig_(rai::Transaction&,
                                        const std::shared_ptr<rai::Block>&,
-                                       const rai::ExtensionTokenSwap&);
+                                       const rai::ExtensionTokenSwap&,
+                                       std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapMake_(rai::Transaction&,
                                      const std::shared_ptr<rai::Block>&,
-                                     const rai::ExtensionTokenSwap&);
+                                     const rai::ExtensionTokenSwap&,
+                                     std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapInquiry_(rai::Transaction&,
                                         const std::shared_ptr<rai::Block>&,
-                                        const rai::ExtensionTokenSwap&);
+                                        const rai::ExtensionTokenSwap&,
+                                        std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapInquiryAck_(rai::Transaction&,
                                            const std::shared_ptr<rai::Block>&,
-                                           const rai::ExtensionTokenSwap&);
+                                           const rai::ExtensionTokenSwap&,
+                                           std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapTake_(rai::Transaction&,
                                      const std::shared_ptr<rai::Block>&,
-                                     const rai::ExtensionTokenSwap&);
+                                     const rai::ExtensionTokenSwap&,
+                                     std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapTakeAck_(rai::Transaction&,
                                         const std::shared_ptr<rai::Block>&,
-                                        const rai::ExtensionTokenSwap&);
+                                        const rai::ExtensionTokenSwap&,
+                                        std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapTakeNack_(rai::Transaction&,
                                          const std::shared_ptr<rai::Block>&,
-                                         const rai::ExtensionTokenSwap&);
+                                         const rai::ExtensionTokenSwap&,
+                                         std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapCancel_(rai::Transaction&,
                                        const std::shared_ptr<rai::Block>&,
-                                       const rai::ExtensionTokenSwap&);
+                                       const rai::ExtensionTokenSwap&,
+                                       std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapPing_(rai::Transaction&,
                                      const std::shared_ptr<rai::Block>&,
-                                     const rai::ExtensionTokenSwap&);
+                                     const rai::ExtensionTokenSwap&,
+                                     std::vector<std::function<void()>>&);
     rai::TokenError ProcessSwapPong_(rai::Transaction&,
                                      const std::shared_ptr<rai::Block>&,
-                                     const rai::ExtensionTokenSwap&);
+                                     const rai::ExtensionTokenSwap&,
+                                     std::vector<std::function<void()>>&);
     rai::TokenError ProcessUnmap_(rai::Transaction&,
                                   const std::shared_ptr<rai::Block>&,
                                   const rai::ExtensionToken&);
@@ -163,9 +180,11 @@ private:
                                  const rai::ExtensionToken&);
     rai::ErrorCode ProcessError_(rai::Transaction&, const rai::TokenError&);
     rai::ErrorCode PurgeInquiryWaiting_(rai::Transaction&, const rai::Account&,
-                                        uint64_t);
+                                        uint64_t,
+                                        std::vector<std::function<void()>>&);
     rai::ErrorCode PurgeTakeWaiting_(rai::Transaction&,
-                                     const std::shared_ptr<rai::Block>&);
+                                     const std::shared_ptr<rai::Block>&,
+                                     std::vector<std::function<void()>>&);
     rai::ErrorCode UpdateLedgerCommon_(
         rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
         const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
@@ -240,5 +259,7 @@ private:
         const std::vector<std::pair<rai::TokenKey, rai::AccountTokenInfo>>&)>
         account_observer_;
     std::function<void(const rai::Account&, uint64_t)> order_observer_;
+    std::function<void(const rai::Account&, uint64_t)> swap_observer_;
+    std::function<void(const rai::Account&)> account_swap_info_observer_;
 };
 }

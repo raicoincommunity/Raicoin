@@ -19,6 +19,7 @@
 #include <rai/app/provider.hpp>
 #include <rai/app/blockwaiting.hpp>
 #include <rai/app/blockquery.hpp>
+#include <rai/app/topic.hpp>
 
 namespace rai
 {
@@ -148,6 +149,7 @@ public:
     std::vector<std::string> provider_actions_;
     rai::BlockWaiting block_waiting_;
     rai::AppBlockQueries block_queries_;
+    rai::AppTopics topics_;
 
 protected:
     template <typename Derived>

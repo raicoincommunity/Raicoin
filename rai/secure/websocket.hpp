@@ -35,11 +35,11 @@ public:
                     const std::string&, bool = true);
     ~WebsocketClient();
 
-    void OnResolve(const boost::system::error_code&,
+    void OnResolve(uint32_t, const boost::system::error_code&,
                    boost::asio::ip::tcp::resolver::iterator);
-    void OnConnect(const boost::system::error_code&);
-    void OnSslHandshake(const boost::system::error_code&);
-    void OnWebsocketHandshake(const boost::system::error_code&);
+    void OnConnect(uint32_t, const boost::system::error_code&);
+    void OnSslHandshake(uint32_t, const boost::system::error_code&);
+    void OnWebsocketHandshake(uint32_t, const boost::system::error_code&);
     void Run();
     void Send(const std::string&);
     void Send(const rai::Ptree&);
