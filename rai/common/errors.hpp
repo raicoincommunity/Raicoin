@@ -311,6 +311,10 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_LIMIT_BY      = 361,
     RPC_MISS_FIELD_LIMIT_VALUE      = 362,
     RPC_INVALID_FIELD_LIMIT_VALUE   = 363,
+    RPC_MISS_FIELD_MAKER            = 364,
+    RPC_INVALID_FIELD_MAKER         = 365,
+    RPC_MISS_FIELD_TRADE_HEIGHT     = 366,
+    RPC_INVALID_FIELD_TRADE_HEIGHT  = 367,
 
 
     // Block process errors: 400 ~ 499

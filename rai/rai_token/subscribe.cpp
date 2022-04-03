@@ -52,6 +52,11 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             NotifySwapInfo(account, height);
         });
 
+    token_.observers_.main_account_.Add(
+        [this](const rai::Account& account, const rai::Account& main_account) {
+            NotifySwapMainAccount(account, main_account);
+        });
+
     token_.observers_.order_.Add(
         [this](const rai::Account& account, uint64_t height) {
             NotifyOrderInfo(account, height);
@@ -215,6 +220,21 @@ void rai::TokenSubscriptions::NotifySwapInfo(const rai::Account& account,
     P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, maker.StringAccount());
 
     Notify({account, maker}, ptree);
+}
+
+void rai::TokenSubscriptions::NotifySwapMainAccount(
+    const rai::Account& account, const rai::Account& main_account)
+{
+    if (!Subscribed(account)) return;
+
+    using P = rai::Provider;
+    rai::Ptree ptree;
+    P::PutAction(ptree, P::Action::TOKEN_SWAP_MAIN_ACCOUNT);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+    ptree.put("account", account.StringAccount());
+    ptree.put("main_account", main_account.StringAccount());
+    Notify(account, ptree);
 }
 
 void rai::TokenSubscriptions::NotifyOrderInfo(const rai::Account& account,

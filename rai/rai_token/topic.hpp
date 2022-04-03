@@ -20,6 +20,19 @@ public:
     rai::TokenType type_want_;
 };
 
+class AccountTokenBalanceTopic : public rai::Serializer
+{
+public:
+    AccountTokenBalanceTopic(const rai::Account&, const rai::TokenKey&,
+                             rai::TokenType,
+                             const boost::optional<rai::TokenValue>&);
+    void Serialize(rai::Stream&) const override;
+    rai::Account account_;
+    rai::TokenKey token_;
+    rai::TokenType type_;
+    boost::optional<rai::TokenValue> id_o_;
+};
+
 class TokenTopics
 {
 public:
@@ -27,6 +40,9 @@ public:
 
     void NotifyAccountSwapInfo(const rai::Account&);
     void NotifyOrderInfo(const rai::Account&, uint64_t);
+    void NotifyAccountTokenBalance(const rai::Account&, const rai::TokenKey&,
+                                   rai::TokenType,
+                                   const boost::optional<rai::TokenValue>&);
 
     rai::Token& token_;
 };

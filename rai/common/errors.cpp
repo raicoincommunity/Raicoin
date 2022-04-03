@@ -1270,6 +1270,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid limit_value field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_MAKER:
+        {
+            return "[RPC] The maker field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_MAKER:
+        {
+            return "[RPC] Invalid maker field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_TRADE_HEIGHT:
+        {
+            return "[RPC] The trade_height field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TRADE_HEIGHT:
+        {
+            return "[RPC] Invalid trade_height field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";

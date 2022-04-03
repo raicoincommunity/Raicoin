@@ -20,6 +20,25 @@ void rai::TokenOrderTopic::Serialize(rai::Stream& stream) const
     rai::Write(stream, type_want_);
 }
 
+rai::AccountTokenBalanceTopic::AccountTokenBalanceTopic(
+    const rai::Account& account, const rai::TokenKey& token,
+    rai::TokenType type, const boost::optional<rai::TokenValue>& id_o)
+    : account_(account), token_(token), type_(type), id_o_(id_o)
+{
+}
+
+void rai::AccountTokenBalanceTopic::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, account_.bytes);
+    rai::Write(stream, token_.chain_);
+    rai::Write(stream, token_.address_.bytes);
+    rai::Write(stream, type_);
+    if (id_o_)
+    {
+        rai::Write(stream, id_o_->bytes);
+    }
+}
+
 rai::TokenTopics::TokenTopics(rai::Token& token) : token_(token)
 {
     token_.observers_.account_swap_info_.Add(
@@ -30,6 +49,13 @@ rai::TokenTopics::TokenTopics(rai::Token& token) : token_(token)
     token_.observers_.order_.Add(
         [this](const rai::Account& account, uint64_t height) {
             NotifyOrderInfo(account, height);
+        });
+
+    token_.observers_.account_token_balance_.Add(
+        [this](const rai::Account& account, const rai::TokenKey& token,
+               rai::TokenType type,
+               const boost::optional<rai::TokenValue>& id_o) {
+            NotifyAccountTokenBalance(account, token, type, id_o);
         });
 }
 
@@ -99,3 +125,32 @@ void rai::TokenTopics::NotifyOrderInfo(const rai::Account& account,
     token_.topics_.Notify({pair_topic, id_topic}, ptree);
 }
 
+void rai::TokenTopics::NotifyAccountTokenBalance(
+    const rai::Account& account, const rai::TokenKey& token,
+    rai::TokenType type, const boost::optional<rai::TokenValue>& id_o)
+{
+    rai::AccountTokenBalanceTopic balance_topic(account, token, type, id_o);
+    rai::Topic topic = rai::AppTopics::CalcTopic(
+        rai::AppTopicType::ACCOUNT_TOKEN_BALANCE, balance_topic);
+    if (!token_.topics_.Subscribed(topic))
+    {
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    std::string error_info;
+    rai::Ptree ptree;
+    bool error = token_.MakeAccountTokenBalancePtree(
+        transaction, account, token, type, id_o, error_info, ptree);
+    IF_ERROR_RETURN_VOID(error);
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_ACCOUNT_BALANCE);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_TOPIC, topic.StringHex());
+    
+    token_.topics_.Notify(topic, ptree);
+}
