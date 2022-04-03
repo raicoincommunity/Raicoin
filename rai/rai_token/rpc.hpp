@@ -18,7 +18,9 @@ public:
 
     void Stop() override;
 
+    void AccountOrders();
     void AccountSwapInfo();
+    void AccountTokenBalance();
     void AccountTokenLink();
     void AccountTokenInfo();
     void AccountTokenIds();
@@ -28,6 +30,7 @@ public:
     void NextTokenBlocks();
     void OrderCount();
     void OrderInfo();
+    void OrderSwaps();
     void PreviousAccountTokenLinks();
     void PreviousTokenBlocks();
     void ReceivableTokens();
@@ -35,6 +38,7 @@ public:
     void SearchOrdersById();
     void SearchOrdersByPair();
     void SwapInfo();
+    void SwapMainAccount();
     void TokenBlock();
     void TokenIdInfo();
     void TokenInfo();
@@ -46,10 +50,13 @@ public:
 private:
     bool GetChain_(rai::Chain&);
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);
+    bool GetTokenType_(rai::TokenType&);
     bool GetTokenId_(rai::TokenValue&, const std::string& = "token_id");
     bool GetTokens_(std::vector<rai::TokenKey>&);
     bool GetToken_(const std::string&, rai::ErrorCode, rai::ErrorCode,
                    rai::TokenKey&, rai::TokenType&);
+    bool GetMaker_(rai::Account&);
+    bool GetTradeHeight_(uint64_t&);
     bool PutTokenBlock_(rai::Transaction&, uint64_t, const rai::TokenBlock&,
                         rai::Ptree&);
 

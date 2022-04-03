@@ -429,7 +429,7 @@ public:
 
     rai::Account maker_;
     uint64_t order_height_;
-    uint64_t ts_comp_;
+    uint64_t trade_height_;
     rai::Account taker_;
     uint64_t inquiry_height_;
 };
@@ -807,6 +807,14 @@ public:
                       const rai::OrderInfo&);
     bool OrderInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
                       rai::OrderInfo&) const;
+    bool OrderInfoGet(const rai::Iterator&, rai::Account&, uint64_t&,
+                      rai::OrderInfo&) const;
+    rai::Iterator OrderInfoLowerBound(rai::Transaction&,
+                                      const rai::Account&) const;
+    rai::Iterator OrderInfoLowerBound(rai::Transaction&, const rai::Account&,
+                                      uint64_t) const;
+    rai::Iterator OrderInfoUpperBound(rai::Transaction&,
+                                      const rai::Account&) const;
     bool OrderIndexPut(rai::Transaction&, const rai::OrderIndex&);
     bool OrderIndexDel(rai::Transaction&, const rai::OrderIndex&);
     bool OrderIndexGet(const rai::Iterator&, rai::OrderIndex&) const;
@@ -851,6 +859,12 @@ public:
     rai::Iterator TakeWaitingUpperBound(rai::Transaction&, const rai::Account&,
                                         uint64_t) const;
     bool OrderSwapIndexPut(rai::Transaction&, const rai::OrderSwapIndex&);
+    bool OrderSwapIndexGet(const rai::Iterator&, rai::OrderSwapIndex&) const;
+    rai::Iterator OrderSwapIndexLowerBound(rai::Transaction&,
+                                           const rai::Account&, uint64_t,
+                                           uint64_t) const;
+    rai::Iterator OrderSwapIndexUpperBound(rai::Transaction&,
+                                           const rai::Account&, uint64_t) const;
     bool TokenSwapIndexPut(rai::Transaction&, const rai::TokenSwapIndex&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,

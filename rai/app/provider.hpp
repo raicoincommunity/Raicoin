@@ -55,10 +55,14 @@ public:
         TOKEN_ID_INFO                       = 212,
         TOKEN_ACCOUNT_TOKEN_IDS             = 213,
         TOKEN_ID_TRANSFER                   = 214,
-        TOKEN_RECEIVABLES_SUMMARY           = 245,
-        TOKEN_SWAP_INFO                     = 246,
-        TOKEN_ORDER_INFO                    = 247,
-        TOKEN_ACCOUNT_SWAP_INFO             = 248,
+        TOKEN_RECEIVABLES_SUMMARY           = 215,
+        TOKEN_SWAP_INFO                     = 216,
+        TOKEN_ORDER_INFO                    = 217,
+        TOKEN_ACCOUNT_SWAP_INFO             = 218,
+        TOKEN_SWAP_MAIN_ACCOUNT             = 219,
+        TOKEN_ACCOUNT_ORDERS                = 220,
+        TOKEN_ORDER_SWAPS                   = 221,
+        TOKEN_ACCOUNT_BALANCE               = 222,
 
     };
     static std::string ToString(Action);

@@ -170,6 +170,22 @@ std::string rai::Provider::ToString(Action action)
         {
             return "account_swap_info";
         }
+        case rai::Provider::Action::TOKEN_SWAP_MAIN_ACCOUNT:
+        {
+            return "swap_main_account";
+        }
+        case rai::Provider::Action::TOKEN_ACCOUNT_ORDERS:
+        {
+            return "account_orders";
+        }
+        case rai::Provider::Action::TOKEN_ORDER_SWAPS:
+        {
+            return "order_swaps";
+        }
+        case rai::Provider::Action::TOKEN_ACCOUNT_BALANCE:
+        {
+            return "account_token_balance";
+        }
         default:
         {
             return "";

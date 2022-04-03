@@ -14,11 +14,12 @@ class App;
 
 enum class AppTopicType : uint32_t
 {
-    INVALID             = 0,
-    ORDER_PAIR          = 1,
-    ORDER_ID            = 2,
-    ACCOUNT_SWAP_INFO   = 3,
-    ACCOUNT_HEAD        = 4,
+    INVALID                 = 0,
+    ORDER_PAIR              = 1,
+    ORDER_ID                = 2,
+    ACCOUNT_SWAP_INFO       = 3,
+    ACCOUNT_HEAD            = 4,
+    ACCOUNT_TOKEN_BALANCE   = 5,
 
     MAX
 };

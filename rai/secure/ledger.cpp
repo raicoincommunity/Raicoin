@@ -1080,7 +1080,7 @@ bool rai::OrderInfo::Finished() const
 rai::OrderSwapIndex::OrderSwapIndex()
     : maker_(0),
       order_height_(rai::Block::INVALID_HEIGHT),
-      ts_comp_(0),
+      trade_height_(rai::Block::INVALID_HEIGHT),
       taker_(0),
       inquiry_height_(rai::Block::INVALID_HEIGHT)
 {
@@ -1089,10 +1089,11 @@ rai::OrderSwapIndex::OrderSwapIndex()
 rai::OrderSwapIndex::OrderSwapIndex(const rai::Account& maker,
                                     uint64_t order_height,
                                     const rai::Account& taker,
-                                    uint64_t inquiry_height, uint64_t timestamp)
+                                    uint64_t inquiry_height,
+                                    uint64_t trade_height)
     : maker_(maker),
       order_height_(order_height),
-      ts_comp_(~timestamp),
+      trade_height_(trade_height),
       taker_(taker),
       inquiry_height_(inquiry_height)
 {
@@ -1102,7 +1103,7 @@ void rai::OrderSwapIndex::Serialize(rai::Stream& stream) const
 {
     rai::Write(stream, maker_.bytes);
     rai::Write(stream, order_height_);
-    rai::Write(stream, ts_comp_);
+    rai::Write(stream, ~trade_height_);
     rai::Write(stream, taker_.bytes);
     rai::Write(stream, inquiry_height_);
 }
@@ -1114,8 +1115,9 @@ bool rai::OrderSwapIndex::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, order_height_);
     IF_ERROR_RETURN(error, true);
-    error = rai::Read(stream, ts_comp_);
+    error = rai::Read(stream, trade_height_);
     IF_ERROR_RETURN(error, true);
+    trade_height_ = ~trade_height_;
     error = rai::Read(stream, taker_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, inquiry_height_);
@@ -3036,7 +3038,7 @@ bool rai::Ledger::OrderInfoPut(rai::Transaction& transaction,
     {
         rai::VectorStream stream(bytes_key);
         rai::Write(stream, account.bytes);
-        rai::Write(stream, height);
+        rai::Write(stream, ~height);
     }
     std::vector<uint8_t> bytes_value;
     {
@@ -3061,7 +3063,7 @@ bool rai::Ledger::OrderInfoGet(rai::Transaction& transaction,
     {
         rai::VectorStream stream(bytes_key);
         rai::Write(stream, account.bytes);
-        rai::Write(stream, height);
+        rai::Write(stream, ~height);
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
@@ -3070,6 +3072,71 @@ bool rai::Ledger::OrderInfoGet(rai::Transaction& transaction,
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
+}
+
+bool rai::Ledger::OrderInfoGet(const rai::Iterator& it, rai::Account& account,
+                               uint64_t& height, rai::OrderInfo& info) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, height);
+    IF_ERROR_RETURN(error, true);
+    height = ~height;
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = info.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::OrderInfoLowerBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    return OrderInfoLowerBound(transaction, account,
+                               std::numeric_limits<uint64_t>::max());
+}
+
+rai::Iterator rai::Ledger::OrderInfoLowerBound(rai::Transaction& transaction,
+                                               const rai::Account& account,
+                                               uint64_t height) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, ~height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.order_info_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::OrderInfoUpperBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    rai::Account account_l(account);
+    account_l += 1;
+    if (account_l.IsZero())
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+
+    return OrderInfoLowerBound(transaction, account_l);
 }
 
 bool rai::Ledger::OrderIndexPut(rai::Transaction& transaction,
@@ -3495,8 +3562,9 @@ bool rai::Ledger::OrderSwapIndexPut(rai::Transaction& transaction,
     }
     std::vector<uint8_t> bytes_value;
     {
+        uint8_t junk = 0;
         rai::VectorStream stream(bytes_value);
-        rai::Write(stream, ~index.ts_comp_);
+        rai::Write(stream, junk);
     }
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
@@ -3506,6 +3574,46 @@ bool rai::Ledger::OrderSwapIndexPut(rai::Transaction& transaction,
     IF_ERROR_RETURN(error, error);
 
     return false;
+}
+
+bool rai::Ledger::OrderSwapIndexGet(const rai::Iterator& it,
+                                    rai::OrderSwapIndex& index) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = index.Deserialize(stream_key);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::OrderSwapIndexLowerBound(
+    rai::Transaction& transaction, const rai::Account& maker,
+    uint64_t order_height, uint64_t trade_height) const
+{
+    rai::OrderSwapIndex index(maker, order_height, rai::Account(0), 0,
+                              trade_height);
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.order_swap_index_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::OrderSwapIndexUpperBound(
+    rai::Transaction& transaction, const rai::Account& maker,
+    uint64_t order_height) const
+{
+    return OrderSwapIndexLowerBound(transaction, maker, order_height, 0);
 }
 
 bool rai::Ledger::TokenSwapIndexPut(rai::Transaction& transaction,
