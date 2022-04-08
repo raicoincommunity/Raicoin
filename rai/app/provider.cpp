@@ -186,6 +186,14 @@ std::string rai::Provider::ToString(Action action)
         {
             return "account_token_balance";
         }
+        case rai::Provider::Action::TOKEN_ACCOUNT_ACTIVE_SWAPS:
+        {
+            return "account_active_swaps";
+        }
+        case rai::Provider::Action::TOKEN_TAKE_NACK_BLOCK_SUBMITTED:
+        {
+            return "take_nack_block_submitted";
+        }
         default:
         {
             return "";

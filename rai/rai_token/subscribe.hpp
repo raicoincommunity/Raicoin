@@ -26,6 +26,8 @@ public:
     void NotifySwapMainAccount(const rai::Account&, const rai::Account&);
     void NotifyOrderInfo(const rai::Account&, uint64_t);
     void NotifyAccountSwapInfo(const rai::Account&);
+    void NotifyTakeNackBlockSubmitted(const rai::Account&, uint64_t,
+                                      const std::shared_ptr<rai::Block>&);
 
     rai::Token& token_;
 };

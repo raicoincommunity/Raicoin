@@ -18,6 +18,7 @@ public:
 
     void Stop() override;
 
+    void AccountActiveSwaps();
     void AccountOrders();
     void AccountSwapInfo();
     void AccountTokenBalance();
@@ -37,6 +38,7 @@ public:
     void SearchOrders();
     void SearchOrdersById();
     void SearchOrdersByPair();
+    void SubmitTakeNackBlock();
     void SwapInfo();
     void SwapMainAccount();
     void TokenBlock();
@@ -57,6 +59,8 @@ private:
                    rai::TokenKey&, rai::TokenType&);
     bool GetMaker_(rai::Account&);
     bool GetTradeHeight_(uint64_t&);
+    bool GetTaker_(rai::Account&);
+    bool GetInquiryHeight_(uint64_t&);
     bool PutTokenBlock_(rai::Transaction&, uint64_t, const rai::TokenBlock&,
                         rai::Ptree&);
 

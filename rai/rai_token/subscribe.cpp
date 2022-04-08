@@ -67,6 +67,12 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             NotifyAccountSwapInfo(account);
         });
 
+    token_.observers_.take_nack_block_submitted_.Add(
+        [this](const rai::Account& account, uint64_t height,
+               const std::shared_ptr<rai::Block>& block) {
+            NotifyTakeNackBlockSubmitted(account, height, block);
+        });
+
     // todo:
 }
 
@@ -276,6 +282,27 @@ void rai::TokenSubscriptions::NotifyAccountSwapInfo(const rai::Account& account)
 
     using P = rai::Provider;
     P::PutAction(ptree, P::Action::TOKEN_ACCOUNT_SWAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
+    Notify(account, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyTakeNackBlockSubmitted(
+    const rai::Account& account, uint64_t height, const std::shared_ptr<rai::Block>& block)
+{
+    if (!Subscribed(account)) return;
+
+    rai::Ptree ptree;
+    ptree.put("taker", account.StringAccount());
+    ptree.put("inquiry_height", std::to_string(height));
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    ptree.put_child("block", block_ptree);
+    ptree.put("status", "submitted");
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_TAKE_NACK_BLOCK_SUBMITTED);
     P::PutId(ptree, token_.provider_info_.id_);
     P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
 

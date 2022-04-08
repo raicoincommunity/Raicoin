@@ -546,6 +546,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid send amount";
         }
+        case rai::ErrorCode::LEDGER_TAKE_NACK_BLOCK_GET:
+        {
+            return "Failed to get nack block from ledger";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -1285,6 +1289,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::RPC_INVALID_FIELD_TRADE_HEIGHT:
         {
             return "[RPC] Invalid trade_height field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_TAKER:
+        {
+            return "[RPC] The taker field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_TAKER:
+        {
+            return "[RPC] Invalid taker field";
+        }
+        case rai::ErrorCode::RPC_MISS_FIELD_INQUIRY_HEIGHT:
+        {
+            return "[RPC] The inquiry_height field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_INQUIRY_HEIGHT:
+        {
+            return "[RPC] Invalid inquiry_height field";
         }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {

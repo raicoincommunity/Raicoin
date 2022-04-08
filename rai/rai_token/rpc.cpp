@@ -15,7 +15,11 @@ void rai::TokenRpcHandler::ProcessImpl()
 {
     std::string action = request_.get<std::string>("action");
 
-    if (action == "account_orders")
+    if ("account_active_swaps")
+    {
+        AccountActiveSwaps();
+    }
+    else if (action == "account_orders")
     {
         AccountOrders();
     }
@@ -79,6 +83,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         SearchOrders();
     }
+    else if (action == "submit_take_nack_block")
+    {
+        SubmitTakeNackBlock();
+    }
     else if (action == "swap_info")
     {
         SwapInfo();
@@ -132,6 +140,139 @@ void rai::TokenRpcHandler::Stop()
 {
     token_.Stop();
     response_.put("success", "");
+}
+
+void rai::TokenRpcHandler::AccountActiveSwaps()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint64_t count = 0;
+    uint64_t now = rai::CurrentTimestamp();
+    rai::Ptree swaps;
+    rai::Iterator i = token_.ledger_.SwapInfoLowerBound(transaction, account);
+    rai::Iterator n = token_.ledger_.SwapInfoUpperBound(transaction, account);
+    for (; i != n && count < 100; ++i)
+    {
+        uint64_t height;
+        rai::SwapInfo info;
+        error = token_.ledger_.SwapInfoGet(i, account, height, info);
+        if (error)
+        {
+            response_.put("error", "Failed to get swap info");
+            return;
+        }
+
+        std::shared_ptr<rai::Block> block;
+        error = token_.ledger_.BlockGet(transaction, info.hash_, block);
+        if (error || block == nullptr)
+        {
+            response_.put("error", "Failed to get block");
+            return;
+        }
+
+        if (block->Timestamp() < now - 360)
+        {
+            break;
+        }
+
+        if (info.Finished())
+        {
+            continue;
+        }
+
+        std::string error_info;
+        rai::Ptree swap;
+        error = token_.MakeSwapPtree(transaction, account, height, error_info,
+                                     swap);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+
+        swaps.push_back(std::make_pair("", swap));
+        ++count;
+    }
+
+    if (count >= 100)
+    {
+        response_.put_child("swaps", swaps);
+        return;
+    }
+
+    rai::AccountInfo account_info;
+    error = token_.ledger_.AccountInfoGet(transaction, account, account_info);
+    if (error || !account_info.Valid())
+    {
+        response_.put_child("swaps", swaps);
+        return;
+    }
+
+    uint64_t next = account_info.head_height_ + 1;
+    i = token_.ledger_.InquiryWaitingLowerBound(transaction, account, next);
+    n = token_.ledger_.InquiryWaitingUpperBound(transaction, account, next);
+    for (; i != n && count < 100; ++i)
+    {
+        rai::InquiryWaiting waiting;
+        error = token_.ledger_.InquiryWaitingGet(i, waiting);
+        if (error)
+        {
+            response_.put("error", "Failed to get inquiry waiting info");
+            return;
+        }
+
+        std::string error_info;
+        rai::Ptree swap;
+        error = token_.MakeSwapPtree(transaction, waiting.taker_,
+                                     waiting.inquiry_height_, error_info, swap);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+
+        swaps.push_back(std::make_pair("", swap));
+        ++count;
+    }
+
+    if (count >= 100)
+    {
+        response_.put_child("swaps", swaps);
+        return;
+    }
+
+    i = token_.ledger_.TakeWaitingLowerBound(transaction, account, next);
+    n = token_.ledger_.TakeWaitingUpperBound(transaction, account, next);
+    for (; i != n && count < 100; ++i)
+    {
+        rai::TakeWaiting waiting;
+        error = token_.ledger_.TakeWaitingGet(i, waiting);
+        if (error)
+        {
+            response_.put("error", "Failed to get take waiting info");
+            return;
+        }
+
+        std::string error_info;
+        rai::Ptree swap;
+        error = token_.MakeSwapPtree(transaction, waiting.taker_,
+                                     waiting.inquiry_height_, error_info, swap);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+
+        swaps.push_back(std::make_pair("", swap));
+        ++count;
+    }
+    response_.put_child("swaps", swaps);
 }
 
 void rai::TokenRpcHandler::AccountOrders()
@@ -1152,6 +1293,76 @@ void rai::TokenRpcHandler::SwapInfo()
     response_.put_child("swap", swap);
 }
 
+void rai::TokenRpcHandler::SubmitTakeNackBlock()
+{
+    rai::Account taker;
+    bool error = GetTaker_(taker);
+    IF_ERROR_RETURN_VOID(error);
+
+    uint64_t inquiry_height = 0;
+    error = GetInquiryHeight_(inquiry_height);
+    IF_ERROR_RETURN_VOID(error);
+
+    boost::optional<rai::Ptree&> block_ptree =
+        request_.get_child_optional("block");
+    if (!block_ptree)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_BLOCK;
+        return;
+    }
+
+    std::shared_ptr<rai::Block> block =
+        rai::DeserializeBlockJson(error_code_, *block_ptree);
+    if (error_code_ != rai::ErrorCode::SUCCESS || block == nullptr)
+    {
+        return;
+    }
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    bool existing =
+        token_.ledger_.TakeNackBlockExists(transaction, taker, inquiry_height);
+    if (existing)
+    {
+        response_.put("status", "submitted");
+        return;
+    }
+
+    rai::SwapInfo info;
+    error =
+        token_.ledger_.SwapInfoGet(transaction, taker, inquiry_height, info);
+    if (error)
+    {
+        response_.put("error", "swap missing");
+        return;
+    }
+
+    if (info.status_ != rai::SwapInfo::Status::TAKE)
+    {
+        response_.put("error", "swap status");
+        return;
+    }
+
+    rai::AccountInfo maker_info;
+    error = token_.ledger_.AccountInfoGet(transaction, info.maker_, maker_info);
+    if (error)
+    {
+        response_.put("error", "maker missing");
+        return;
+    }
+
+    if (maker_info.head_ != info.trade_previous_
+        || !maker_info.Confirmed(maker_info.head_height_))
+    {
+        response_.put("error", "maker status");
+        return;
+    }
+
+    token_.SubmitTakeNackBlock(taker, inquiry_height, block);
+    response_.put("status", "pending");
+}
+
 void rai::TokenRpcHandler::SwapMainAccount()
 {
     rai::Account account;
@@ -1679,6 +1890,43 @@ bool rai::TokenRpcHandler::GetTradeHeight_(uint64_t& height)
     if (error)
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TRADE_HEIGHT;
+        return  true;
+    }
+
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetTaker_(rai::Account& taker)
+{
+    auto taker_o = request_.get_optional<std::string>("taker");
+    if (!taker_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_TAKER;
+        return true;
+    }
+
+    if (taker.DecodeAccount(*taker_o))
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_TAKER;
+        return true;
+    }
+
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetInquiryHeight_(uint64_t& height)
+{
+    auto height_o = request_.get_optional<std::string>("inquiry_height");
+    if (!height_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_INQUIRY_HEIGHT;
+        return true;
+    }
+
+    bool error = rai::StringToUint(*height_o, height);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_INQUIRY_HEIGHT;
         return  true;
     }
 

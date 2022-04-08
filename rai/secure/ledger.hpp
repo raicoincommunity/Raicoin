@@ -454,7 +454,8 @@ class SwapInfo
 public:
     SwapInfo();
     SwapInfo(const rai::Account&, uint64_t, uint64_t, uint64_t,
-             const rai::TokenValue&, const rai::PublicKey&);
+             const rai::TokenValue&, const rai::PublicKey&,
+             const rai::BlockHash&);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
@@ -470,6 +471,12 @@ public:
         MAX
     };
 
+    bool Finished()
+    {
+        return status_ == Status::TAKE_ACK || status_ == Status::TAKE_NACK
+               || status_ == Status::INQUIRY_NACK;
+    }
+
     static std::string StatusToString(Status);
 
     Status status_;
@@ -484,6 +491,7 @@ public:
     rai::PublicKey maker_share_;
     rai::Signature maker_signature_;
     rai::BlockHash trade_previous_;
+    rai::BlockHash hash_;
 };
 
 class AccountSwapInfo
@@ -837,6 +845,14 @@ public:
                      const rai::SwapInfo&);
     bool SwapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
                      rai::SwapInfo&) const;
+    bool SwapInfoGet(const rai::Iterator&, rai::Account&, uint64_t&,
+                     rai::SwapInfo&) const;
+    rai::Iterator SwapInfoLowerBound(rai::Transaction&,
+                                     const rai::Account&) const;
+    rai::Iterator SwapInfoLowerBound(rai::Transaction&, const rai::Account&,
+                                     uint64_t) const;
+    rai::Iterator SwapInfoUpperBound(rai::Transaction&,
+                                     const rai::Account&) const;
     bool InquiryWaitingPut(rai::Transaction&, const rai::InquiryWaiting&);
     bool InquiryWaitingGet(const rai::Iterator&, rai::InquiryWaiting&) const;
     bool InquiryWaitingDel(rai::Transaction&, const rai::InquiryWaiting&);
@@ -858,6 +874,17 @@ public:
                                         uint64_t) const;
     rai::Iterator TakeWaitingUpperBound(rai::Transaction&, const rai::Account&,
                                         uint64_t) const;
+    bool TakeNackBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
+                          const rai::Block&);
+    bool TakeNackBlockDel(rai::Transaction&, const rai::Account&, uint64_t);
+    bool TakeNackBlockGet(rai::Transaction&, const rai::Account&, uint64_t,
+                          std::shared_ptr<rai::Block>&) const;
+    bool TakeNackBlockGet(const rai::Iterator&, rai::Account&, uint64_t&,
+                          std::shared_ptr<rai::Block>&) const;
+    bool TakeNackBlockExists(rai::Transaction&, const rai::Account&,
+                             uint64_t) const;
+    rai::Iterator TakeNackBlockBegin(rai::Transaction&) const;
+    rai::Iterator TakeNackBlockEnd(rai::Transaction&) const;
     bool OrderSwapIndexPut(rai::Transaction&, const rai::OrderSwapIndex&);
     bool OrderSwapIndexGet(const rai::Iterator&, rai::OrderSwapIndex&) const;
     rai::Iterator OrderSwapIndexLowerBound(rai::Transaction&,

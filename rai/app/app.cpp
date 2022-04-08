@@ -984,6 +984,29 @@ void rai::App::NotifyProviderInfo(const rai::UniqueId& uid)
     SendToClient(ptree, uid);
 }
 
+void rai::App::PublishBlock(const std::shared_ptr<rai::Block>& block)
+{
+    rai::Ptree ptree;
+
+    ptree.put("action", "block_publish");
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    ptree.put_child("block", block_ptree);
+
+    SendToGateway(ptree);
+}
+
+void rai::App::PublishBlockAsync(const std::shared_ptr<rai::Block>& block)
+{
+    std::weak_ptr<rai::App> app_w(Shared());
+    Background([app_w, block]() {
+        if (auto app_s = app_w.lock())
+        {
+            app_s->PublishBlock(block);
+        }
+    });
+}
+
 rai::ErrorCode rai::App::WaitBlock(rai::Transaction& transaction,
                                    const rai::Account& account, uint64_t height,
                                    const std::shared_ptr<rai::Block>& waiting,

@@ -23,7 +23,7 @@ from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSock
 from functools import partial
 
 ALLOWED_RPC_ACTIONS = [
-    'account_heads', 'active_account_heads', 'block_confirm', 'blocks_query', 'event_subscribe'
+    'account_heads', 'active_account_heads', 'block_confirm', 'block_publish', 'blocks_query', 'event_subscribe'
 ]
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
