@@ -8,6 +8,7 @@
 #include <rai/rai_token/subscribe.hpp>
 #include <rai/rai_token/rpc.hpp>
 #include <rai/rai_token/topic.hpp>
+#include <rai/rai_token/swaphelper.hpp>
 
 namespace rai
 {
@@ -42,6 +43,9 @@ public:
                            rai::TokenType,
                            const boost::optional<rai::TokenValue>&>
         account_token_balance_;
+    rai::ObserverContainer<const rai::Account&, uint64_t,
+                           const std::shared_ptr<rai::Block>&>
+        take_nack_block_submitted_;
 };
 
 class TokenError
@@ -77,6 +81,9 @@ public:
                            const std::shared_ptr<rai::Block>&,
                            const rai::Extensions&,
                            std::vector<std::function<void()>>&);
+    void ProcessTakeNackBlock(const rai::Account&, uint64_t,
+                              const std::shared_ptr<rai::Block>&);
+    void ProcessTakeNackBlockPurge(const rai::Account&, uint64_t);
     std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
         const rai::UniqueId&, bool, const std::string&,
         const std::function<void(const rai::Ptree&)>&) override;
@@ -87,6 +94,9 @@ public:
     void Start() override;
     void Stop() override;
     rai::ErrorCode UpgradeLedgerV1V2(rai::Transaction&);
+    void SubmitTakeNackBlock(const rai::Account&, uint64_t,
+                             const std::shared_ptr<rai::Block>&);
+    void PurgeTakeNackBlock(const rai::Account&, uint64_t);
 
     void TokenKeyToPtree(const rai::TokenKey&, rai::Ptree&) const;
     void TokenInfoToPtree(const rai::TokenInfo&, rai::Ptree&) const;
@@ -119,10 +129,12 @@ public:
     std::shared_ptr<rai::OngoingServiceRunner> runner_;
     rai::TokenSubscriptions subscribe_;
     rai::TokenTopics token_topics_;
+    rai::SwapHelper swap_helper_;
 
 private:
     static uint32_t constexpr CURRENT_LEDGER_VERSION = 2;
     rai::ErrorCode InitLedger_();
+    rai::ErrorCode ReadTakeNackBlocks_();
     rai::TokenError ProcessCreate_(rai::Transaction&,
                                    const std::shared_ptr<rai::Block>&,
                                    const rai::ExtensionToken&,
@@ -283,5 +295,8 @@ private:
     std::function<void(const rai::Account&, const rai::TokenKey&,
                        rai::TokenType, const boost::optional<rai::TokenValue>&)>
         account_token_balance_observer_;
+    std::function<void(const rai::Account&, uint64_t,
+                       const std::shared_ptr<rai::Block>&)>
+        take_nack_block_submitted_observer_;
 };
 }

@@ -52,6 +52,7 @@ public:
     rai::ErrorCode Append(const rai::Extension&);
     size_t Count(rai::ExtensionType) const;
     size_t SerialSize() const;
+    size_t Size() const;
     rai::ErrorCode FromBytes(const std::vector<uint8_t>&);
     std::vector<uint8_t> Bytes() const;
     rai::ErrorCode FromJson(const rai::Ptree&);

@@ -10,6 +10,8 @@ add_executable (rai_token
 	subscribe.hpp
 	topic.cpp
 	topic.hpp
+	swaphelper.cpp
+	swaphelper.hpp
 )
 
 target_link_libraries (rai_token

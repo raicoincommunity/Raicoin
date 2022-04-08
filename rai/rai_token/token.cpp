@@ -26,10 +26,13 @@ rai::Token::Token(rai::ErrorCode& error_code, boost::asio::io_service& service,
       alarm_(alarm),
       config_(config),
       subscribe_(*this),
-      token_topics_(*this)
+      token_topics_(*this),
+      swap_helper_(*this)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     error_code = InitLedger_();
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+    error_code = ReadTakeNackBlocks_();
 }
 
 rai::ErrorCode rai::Token::PreBlockAppend(
@@ -281,6 +284,113 @@ rai::ErrorCode rai::Token::Process(
     return rai::ErrorCode::SUCCESS;
 }
 
+void rai::Token::ProcessTakeNackBlock(const rai::Account& taker,
+                                      uint64_t inquiry_height,
+                                      const std::shared_ptr<rai::Block>& block)
+{
+    do
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, true);
+        IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+        bool existing =
+            ledger_.TakeNackBlockExists(transaction, taker, inquiry_height);
+        if (existing) return;
+
+        rai::SwapInfo info;
+        bool error =
+            ledger_.SwapInfoGet(transaction, taker, inquiry_height, info);
+        if (error) return;
+
+        if (info.status_ != rai::SwapInfo::Status::TAKE) return;
+
+        rai::AccountInfo maker_info;
+        error = ledger_.AccountInfoGet(transaction, info.maker_, maker_info);
+        IF_ERROR_RETURN_VOID(error);
+        if (maker_info.head_ != info.trade_previous_) return;
+        if (!maker_info.Confirmed(maker_info.head_height_)) return;
+
+        std::shared_ptr<rai::Block> head;
+        error = ledger_.BlockGet(transaction, maker_info.head_, head);
+        IF_ERROR_RETURN_VOID(error);
+
+        if (block->Type() != head->Type()) return;
+        if (block->Opcode() != rai::BlockOpcode::CHANGE) return;
+        if (block->Credit() != head->Credit()) return;
+        if (block->Timestamp() != info.timeout_
+            || block->Timestamp() < head->Timestamp()) return;
+
+        if (rai::SameDay(block->Timestamp(), head->Timestamp()))
+        {
+            if (block->Counter() != head->Counter() + 1) return;
+            if (block->Counter()
+                > block->Credit() * rai::TRANSACTIONS_PER_CREDIT) return;
+        }
+        else
+        {
+            if (block->Counter() != 1) return;
+        }
+
+        if (block->Height() != head->Height() + 1) return;
+        if (block->Height() != info.trade_height_) return;
+        if (block->Account() != info.maker_) return;
+        if (block->Previous() != maker_info.head_) return;
+        if (block->HasRepresentative()
+            && block->Representative() != head->Representative())
+            return;
+        if (block->Balance() != head->Balance()) return;
+        if (!block->Link().IsZero()) return;
+        if (block->Extensions().empty()) return;
+        if (block->CheckSignature()) return;
+
+        rai::Extensions extensions;
+        error_code = extensions.FromBytes(block->Extensions());
+        IF_NOT_SUCCESS_RETURN_VOID(error_code);
+        if (extensions.Size() != 1) return;
+        if (extensions.Count(rai::ExtensionType::TOKEN) != 1) return;
+
+        rai::ExtensionToken token;
+        error_code =
+            token.FromExtension(extensions.Get(rai::ExtensionType::TOKEN));
+        IF_NOT_SUCCESS_RETURN_VOID(error_code);
+        if (token.op_ != rai::ExtensionToken::Op::SWAP) return;
+        if (token.op_data_ == nullptr) return;
+
+        auto swap =
+            std::static_pointer_cast<rai::ExtensionTokenSwap>(token.op_data_);
+        error_code = swap->CheckData();
+        IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+        if (swap->sub_op_ != rai::ExtensionTokenSwap::SubOp::TAKE_NACK) return;
+        if (swap->sub_data_ == nullptr) return;
+        auto take_nack =
+            std::static_pointer_cast<rai::ExtensionTokenSwapTakeNack>(
+                swap->sub_data_);
+        error_code = take_nack->CheckData();
+        IF_NOT_SUCCESS_RETURN_VOID(error_code);
+        if (take_nack->taker_ != taker) return;
+        if (take_nack->inquiry_height_) return;
+
+        error = ledger_.TakeNackBlockPut(transaction, taker, inquiry_height,
+                                         *block);
+        IF_ERROR_RETURN_VOID(error);
+    } while (0);
+    
+    swap_helper_.Add(taker, inquiry_height, block);
+
+    take_nack_block_submitted_observer_(taker, inquiry_height, block);
+}
+
+void rai::Token::ProcessTakeNackBlockPurge(const rai::Account& taker,
+                                           uint64_t inquiry_height)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, true);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+    ledger_.TakeNackBlockDel(transaction, taker, inquiry_height);
+}
+
 std::shared_ptr<rai::AppRpcHandler> rai::Token::MakeRpcHandler(
     const rai::UniqueId& uid, bool check, const std::string& body,
     const std::function<void(const rai::Ptree&)>& send_response)
@@ -465,6 +575,21 @@ void rai::Token::Start()
             });
         };
 
+    take_nack_block_submitted_observer_ =
+        [token](const rai::Account& account, uint64_t height,
+                const std::shared_ptr<rai::Block>& block) {
+            auto token_s = token.lock();
+            if (token_s == nullptr) return;
+
+            token_s->Background([token, account, height, block]() {
+                if (auto token_s = token.lock())
+                {
+                    token_s->observers_.take_nack_block_submitted_.Notify(
+                        account, height, block);
+                }
+            });
+        };
+
     App::Start();
 }
 
@@ -479,6 +604,8 @@ void rai::Token::Stop()
     {
         runner_->Stop();
     }
+
+    swap_helper_.Stop();
 
     App::Stop();
 }
@@ -499,6 +626,33 @@ rai::ErrorCode rai::Token::UpgradeLedgerV1V2(rai::Transaction& transaction)
     }
 
     return rai::ErrorCode::SUCCESS;
+}
+
+void rai::Token::SubmitTakeNackBlock(const rai::Account& taker,
+                                     uint64_t inquiry_height,
+                                     const std::shared_ptr<rai::Block>& block)
+{
+    std::weak_ptr<rai::Token> token_w(Shared());
+    QueueAction(
+        rai::AppActionPri::NORMAL, [token_w, taker, inquiry_height, block]() {
+            if (auto token_s = token_w.lock())
+            {
+                token_s->ProcessTakeNackBlock(taker, inquiry_height, block);
+            }
+        });
+}
+
+void rai::Token::PurgeTakeNackBlock(const rai::Account& taker,
+                                     uint64_t inquiry_height)
+{
+    std::weak_ptr<rai::Token> token_w(Shared());
+    QueueAction(
+        rai::AppActionPri::NORMAL, [token_w, taker, inquiry_height]() {
+            if (auto token_s = token_w.lock())
+            {
+                token_s->ProcessTakeNackBlockPurge(taker, inquiry_height);
+            }
+        });
 }
 
 void rai::Token::TokenKeyToPtree(const rai::TokenKey& key,
@@ -823,6 +977,7 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_ACCOUNT_ORDERS);
     info.actions_.push_back(P::Action::TOKEN_ORDER_SWAPS);
     info.actions_.push_back(P::Action::TOKEN_ACCOUNT_BALANCE);
+    info.actions_.push_back(P::Action::TOKEN_ACCOUNT_ACTIVE_SWAPS);
     // todo:
 
     return info;
@@ -865,6 +1020,31 @@ rai::ErrorCode rai::Token::InitLedger_()
         {
             return rai::ErrorCode::UNEXPECTED;
         }
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Token::ReadTakeNackBlocks_()
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, false);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    rai::Iterator i = ledger_.TakeNackBlockBegin(transaction);
+    rai::Iterator n = ledger_.TakeNackBlockEnd(transaction);
+    for (; i != n; ++i)
+    {
+        rai::Account account;
+        uint64_t height;
+        std::shared_ptr<rai::Block> block;
+        bool error = ledger_.TakeNackBlockGet(i, account, height,
+                                              block);
+        if (error)
+        {
+            return rai::ErrorCode::LEDGER_TAKE_NACK_BLOCK_GET;
+        }
+        swap_helper_.Add(account, height, block);
     }
 
     return rai::ErrorCode::SUCCESS;
@@ -2104,7 +2284,7 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
 
     rai::SwapInfo swap_info(inquiry->maker_, inquiry->order_height_,
                             inquiry->ack_height_, inquiry->timeout_,
-                            inquiry->value_, inquiry->share_);
+                            inquiry->value_, inquiry->share_, block->Hash());
     error = ledger_.SwapInfoPut(transaction, block->Account(), block->Height(),
                                 swap_info);
     if (error)

@@ -1180,7 +1180,8 @@ rai::SwapInfo::SwapInfo()
 rai::SwapInfo::SwapInfo(const rai::Account& maker, uint64_t order_height,
                         uint64_t inquiry_ack_height, uint64_t timeout,
                         const rai::TokenValue& value,
-                        const rai::PublicKey& take_share)
+                        const rai::PublicKey& take_share,
+                        const rai::BlockHash& hash)
     : status_(rai::SwapInfo::Status::INQUIRY),
       maker_(maker),
       order_height_(order_height),
@@ -1189,7 +1190,8 @@ rai::SwapInfo::SwapInfo(const rai::Account& maker, uint64_t order_height,
       trade_height_(rai::Block::INVALID_HEIGHT),
       timeout_(timeout),
       value_(value),
-      taker_share_(take_share)
+      taker_share_(take_share),
+      hash_(hash)
 {
 }
 
@@ -1207,6 +1209,7 @@ void rai::SwapInfo::Serialize(rai::Stream& stream) const
     rai::Write(stream, maker_share_.bytes);
     rai::Write(stream, maker_signature_.bytes);
     rai::Write(stream, trade_previous_.bytes);
+    rai::Write(stream, hash_.bytes);
 }
 
 bool rai::SwapInfo::Deserialize(rai::Stream& stream)
@@ -1235,6 +1238,8 @@ bool rai::SwapInfo::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, maker_signature_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, trade_previous_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, hash_.bytes);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -3277,7 +3282,7 @@ bool rai::Ledger::SwapInfoPut(rai::Transaction& transaction,
     {
         rai::VectorStream stream(bytes_key);
         rai::Write(stream, account.bytes);
-        rai::Write(stream, height);
+        rai::Write(stream, ~height);
     }
     std::vector<uint8_t> bytes_value;
     {
@@ -3302,7 +3307,7 @@ bool rai::Ledger::SwapInfoGet(rai::Transaction& transaction,
     {
         rai::VectorStream stream(bytes_key);
         rai::Write(stream, account.bytes);
-        rai::Write(stream, height);
+        rai::Write(stream, ~height);
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
@@ -3311,6 +3316,71 @@ bool rai::Ledger::SwapInfoGet(rai::Transaction& transaction,
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
+}
+
+bool rai::Ledger::SwapInfoGet(const rai::Iterator& it, rai::Account& account,
+                               uint64_t& height, rai::SwapInfo& info) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, height);
+    IF_ERROR_RETURN(error, true);
+    height = ~height;
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = info.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::SwapInfoLowerBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    return SwapInfoLowerBound(transaction, account,
+                              std::numeric_limits<uint64_t>::max());
+}
+
+rai::Iterator rai::Ledger::SwapInfoLowerBound(rai::Transaction& transaction,
+                                              const rai::Account& account,
+                                              uint64_t height) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, ~height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_, store_.swap_info_,
+                                key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::SwapInfoUpperBound(rai::Transaction& transaction,
+                                              const rai::Account& account) const
+{
+    rai::Account account_l(account);
+    account_l += 1;
+    if (account_l.IsZero())
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+
+    return SwapInfoLowerBound(transaction, account_l);
 }
 
 bool rai::Ledger::InquiryWaitingPut(rai::Transaction& transaction,
@@ -3544,6 +3614,151 @@ rai::Iterator rai::Ledger::TakeWaitingUpperBound(rai::Transaction& transaction,
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::StoreIterator store_it(transaction.mdb_transaction_,
                                 store_.take_waiting_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+bool rai::Ledger::TakeNackBlockPut(rai::Transaction& transaction,
+                                   const rai::Account& account, uint64_t height,
+                                   const rai::Block& block)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        block.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_,
+                            store_.take_nack_block_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::TakeNackBlockDel(rai::Transaction& transaction,
+                                   const rai::Account& account, uint64_t height)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    return store_.Del(transaction.mdb_transaction_, store_.take_nack_block_,
+                      key, nullptr);
+}
+
+bool rai::Ledger::TakeNackBlockGet(rai::Transaction& transaction,
+                                   const rai::Account& account, uint64_t height,
+                                   std::shared_ptr<rai::Block>& block) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.take_nack_block_, key, value);
+    IF_ERROR_RETURN(error, error);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    block = rai::DeserializeBlockUnverify(error_code, stream);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+bool rai::Ledger::TakeNackBlockGet(const rai::Iterator& it,
+                                   rai::Account& account, uint64_t& height,
+                                   std::shared_ptr<rai::Block>& block) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, height);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    block = rai::DeserializeBlockUnverify(error_code, stream_value);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+bool rai::Ledger::TakeNackBlockExists(rai::Transaction& transaction,
+                                      const rai::Account& account,
+                                      uint64_t height) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal ignore;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.take_nack_block_, key, ignore);
+    if (error)
+    {
+        return false;
+    }
+    return true;
+}
+
+rai::Iterator rai::Ledger::TakeNackBlockBegin(
+    rai::Transaction& transaction) const
+{
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.take_nack_block_);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::TakeNackBlockEnd(rai::Transaction& transaction) const
+{
+    rai::StoreIterator store_it(nullptr);
     return rai::Iterator(std::move(store_it));
 }
 

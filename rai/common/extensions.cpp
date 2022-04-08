@@ -210,6 +210,11 @@ size_t rai::Extensions::SerialSize() const
     return size;
 }
 
+size_t rai::Extensions::Size() const
+{
+    return extensions_.size();
+}
+
 rai::ErrorCode rai::Extensions::FromBytes(const std::vector<uint8_t>& bytes)
 {
     if (bytes.empty())

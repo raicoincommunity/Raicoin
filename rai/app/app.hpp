@@ -118,6 +118,8 @@ public:
     void ReceiveWsMessage(const std::string&, const rai::UniqueId&);
     void ProcessWsSession(const rai::UniqueId&, bool);
     void NotifyProviderInfo(const rai::UniqueId&);
+    void PublishBlock(const std::shared_ptr<rai::Block>&);
+    void PublishBlockAsync(const std::shared_ptr<rai::Block>&);
 
     template <typename T>
     void Background(T action)
