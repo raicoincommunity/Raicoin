@@ -449,6 +449,21 @@ public:
     uint64_t inquiry_height_;
 };
 
+class MakerSwapIndex
+{
+public:
+    MakerSwapIndex();
+    MakerSwapIndex(const rai::Account&, uint64_t, const rai::Account&,
+                   uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Account maker_;
+    uint64_t trade_height_;
+    rai::Account main_account_;
+    uint64_t inquiry_ack_height_;
+};
+
 class SwapInfo
 {
 public:
@@ -893,6 +908,14 @@ public:
     rai::Iterator OrderSwapIndexUpperBound(rai::Transaction&,
                                            const rai::Account&, uint64_t) const;
     bool TokenSwapIndexPut(rai::Transaction&, const rai::TokenSwapIndex&);
+    bool MakerSwapIndexPut(rai::Transaction&, const rai::MakerSwapIndex&,
+                           const rai::Account&, uint64_t);
+    bool MakerSwapIndexGet(const rai::Iterator&, rai::MakerSwapIndex&,
+                           rai::Account&, uint64_t&) const;
+    rai::Iterator MakerSwapIndexLowerBound(rai::Transaction&,
+                                           const rai::Account&, uint64_t) const;
+    rai::Iterator MakerSwapIndexUpperBound(rai::Transaction&,
+                                           const rai::Account&) const;
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&);
     bool BlockPut(rai::Transaction&, const rai::BlockHash&, const rai::Block&,
                   const rai::BlockHash&);

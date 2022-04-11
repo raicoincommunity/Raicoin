@@ -978,6 +978,8 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_ORDER_SWAPS);
     info.actions_.push_back(P::Action::TOKEN_ACCOUNT_BALANCE);
     info.actions_.push_back(P::Action::TOKEN_ACCOUNT_ACTIVE_SWAPS);
+    info.actions_.push_back(P::Action::TOKEN_MAKER_SWAPS);
+    info.actions_.push_back(P::Action::TOKEN_TAKER_SWAPS);
     // todo:
 
     return info;
@@ -2427,6 +2429,20 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
     }
     observers.push_back(std::bind(swap_observer_, inquiry_ack->taker_,
                                   inquiry_ack->inquiry_height_));
+
+    rai::MakerSwapIndex maker_swap_index(swap_info.maker_,
+                                         swap_info.trade_height_,
+                                         block->Account(), block->Height());
+    error = ledger_.MakerSwapIndexPut(transaction, maker_swap_index,
+                                      inquiry_ack->taker_,
+                                      inquiry_ack->inquiry_height_);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessSwapInquiryAck_: put maker swap index failed, hash=",
+            block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
 
     error_code = UpdateLedgerAccountSwapsInc_(transaction, swap_info.maker_);
     IF_NOT_SUCCESS_RETURN(error_code);
