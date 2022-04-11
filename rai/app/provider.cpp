@@ -194,6 +194,14 @@ std::string rai::Provider::ToString(Action action)
         {
             return "take_nack_block_submitted";
         }
+        case rai::Provider::Action::TOKEN_MAKER_SWAPS:
+        {
+            return "maker_swaps";
+        }
+        case rai::Provider::Action::TOKEN_TAKER_SWAPS:
+        {
+            return "taker_swaps";
+        }
         default:
         {
             return "";

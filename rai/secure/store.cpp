@@ -37,7 +37,8 @@ rai::Store::Store(rai::ErrorCode& error_code,
       take_waiting_(0),
       order_swap_index_(0),
       token_swap_index_(0),
-      take_nack_block_(0)
+      take_nack_block_(0),
+      maker_swap_index_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -306,6 +307,14 @@ rai::Store::Store(rai::ErrorCode& error_code,
 
     ret = mdb_dbi_open(transaction, "take_nack_block", MDB_CREATE,
                        &take_nack_block_);
+    if (ret != MDB_SUCCESS)
+    {
+        error_code = rai::ErrorCode::MDB_DBI_OPEN;
+        return;
+    }
+
+    ret = mdb_dbi_open(transaction, "maker_swap_index", MDB_CREATE,
+                       &maker_swap_index_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

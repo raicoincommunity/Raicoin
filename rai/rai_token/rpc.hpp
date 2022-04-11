@@ -27,6 +27,7 @@ public:
     void AccountTokenIds();
     void AccountTokensInfo();
     void LedgerVersion();
+    void MakerSwaps();
     void NextAccountTokenLinks();
     void NextTokenBlocks();
     void OrderCount();
@@ -39,8 +40,10 @@ public:
     void SearchOrdersById();
     void SearchOrdersByPair();
     void SubmitTakeNackBlock();
+    void SwapHelperStatus();
     void SwapInfo();
     void SwapMainAccount();
+    void TakerSwaps();
     void TokenBlock();
     void TokenIdInfo();
     void TokenInfo();

@@ -65,6 +65,8 @@ public:
         TOKEN_ACCOUNT_BALANCE               = 222,
         TOKEN_ACCOUNT_ACTIVE_SWAPS          = 223,
         TOKEN_TAKE_NACK_BLOCK_SUBMITTED     = 224,
+        TOKEN_MAKER_SWAPS                   = 225,
+        TOKEN_TAKER_SWAPS                   = 226,
 
     };
     static std::string ToString(Action);

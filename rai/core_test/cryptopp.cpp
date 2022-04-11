@@ -46,7 +46,7 @@ TEST(x25519, Share)
     std::string pub4_hex =
         "358072D6365880D1AEEA329ADF9121383851ED21A28E3B75E965D0D2CD166254";
     bool ret4 = TestDecodeHex(pub4_hex, pub4, 32);
-    ASSERT_EQ(false, ret3);
+    ASSERT_EQ(false, ret4);
 
     std::vector<unsigned char> v3(pub3, pub3 + 32);
     std::vector<unsigned char> v4(pub4, pub4 + 32);
