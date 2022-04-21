@@ -2425,7 +2425,19 @@ rai::ErrorCode rai::ExtensionTokenSwapMake::CheckData() const
             return rai::ErrorCode::TOKEN_SWAP_MAX_OFFER;
         }
 
+        rai::uint512_t s(max_offer_.Number());
+        if (s * value_want_.Number() % value_offer_.Number() != 0)
+        {
+            return rai::ErrorCode::TOKEN_SWAP_MAX_OFFER;
+        }
+
         if (min_offer_ > max_offer_)
+        {
+            return rai::ErrorCode::TOKEN_SWAP_MIN_OFFER;
+        }
+
+        s = min_offer_.Number();
+        if (s * value_want_.Number() % value_offer_.Number() != 0)
         {
             return rai::ErrorCode::TOKEN_SWAP_MIN_OFFER;
         }

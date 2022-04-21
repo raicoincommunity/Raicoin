@@ -315,7 +315,6 @@ void rai::App::ProcessBlock(const std::shared_ptr<rai::Block>& block,
             }
             case rai::ErrorCode::APP_PROCESS_EXIST:
             {
-                PullNextBlockAsync(block);
                 break;
             }
             case rai::ErrorCode::APP_PROCESS_CONFIRMED:

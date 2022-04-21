@@ -1104,6 +1104,7 @@ void rai::TokenRpcHandler::SearchOrders()
         error_code_ = rai::ErrorCode::RPC_MISS_FIELD_BY;
         return;
     }
+    response_.put("by", *by_o);
 
     if (*by_o == "id")
     {
@@ -1213,21 +1214,83 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
     if (error || count == 0) count = 10;
     if (count > 100) count = 100;
 
+    bool has_order = false;
+    rai::Account maker;
+    uint64_t order_height;
+    error = GetOrder_(maker, order_height);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::SUCCESS;
+    }
+    else
+    {
+        has_order = true;
+    }
+
     rai::Transaction transaction(error_code_, token_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
+    rai::OrderIndex order_index;
+    if (has_order)
+    {
+        rai::OrderInfo order_info;
+        error = token_.ledger_.OrderInfoGet(transaction, maker, order_height,
+                                            order_info);
+        if (error)
+        {
+            response_.put("error", "Failed to get order info");
+            return;
+        }
+        order_index = order_info.GetIndex(maker, order_height);
+        if (order_index.token_offer_ != from_token
+            || order_index.token_want_ != to_token
+            || order_index.type_offer_ != from_type
+            || order_index.type_want_ != to_type)
+        {
+            response_.put("error", "Invalid order parameter");
+            return;
+        }
+        if (limit_by == "from_token" && from_type == rai::TokenType::_721)
+        {
+            if (order_index.id_offer_ != limit_value)
+            {
+                response_.put("error", "Invalid order parameter");
+                return;
+            }
+        }
+        if (limit_by == "to_token" && to_type == rai::TokenType::_721)
+        {
+            if (order_index.id_want_ != limit_value)
+            {
+                response_.put("error", "Invalid order parameter");
+                return;
+            }
+        }
+    }
+
     rai::Iterator i, n;
+    if (has_order)
+    {
+        i = token_.ledger_.OrderIndexLowerBound(transaction, order_index);
+    }
     if (limit_by == "from_token" && from_type == rai::TokenType::_721)
     {
-        i = token_.ledger_.OrderIndexLowerBound(
-            transaction, from_token, from_type, to_token, to_type, limit_value);
+        if (!has_order)
+        {
+            i = token_.ledger_.OrderIndexLowerBound(transaction, from_token,
+                                                    from_type, to_token,
+                                                    to_type, limit_value);
+        }
         n = token_.ledger_.OrderIndexUpperBound(
             transaction, from_token, from_type, to_token, to_type, limit_value);
     }
     else
     {
-        i = token_.ledger_.OrderIndexLowerBound(transaction, from_token,
-                                                from_type, to_token, to_type);
+        if (!has_order)
+        {
+            i = token_.ledger_.OrderIndexLowerBound(
+                transaction, from_token, from_type, to_token, to_type);
+        }
         n = token_.ledger_.OrderIndexUpperBound(transaction, from_token,
                                                 from_type, to_token, to_type);
     }
@@ -1244,6 +1307,11 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
             return;
         }
 
+        if (has_order && index.maker_ == maker && index.height_ == order_height)
+        {
+            continue;
+        }
+
         rai::OrderInfo info;
         error = token_.ledger_.OrderInfoGet(transaction, index.maker_,
                                             index.height_, info);
@@ -1255,27 +1323,24 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
 
         if (!include_inactive)
         {
-            rai::AccountInfo account_info;
-            error = token_.ledger_.AccountInfoGet(transaction, index.maker_,
-                                                  account_info);
+            if (info.Finished()) continue;
+            if (info.timeout_ < now) continue;
+
+            rai::AccountSwapInfo account_swap_info;
+            error = token_.ledger_.AccountSwapInfoGet(transaction, index.maker_,
+                                                      account_swap_info);
             if (error)
             {
-                response_.put("error",
-                              "Failed to get account info from ledger");
+                response_.put("error", "Failed to get account swap info");
                 return;
             }
-
-            std::shared_ptr<rai::Block> head;
-            error =
-                token_.ledger_.BlockGet(transaction, account_info.head_, head);
-            if (error || head == nullptr)
+            if (account_swap_info.ping_ < now - rai::SWAP_PING_PONG_INTERVAL)
             {
-                response_.put("error", "Failed to get head block from ledger");
-                return;
-            }
-            if (head->Timestamp() + rai::MAKER_KEEPLIVE_INTERVAL < now)
-            {
-                continue;
+                if (account_swap_info.pong_ + rai::SWAP_PING_PONG_INTERVAL
+                    < account_swap_info.ping_)
+                {
+                    continue;
+                }
             }
         }
 
@@ -2060,6 +2125,29 @@ bool rai::TokenRpcHandler::GetInquiryHeight_(uint64_t& height)
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_INQUIRY_HEIGHT;
         return  true;
+    }
+
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetOrder_(rai::Account& maker,
+                                     uint64_t& order_height)
+{
+    bool error = GetMaker_(maker);
+    IF_ERROR_RETURN(error, true);
+
+    auto height_o = request_.get_optional<std::string>("order_height");
+    if (!height_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_ORDER_HEIGHT;
+        return true;
+    }
+
+    error = rai::StringToUint(*height_o, order_height);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ORDER_HEIGHT;
+        return true;
     }
 
     return false;

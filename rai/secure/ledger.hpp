@@ -143,6 +143,8 @@ public:
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
     bool Valid() const;
+    bool operator==(const rai::TokenKey&) const;
+    bool operator!=(const rai::TokenKey&) const;
 
     rai::Chain chain_;
     rai::TokenAddress address_;
@@ -368,9 +370,9 @@ public:
 
     rai::TokenKey token_offer_;
     rai::TokenType type_offer_;
-    rai::TokenValue id_offer_;
     rai::TokenKey token_want_;
     rai::TokenType type_want_;
+    rai::TokenValue id_offer_;
     rai::TokenValue id_want_;
     rai::SwapRate rate_;
     rai::Account maker_;
@@ -393,6 +395,7 @@ public:
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
     bool Finished() const;
+    rai::OrderIndex GetIndex(const rai::Account&, uint64_t) const;
 
     enum class FinishedBy : uint8_t
     {
@@ -522,6 +525,8 @@ public:
     uint64_t total_swaps_;
     uint64_t trusted_;
     uint64_t blocked_;
+    uint64_t ping_; // the last ping received
+    uint64_t pong_; // the last pong sent
 };
 
 class InquiryWaiting
@@ -855,6 +860,8 @@ public:
                                        rai::TokenType, const rai::TokenKey&,
                                        rai::TokenType,
                                        const rai::TokenValue&) const;
+    rai::Iterator OrderIndexLowerBound(rai::Transaction&,
+                                       const rai::OrderIndex&) const;
     bool OrderCount(rai::Transaction&, size_t&) const;
     bool SwapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
                      const rai::SwapInfo&);

@@ -320,6 +320,8 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_TAKER             = 369,
     RPC_MISS_FIELD_INQUIRY_HEIGHT       = 370,
     RPC_INVALID_FIELD_INQUIRY_HEIGHT    = 371,
+    RPC_MISS_FIELD_ORDER_HEIGHT         = 372,
+    RPC_INVALID_FIELD_ORDER_HEIGHT      = 373,
 
 
     // Block process errors: 400 ~ 499

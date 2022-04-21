@@ -8,8 +8,9 @@ rai::AppBlockQuery::AppBlockQuery(const rai::Account& account, uint64_t height,
 }
 
 rai::AppBlockQueries::Entry::Entry(const rai::AppBlockQuery& query)
-    : key_{query.account_, query.height_},
+    : account_(query.account_),
       wakeup_(std::chrono::steady_clock::now()),
+      height_(query.height_),
       retries_(0),
       count_(query.count_)
 {
@@ -53,8 +54,8 @@ void rai::AppBlockQueries::Run()
             auto it(pendings_.get<1>().begin());
             if (it->wakeup_ <= std::chrono::steady_clock::now())
             {
-                rai::Account account = it->key_.account_;
-                uint64_t height = it->key_.height_;
+                rai::Account account = it->account_;
+                uint64_t height = it->height_;
                 uint64_t count = it->count_;
                 pendings_.get<1>().modify(it, [&](Entry& data) {
                     ++data.retries_;
@@ -101,13 +102,9 @@ void rai::AppBlockQueries::Add(const rai::Account& account, uint64_t height,
     {
         std::unique_lock<std::mutex> lock(mutex_);
         auto it = queries_.find(account);
-        if (it == queries_.end())
+        if  (it != queries_.end())
         {
-            queries_.insert(rai::AppBlockQuery(account, height, count));
-        }
-        else
-        {
-            if (height >= it->height_)
+            if (height <= it->height_)
             {
                 return;
             }
@@ -115,7 +112,27 @@ void rai::AppBlockQueries::Add(const rai::Account& account, uint64_t height,
                 data.height_ = height;
                 data.count_ = count;
             });
+            return;
         }
+
+        auto it_pending = pendings_.find(account);
+        if (it_pending != pendings_.end())
+        {
+            if (height <= it_pending->height_)
+            {
+                return;
+            }
+            pendings_.modify(it_pending, [&](Entry& data) {
+                data.height_ = height;
+                data.count_ = count;
+                data.wakeup_ = std::chrono::steady_clock::now()
+                                + std::chrono::seconds(1);
+                data.retries_ = 0;
+            });
+            return;
+        }
+
+        queries_.insert(rai::AppBlockQuery(account, height, count));
     }
     condition_.notify_all();
 }
@@ -124,8 +141,8 @@ void rai::AppBlockQueries::Remove(const rai::Account& account, uint64_t height)
 {
     {
         std::unique_lock<std::mutex> lock(mutex_);
-        auto it = pendings_.find(rai::AccountHeight{account, height});
-        if (it == pendings_.end())
+        auto it = pendings_.find(account);
+        if (it == pendings_.end() || it->height_ != height)
         {
             return;
         }

@@ -1306,6 +1306,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid inquiry_height field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_ORDER_HEIGHT:
+        {
+            return "[RPC] The order_height field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_ORDER_HEIGHT:
+        {
+            return "[RPC] Invalid order_height field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";
