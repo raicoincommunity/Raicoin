@@ -202,6 +202,10 @@ std::string rai::Provider::ToString(Action action)
         {
             return "taker_swaps";
         }
+        case rai::Provider::Action::TOKEN_SEARCH_ORDERS:
+        {
+            return "search_orders";
+        }
         default:
         {
             return "";

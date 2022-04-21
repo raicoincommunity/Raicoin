@@ -206,7 +206,8 @@ rai::ErrorCode rai::Token::Process(
     if (extensions.Count(rai::ExtensionType::TOKEN) != 1)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_MULTI_EXTENSIONS);
+                                   rai::ErrorCode::TOKEN_MULTI_EXTENSIONS,
+                                   observers);
     }
 
     rai::ExtensionToken token;
@@ -214,7 +215,7 @@ rai::ErrorCode rai::Token::Process(
         token.FromExtension(extensions.Get(rai::ExtensionType::TOKEN));
     if (error_code != rai::ErrorCode::SUCCESS)
     {
-        return UpdateLedgerCommon_(transaction, block, error_code);
+        return UpdateLedgerCommon_(transaction, block, error_code, observers);
     }
 
     if (token.op_data_ == nullptr)
@@ -758,6 +759,14 @@ bool rai::Token::MakeOrderPtree(rai::Transaction& transaction,
         return true;
     }
 
+    std::shared_ptr<rai::Block> block;
+    error = ledger_.BlockGet(transaction, order_info.hash_, block);
+    if (error)
+    {
+        error_info = "Failed to get order block";
+        return true;
+    }
+
     rai::AccountInfo account_info;
     error = ledger_.AccountInfoGet(transaction, account, account_info);
     if (error)
@@ -783,7 +792,7 @@ bool rai::Token::MakeOrderPtree(rai::Transaction& transaction,
     }
 
     MakeOrderPtree_(account, height, order_info, account_swap_info,
-                    head->Credit(), ptree);
+                    head->Credit(), block->Timestamp(), ptree);
 
     return false;
 }
@@ -980,6 +989,7 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_ACCOUNT_ACTIVE_SWAPS);
     info.actions_.push_back(P::Action::TOKEN_MAKER_SWAPS);
     info.actions_.push_back(P::Action::TOKEN_TAKER_SWAPS);
+    info.actions_.push_back(P::Action::TOKEN_SEARCH_ORDERS);
     // todo:
 
     return info;
@@ -1065,7 +1075,8 @@ rai::TokenError rai::Token::ProcessCreate_(
     if (!error)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_RECREATE, keys);
+                                   rai::ErrorCode::TOKEN_RECREATE, observers,
+                                   keys);
     }
 
     auto create =
@@ -1143,8 +1154,8 @@ rai::TokenError rai::Token::ProcessCreate_(
         return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
     }
 
-    error_code =
-        UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
+    error_code = UpdateLedgerCommon_(transaction, block,
+                                     rai::ErrorCode::SUCCESS, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (token_observer_)
@@ -1167,14 +1178,15 @@ rai::TokenError rai::Token::ProcessMint_(
     bool error = ledger_.TokenInfoGet(transaction, key, info);
     if (error)
     {
-        return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_NOT_CREATED);
+        return UpdateLedgerCommon_(
+            transaction, block, rai::ErrorCode::TOKEN_NOT_CREATED, observers);
     }
 
     if (!info.mintable_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_UNMINTABLE, keys);
+                                   rai::ErrorCode::TOKEN_UNMINTABLE, observers,
+                                   keys);
     }
 
     auto mint =
@@ -1191,7 +1203,8 @@ rai::TokenError rai::Token::ProcessMint_(
     if (mint->type_ != info.type_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
     }
 
     rai::TokenValue total_supply(0);
@@ -1204,14 +1217,14 @@ rai::TokenError rai::Token::ProcessMint_(
         {
             return UpdateLedgerCommon_(
                 transaction, block, rai::ErrorCode::TOKEN_TOTAL_SUPPLY_OVERFLOW,
-                keys);
+                observers, keys);
         }
 
         if (info.cap_supply_ > 0 && total_supply > info.cap_supply_)
         {
             return UpdateLedgerCommon_(
                 transaction, block, rai::ErrorCode::TOKEN_CAP_SUPPLY_EXCEEDED,
-                keys);
+                observers, keys);
         }
 
         local_supply = info.local_supply_ + mint->value_;
@@ -1239,14 +1252,14 @@ rai::TokenError rai::Token::ProcessMint_(
         {
             return UpdateLedgerCommon_(
                 transaction, block, rai::ErrorCode::TOKEN_TOTAL_SUPPLY_OVERFLOW,
-                keys);
+                observers, keys);
         }
 
         if (info.cap_supply_ > 0 && total_supply > info.cap_supply_)
         {
             return UpdateLedgerCommon_(
                 transaction, block, rai::ErrorCode::TOKEN_CAP_SUPPLY_EXCEEDED,
-                keys);
+                observers, keys);
         }
 
         local_supply = info.local_supply_ + 1;
@@ -1263,7 +1276,7 @@ rai::TokenError rai::Token::ProcessMint_(
         if (!error && !token_id_info.burned_)
         {
             return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_REMINT,
+                transaction, block, rai::ErrorCode::TOKEN_ID_REMINT, observers,
                 keys);
         }
 
@@ -1308,8 +1321,8 @@ rai::TokenError rai::Token::ProcessMint_(
         UpdateLedgerSupplies_(transaction, key, total_supply, local_supply);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code =
-        UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
+    error_code = UpdateLedgerCommon_(transaction, block,
+                                     rai::ErrorCode::SUCCESS, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (token_id_creation_observer_ && mint->type_ == rai::TokenType::_721)
@@ -1332,14 +1345,15 @@ rai::TokenError rai::Token::ProcessBurn_(
     bool error = ledger_.TokenInfoGet(transaction, key, info);
     if (error)
     {
-        return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_NOT_CREATED);
+        return UpdateLedgerCommon_(
+            transaction, block, rai::ErrorCode::TOKEN_NOT_CREATED, observers);
     }
 
     if (!info.burnable_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_UNBURNABLE, keys);
+                                   rai::ErrorCode::TOKEN_UNBURNABLE, observers,
+                                   keys);
     }
 
     auto burn =
@@ -1356,7 +1370,8 @@ rai::TokenError rai::Token::ProcessBurn_(
     if (burn->type_ != info.type_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
     }
 
     rai::AccountTokenInfo account_token_info;
@@ -1380,7 +1395,7 @@ rai::TokenError rai::Token::ProcessBurn_(
         {
             return UpdateLedgerCommon_(
                 transaction, block,
-                rai::ErrorCode::TOKEN_BURN_MORE_THAN_BALANCE, keys);
+                rai::ErrorCode::TOKEN_BURN_MORE_THAN_BALANCE, observers, keys);
         }
         balance = account_token_info.balance_ - burn->value_;
 
@@ -1411,8 +1426,9 @@ rai::TokenError rai::Token::ProcessBurn_(
         rai::AccountTokenId account_token_id(block->Account(), key, token_id);
         if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
         {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
         }
 
         if (account_token_info.balance_ < 1)
@@ -1505,9 +1521,9 @@ rai::TokenError rai::Token::ProcessBurn_(
         UpdateLedgerSupplies_(transaction, key, total_supply, local_supply);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = UpdateLedgerCommon_(transaction, block,
-                                     rai::ErrorCode::SUCCESS, burn->value_,
-                                     rai::TokenBlock::ValueOp::DECREASE, keys);
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, burn->value_,
+        rai::TokenBlock::ValueOp::DECREASE, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     return rai::ErrorCode::SUCCESS;
@@ -1536,12 +1552,14 @@ rai::TokenError rai::Token::ProcessSend_(
     if (error)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_BALANCE_IS_EMPTY);
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_EMPTY,
+                                   observers);
     }
     if (account_token_info.balance_.IsZero())
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO);
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO,
+                                   observers);
     }
 
     rai::TokenKey key(send->token_.chain_, send->token_.address_);
@@ -1560,15 +1578,17 @@ rai::TokenError rai::Token::ProcessSend_(
     if (send->token_.type_ != info.type_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
     }
 
     if (!info.circulable_ && rai::IsRaicoin(key.chain_))
     {
         if (block->Account() != key.address_ && send->to_ != key.address_)
         {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_UNCIRCULABLE, keys);
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_UNCIRCULABLE,
+                                       observers, keys);
         }
     }
 
@@ -1579,7 +1599,7 @@ rai::TokenError rai::Token::ProcessSend_(
         {
             return UpdateLedgerCommon_(
                 transaction, block,
-                rai::ErrorCode::TOKEN_SEND_MORE_THAN_BALANCE, keys);
+                rai::ErrorCode::TOKEN_SEND_MORE_THAN_BALANCE, observers, keys);
         }
         balance = account_token_info.balance_ - send->value_;
 
@@ -1603,8 +1623,9 @@ rai::TokenError rai::Token::ProcessSend_(
         rai::AccountTokenId account_token_id(block->Account(), key, token_id);
         if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
         {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
         }
 
         rai::TokenIdInfo token_id_info;
@@ -1665,9 +1686,9 @@ rai::TokenError rai::Token::ProcessSend_(
                              account_token_info.balance_, balance);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = UpdateLedgerCommon_(transaction, block,
-                                     rai::ErrorCode::SUCCESS, send->value_,
-                                     rai::TokenBlock::ValueOp::DECREASE, keys);
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, send->value_,
+        rai::TokenBlock::ValueOp::DECREASE, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     return rai::ErrorCode::SUCCESS;
@@ -1697,7 +1718,8 @@ rai::TokenError rai::Token::ProcessReceive_(
             && receive->block_height_ >= block->Height())
         {
             return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_RECEIVE_BLOCK_HEIGHT);
+                transaction, block, rai::ErrorCode::TOKEN_RECEIVE_BLOCK_HEIGHT,
+                observers);
         }
 
         std::shared_ptr<rai::Block> source_block(nullptr);
@@ -1738,35 +1760,39 @@ rai::TokenError rai::Token::ProcessReceive_(
         ledger_.TokenReceivableGet(transaction, receivable_key, receivable);
     if (error)
     {
-        return UpdateLedgerCommon_(transaction, block,
-                                    rai::ErrorCode::TOKEN_UNRECEIVABLE);
+        return UpdateLedgerCommon_(
+            transaction, block, rai::ErrorCode::TOKEN_UNRECEIVABLE, observers);
     }
 
     if (receivable.token_type_ != receive->token_.type_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                    rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
     }
     if (receivable.from_ != receive->from_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                    rai::ErrorCode::TOKEN_RECEIVE_FROM, keys);
+                                   rai::ErrorCode::TOKEN_RECEIVE_FROM,
+                                   observers, keys);
     }
     if (receivable.block_height_ != receive->block_height_)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_RECEIVE_BLOCK_HEIGHT,
-            keys);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_RECEIVE_BLOCK_HEIGHT,
+                                   observers, keys);
     }
     if (receivable.value_ != receive->value_)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_RECEIVE_VALUE, keys);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_RECEIVE_VALUE,
+                                   observers, keys);
     }
     if (receivable.source_ != receive->source_)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_RECEIVE_SOURCE, keys);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_RECEIVE_SOURCE,
+                                   observers, keys);
     }
 
     rai::TokenInfo info;
@@ -1806,7 +1832,7 @@ rai::TokenError rai::Token::ProcessReceive_(
         {
             return UpdateLedgerCommon_(transaction, block,
                                        rai::ErrorCode::TOKEN_BALANCE_OVERFLOW,
-                                       keys);
+                                       observers, keys);
         }
         observers.push_back(std::bind(account_token_balance_observer_,
                                       block->Account(), key,
@@ -1819,7 +1845,7 @@ rai::TokenError rai::Token::ProcessReceive_(
         {
             return UpdateLedgerCommon_(transaction, block,
                                        rai::ErrorCode::TOKEN_BALANCE_OVERFLOW,
-                                       keys);
+                                       observers, keys);
         }
 
         rai::TokenValue token_id = receive->value_;
@@ -1882,9 +1908,9 @@ rai::TokenError rai::Token::ProcessReceive_(
                                       prev_balance, balance);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = UpdateLedgerCommon_(transaction, block,
-                                     rai::ErrorCode::SUCCESS, receive->value_,
-                                     rai::TokenBlock::ValueOp::INCREASE, keys);
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, receive->value_,
+        rai::TokenBlock::ValueOp::INCREASE, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     observers.push_back(std::bind(received_observer_, receivable_key));
@@ -1973,7 +1999,8 @@ rai::TokenError rai::Token::ProcessSwapConfig_(
     if (block->Account() == config->main_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT);
+                                   rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT,
+                                   observers);
     }
 
     bool error = ledger_.SwapMainAccountPut(transaction, block->Account(),
@@ -1987,7 +2014,9 @@ rai::TokenError rai::Token::ProcessSwapConfig_(
     }
     observers.push_back(
         std::bind(main_account_observer_, block->Account(), config->main_));
-    return rai::ErrorCode::SUCCESS;
+
+    return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS,
+                               observers);
 }
 
 rai::TokenError rai::Token::ProcessSwapMake_(
@@ -2004,8 +2033,9 @@ rai::TokenError rai::Token::ProcessSwapMake_(
         make->token_offer_.address_, account_token_info);
     if (error)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE,
+                                   observers);
     }
 
     rai::TokenInfo info;
@@ -2028,7 +2058,7 @@ rai::TokenError rai::Token::ProcessSwapMake_(
     {
         return UpdateLedgerCommon_(
             transaction, block, rai::ErrorCode::TOKEN_SWAP_MAIN_ACCOUNT_EMPTY,
-            keys);
+            observers, keys);
     }
 
     rai::AccountSwapInfo account_swap_info;
@@ -2044,20 +2074,23 @@ rai::TokenError rai::Token::ProcessSwapMake_(
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_ORDERS_EXCEEDED,
-                                   keys);
+                                   observers, keys);
     }
 
     rai::TokenType offer_type = make->token_offer_.type_;
     if (offer_type != info.type_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
     }
 
     const rai::ExtensionTokenInfo& offer = make->token_offer_;
     const rai::ExtensionTokenInfo& want = make->token_want_;
     rai::OrderInfo order_info;
-    rai::OrderIndex order_index;
+    rai::TokenValue balance;
+    rai::TokenValue locked_value;
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     if (offer_type == rai::TokenType::_20)
     {
         if (make->FungiblePair())
@@ -2066,17 +2099,16 @@ rai::TokenError rai::Token::ProcessSwapMake_(
             {
                 return UpdateLedgerCommon_(
                     transaction, block,
-                    rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, keys);
+                    rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, observers,
+                    keys);
             }
+            balance = account_token_info.balance_ - make->max_offer_;
+            locked_value = make->max_offer_;
             order_info = rai::OrderInfo(
                 main_account, offer.chain_, offer.address_, offer.type_,
                 want.chain_, want.address_, want.type_, make->value_offer_,
                 make->value_want_, make->min_offer_, make->max_offer_,
                 make->timeout_, block->Hash());
-            rai::SwapRate rate(make->value_offer_, make->value_want_);
-            order_index = rai::OrderIndex(offer.chain_, offer.address_,
-                                          want.chain_, want.address_, rate,
-                                          block->Account(), block->Height());
         }
         else
         {
@@ -2084,16 +2116,15 @@ rai::TokenError rai::Token::ProcessSwapMake_(
             {
                 return UpdateLedgerCommon_(
                     transaction, block,
-                    rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, keys);
+                    rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, observers,
+                    keys);
             }
+            balance = account_token_info.balance_ - make->value_offer_;
+            locked_value = make->value_offer_;
             order_info = rai::OrderInfo(
                 main_account, offer.chain_, offer.address_, offer.type_,
                 want.chain_, want.address_, want.type_, make->value_offer_,
                 make->value_want_, make->timeout_, block->Hash());
-            rai::SwapRate rate(make->value_offer_, 1);
-            order_index = rai::OrderIndex(
-                offer.chain_, offer.address_, want.chain_, want.address_,
-                make->value_want_, rate, block->Account(), block->Height());
         }
     }
     else if (offer_type == rai::TokenType::_721)
@@ -2102,36 +2133,57 @@ rai::TokenError rai::Token::ProcessSwapMake_(
         {
             return UpdateLedgerCommon_(
                 transaction, block,
-                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, keys);
+                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, observers, keys);
         }
+        balance = account_token_info.balance_ - 1;
 
         rai::TokenValue token_id = make->value_offer_;
         rai::AccountTokenId account_token_id(block->Account(), key, token_id);
         if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
         {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
         }
 
+        rai::TokenIdInfo token_id_info;
+        error =
+            ledger_.TokenIdInfoGet(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessSwapMake_: get token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+
+        error = ledger_.AccountTokenIdDel(transaction, account_token_id);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessSwapMake_: del account token id, hash=",
+                block->Hash().StringHex(), ", token.chain=", key.chain_,
+                ", token.address=", key.address_.StringHex(),
+                ", token.id=", token_id.StringDec()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
+        }
+
+        error_code = UpdateLedgerTokenIdTransfer_(
+            transaction, key, token_id, block->Account(), block->Height());
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        observers.push_back(std::bind(token_id_transfer_observer_, key,
+                                      token_id, token_id_info, block->Account(),
+                                      false));
+        observers.push_back(std::bind(account_token_balance_observer_,
+                                      block->Account(), key, info.type_,
+                                      token_id));
+
+        locked_value = token_id;
         order_info = rai::OrderInfo(
             main_account, offer.chain_, offer.address_, offer.type_,
             want.chain_, want.address_, want.type_, make->value_offer_,
             make->value_want_, make->timeout_, block->Hash());
-        if (make->token_want_.type_ == rai::TokenType::_721)
-        {
-            rai::SwapRate rate(1, 1);
-            order_index = rai::OrderIndex(
-                offer.chain_, offer.address_, make->value_offer_, want.chain_,
-                want.address_, make->value_want_, rate, block->Account(),
-                block->Height());
-        }
-        else
-        {
-            rai::SwapRate rate(1, make->value_want_);
-            order_index = rai::OrderIndex(
-                offer.chain_, offer.address_, make->value_offer_, want.chain_,
-                want.address_, rate, block->Account(), block->Height());
-        }
     }
     else
     {
@@ -2140,6 +2192,15 @@ rai::TokenError rai::Token::ProcessSwapMake_(
             block->Hash().StringHex()));
         return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
     }
+
+    error_code =
+        UpdateLedgerTokenTransfer_(transaction, key, block->Timestamp(),
+                                   block->Account(), block->Height());
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = UpdateLedgerBalance_(transaction, block->Account(), key,
+                                      account_token_info.balance_, balance);
+    IF_NOT_SUCCESS_RETURN(error_code);
 
     error = ledger_.OrderInfoPut(transaction, block->Account(), block->Height(),
                                  order_info);
@@ -2153,7 +2214,8 @@ rai::TokenError rai::Token::ProcessSwapMake_(
     observers.push_back(
         std::bind(order_observer_, block->Account(), block->Height()));
 
-    error = ledger_.OrderIndexPut(transaction, order_index);
+    error = ledger_.OrderIndexPut(
+        transaction, order_info.GetIndex(block->Account(), block->Height()));
     if (error)
     {
         rai::Log::Error(
@@ -2162,14 +2224,14 @@ rai::TokenError rai::Token::ProcessSwapMake_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
-    rai::ErrorCode error_code =
-        UpdateLedgerAccountOrdersInc_(transaction, block->Account());
+    error_code = UpdateLedgerAccountOrdersInc_(transaction, block->Account());
     IF_NOT_SUCCESS_RETURN(error_code);
     observers.push_back(
         std::bind(account_swap_info_observer_, block->Account()));
 
-    error_code =
-        UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, locked_value,
+        rai::TokenBlock::ValueOp::DECREASE, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     return rai::ErrorCode::SUCCESS;
@@ -2186,7 +2248,8 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
     if (inquiry->maker_ == block->Account())
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_WITH_SELF);
+                                   rai::ErrorCode::TOKEN_SWAP_WITH_SELF,
+                                   observers);
     }
 
     std::shared_ptr<rai::Block> order_block(nullptr);
@@ -2201,12 +2264,14 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
     if (error)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_ORDER_MISS);
+                                   rai::ErrorCode::TOKEN_SWAP_ORDER_MISS,
+                                   observers);
     }
     if (order_info.main_ == block->Account())
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_WITH_MAIN_ACCOUNT);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_WITH_MAIN_ACCOUNT,
+                                   observers);
     }
 
     std::shared_ptr<rai::Block> ack_block(nullptr);
@@ -2221,7 +2286,8 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
     if (error || account_token_info.balance_.IsZero())
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO);
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO,
+                                   observers);
     }
 
     rai::TokenInfo info;
@@ -2238,8 +2304,9 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
     }
     if (info.type_ != order_info.type_want_)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_TYPE_INVALID, keys);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
     }
 
     error = CheckOrderCirculable_(error_code, transaction, order_info,
@@ -2247,15 +2314,17 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
     IF_NOT_SUCCESS_RETURN(error_code);
     if (error)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_UNCIRCULABLE, keys);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_UNCIRCULABLE,
+                                   observers, keys);
     }
 
     error = CheckInquiryValue_(order_info, inquiry->value_);
     if (error)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_INQUIRY_VALUE, keys);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_INQUIRY_VALUE,
+                                   observers, keys);
     }
     if (info.type_ == rai::TokenType::_20)
     {
@@ -2263,7 +2332,7 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
         {
             return UpdateLedgerCommon_(
                 transaction, block,
-                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, keys);
+                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, observers, keys);
         }
     }
     else if (info.type_ == rai::TokenType::_721)
@@ -2272,8 +2341,9 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
         rai::AccountTokenId account_token_id(block->Account(), key, token_id);
         if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
         {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
         }
     }
     else
@@ -2310,8 +2380,8 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
-    error_code =
-        UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
+    error_code = UpdateLedgerCommon_(transaction, block,
+                                     rai::ErrorCode::SUCCESS, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (ack_block != nullptr)
@@ -2334,8 +2404,8 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
             swap.sub_data_);
     if (inquiry_ack->taker_ == block->Account())
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_TAKER);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_TAKER, observers);
     }
 
     std::shared_ptr<rai::Block> inquiry_block(nullptr);
@@ -2350,8 +2420,8 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
     if (!ledger_.InquiryWaitingExist(transaction, waiting))
     {
         return UpdateLedgerCommon_(
-            transaction, block,
-            rai::ErrorCode::TOKEN_SWAP_INQUIRY_WAITING_MISS);
+            transaction, block, rai::ErrorCode::TOKEN_SWAP_INQUIRY_WAITING_MISS,
+            observers);
     }
 
     rai::SwapInfo swap_info;
@@ -2410,7 +2480,8 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
     if (previous_block->Timestamp() > swap_info.timeout_)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_TIMEOUT, keys);
+                                   rai::ErrorCode::TOKEN_SWAP_TIMEOUT,
+                                   observers, keys);
     }
 
     swap_info.status_ = rai::SwapInfo::Status::INQUIRY_ACK;
@@ -2453,8 +2524,8 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
     observers.push_back(
         std::bind(account_swap_info_observer_, inquiry_ack->taker_));
 
-    error_code =
-        UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS, keys);
+    error_code = UpdateLedgerCommon_(transaction, block,
+                                     rai::ErrorCode::SUCCESS, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     return rai::ErrorCode::SUCCESS;
@@ -2469,8 +2540,9 @@ rai::TokenError rai::Token::ProcessSwapTake_(
         std::static_pointer_cast<rai::ExtensionTokenSwapTake>(swap.sub_data_);
     if (take->inquiry_height_ >= block->Height())
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_INQUIRY_HEIGHT);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_INQUIRY_HEIGHT,
+                                   observers);
     }
 
     rai::SwapInfo swap_info;
@@ -2478,8 +2550,8 @@ rai::TokenError rai::Token::ProcessSwapTake_(
                                      take->inquiry_height_, swap_info);
     if (error)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_MISS);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_MISS, observers);
     }
 
     rai::OrderInfo order_info;
@@ -2526,7 +2598,7 @@ rai::TokenError rai::Token::ProcessSwapTake_(
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_STATUS_UNEXPECTED,
-                                   keys);
+                                   observers, keys);
     }
 
     std::shared_ptr<rai::Block> take_ack_block(nullptr);
@@ -2551,7 +2623,8 @@ rai::TokenError rai::Token::ProcessSwapTake_(
     if (account_token_info.balance_.IsZero())
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO, keys);
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO,
+                                   observers, keys);
     }
 
     rai::TokenValue balance;
@@ -2561,7 +2634,7 @@ rai::TokenError rai::Token::ProcessSwapTake_(
         {
             return UpdateLedgerCommon_(
                 transaction, block,
-                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, keys);
+                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, observers, keys);
         }
         balance = account_token_info.balance_ - swap_info.value_;
         observers.push_back(std::bind(account_token_balance_observer_,
@@ -2575,8 +2648,9 @@ rai::TokenError rai::Token::ProcessSwapTake_(
         rai::AccountTokenId account_token_id(block->Account(), key, token_id);
         if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
         {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
         }
 
         rai::TokenIdInfo token_id_info;
@@ -2655,9 +2729,9 @@ rai::TokenError rai::Token::ProcessSwapTake_(
                              account_token_info.balance_, balance);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = UpdateLedgerCommon_(transaction, block,
-                                     rai::ErrorCode::SUCCESS, swap_info.value_,
-                                     rai::TokenBlock::ValueOp::DECREASE, keys);
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, swap_info.value_,
+        rai::TokenBlock::ValueOp::DECREASE, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     if (take_ack_block != nullptr)
@@ -2679,7 +2753,7 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
     if (take_ack->taker_ == block->Account())
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_TAKER);
+                                   rai::ErrorCode::TOKEN_SWAP_TAKER, observers);
     }
 
     std::shared_ptr<rai::Block> take_block(nullptr);
@@ -2692,8 +2766,9 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
                              take_ack->taker_, take_ack->inquiry_height_);
     if (!ledger_.TakeWaitingExist(transaction, waiting))
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_TAKE_WAITING_MISS);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_TAKE_WAITING_MISS,
+                                   observers);
     }
 
     rai::SwapInfo swap_info;
@@ -2708,8 +2783,9 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
     }
     if (swap_info.take_height_ != take_ack->take_height_)
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_TAKE_HEIGHT,
+                                   observers);
     }
 
     rai::OrderInfo order_info;
@@ -2780,25 +2856,7 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_ORDER_FINISHED,
-                                   keys);
-    }
-
-    rai::AccountTokenInfo account_token_info;
-    error =
-        ledger_.AccountTokenInfoGet(transaction, block->Account(), key.chain_,
-                                    key.address_, account_token_info);
-    if (error)
-    {
-        rai::Log::Error(rai::ToString(
-            "Token::ProcessSwapTakeAck_: get account token info failed, hash=",
-            block->Hash().StringHex(), ", token.chain=", key.chain_,
-            ", token.address=", key.address_.StringHex()));
-        return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
-    }
-    if (account_token_info.balance_.IsZero())
-    {
-        return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO, keys);
+                                   observers, keys);
     }
 
     error = CheckTakeAckValue_(order_info, swap_info.value_, take_ack->value_);
@@ -2806,69 +2864,8 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_TAKE_ACK_VALUE,
-                                   keys);
+                                   observers, keys);
     }
-
-    rai::TokenValue balance;
-    if (info.type_ == rai::TokenType::_20)
-    {
-        if (take_ack->value_ > account_token_info.balance_)
-        {
-            return UpdateLedgerCommon_(
-                transaction, block,
-                rai::ErrorCode::TOKEN_SWAP_NO_ENOUGH_BALANCE, keys);
-        }
-        balance = account_token_info.balance_ - take_ack->value_;
-        observers.push_back(std::bind(account_token_balance_observer_,
-                                      block->Account(), key, info.type_,
-                                      boost::none));
-    }
-    else if (info.type_ == rai::TokenType::_721)
-    {
-        balance = account_token_info.balance_ - 1;
-        rai::TokenValue token_id = take_ack->value_;
-        rai::AccountTokenId account_token_id(block->Account(), key, token_id);
-        if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
-        {
-            return UpdateLedgerCommon_(
-                transaction, block, rai::ErrorCode::TOKEN_ID_NOT_OWNED, keys);
-        }
-
-        error = ledger_.AccountTokenIdDel(transaction, account_token_id);
-        if (error)
-        {
-            rai::Log::Error(rai::ToString(
-                "Token::ProcessSwapTakeAck_: del account token id, hash=",
-                block->Hash().StringHex(), ", token.chain=", key.chain_,
-                ", token.address=", key.address_.StringHex(),
-                ", token.id=", token_id.StringDec()));
-            return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
-        }
-
-        error_code = UpdateLedgerTokenIdTransfer_(
-            transaction, key, token_id, block->Account(), block->Height());
-        IF_NOT_SUCCESS_RETURN(error_code);
-        observers.push_back(std::bind(account_token_balance_observer_,
-                                      block->Account(), key, info.type_,
-                                      token_id));
-    }
-    else
-    {
-        rai::Log::Error(rai::ToString(
-            "Token::ProcessSwapTakeAck_: unexpected token type=", info.type_,
-            ", hash=", block->Hash().StringHex()));
-        return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
-    }
-
-    error_code =
-        UpdateLedgerTokenTransfer_(transaction, key, block->Timestamp(),
-                                   block->Account(), block->Height());
-    IF_NOT_SUCCESS_RETURN(error_code);
-
-    error_code =
-        UpdateLedgerBalance_(transaction, block->Account(), key,
-                             account_token_info.balance_, balance);
-    IF_NOT_SUCCESS_RETURN(error_code);
 
     // put receivable
     {
@@ -2960,8 +2957,8 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
 
     if (order_info.Finished())
     {
-        rai::OrderIndex order_index = MakeOrderIndex_(
-            order_info, swap_info.maker_, swap_info.order_height_);
+        rai::OrderIndex order_index =
+            order_info.GetIndex(swap_info.maker_, swap_info.order_height_);
         error = ledger_.OrderIndexDel(transaction, order_index);
         if (error)
         {
@@ -2994,8 +2991,7 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
         std::bind(account_swap_info_observer_, take_ack->taker_));
 
     error_code = UpdateLedgerCommon_(transaction, block,
-                                     rai::ErrorCode::SUCCESS, take_ack->value_,
-                                     rai::TokenBlock::ValueOp::DECREASE, keys);
+                                     rai::ErrorCode::SUCCESS, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
 
     return rai::ErrorCode::SUCCESS;
@@ -3011,7 +3007,7 @@ rai::TokenError rai::Token::ProcessSwapTakeNack_(
     if (take_nack->taker_ == block->Account())
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_TAKER);
+                                   rai::ErrorCode::TOKEN_SWAP_TAKER, observers);
     }
 
     std::shared_ptr<rai::Block> inquiry_block(nullptr);
@@ -3026,13 +3022,14 @@ rai::TokenError rai::Token::ProcessSwapTakeNack_(
     if (error)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_MISS);
+                                   rai::ErrorCode::TOKEN_SWAP_MISS, observers);
     }
 
     if (swap_info.maker_ != block->Account())
     {
-        return UpdateLedgerCommon_(
-            transaction, block, rai::ErrorCode::TOKEN_SWAP_ACCOUNT_NOT_MAKER);
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_ACCOUNT_NOT_MAKER,
+                                   observers);
     }
 
     rai::OrderInfo order_info;
@@ -3081,18 +3078,18 @@ rai::TokenError rai::Token::ProcessSwapTakeNack_(
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_STATUS_UNEXPECTED,
-                                   keys);
+                                   observers, keys);
     }
 
     if (swap_info.trade_height_ != block->Height())
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_TAKE_NACK_HEIGHT,
-                                   keys);
+                                   observers, keys);
     }
 
     return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS,
-                               keys);
+                               observers, keys);
 }
 
 rai::TokenError rai::Token::ProcessSwapCancel_(
@@ -3105,23 +3102,69 @@ rai::TokenError rai::Token::ProcessSwapCancel_(
 
     rai::Account maker = block->Account();
     uint64_t order_height = cancel->order_height_;
+    if (order_height >= block->Height())
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_SWAP_ORDER_HEIGHT,
+                                   observers);
+    }
+
     rai::OrderInfo order_info;
     bool error =
         ledger_.OrderInfoGet(transaction, maker, order_height, order_info);
     if (error)
     {
         return UpdateLedgerCommon_(transaction, block,
-                                   rai::ErrorCode::TOKEN_SWAP_ORDER_MISS);
+                                   rai::ErrorCode::TOKEN_SWAP_ORDER_MISS,
+                                   observers);
     }
 
+    rai::TokenInfo info;
+    rai::TokenKey key = order_info.token_offer_;
     std::vector<rai::TokenKey> keys;
-    keys.push_back(rai::TokenKey(order_info.token_offer_));
+    keys.push_back(key);
+    error = ledger_.TokenInfoGet(transaction, key, info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessSwapCancel_: get token info failed, hash=",
+            block->Hash().StringHex(), ", chain=", key.chain_,
+            ", address=", key.address_.StringHex()));
+        return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
+    }
+    if (info.type_ != order_info.type_offer_)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessSwapCancel_: unexpected token type mismatch, hash=",
+            block->Hash().StringHex(), ", expected type=", info.type_,
+            ", actual type=", order_info.type_offer_));
+        return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+    }
+
     if (order_info.Finished())
     {
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_ORDER_FINISHED,
-                                   keys);
+                                   observers, keys);
     }
+
+    rai::TokenValue value;
+    if (order_info.type_offer_ == rai::TokenType::_20
+        && order_info.type_want_ == rai::TokenType::_20)
+    {
+        value = order_info.left_;
+    }
+    else
+    {
+        value = order_info.value_offer_;
+    }
+    rai::TokenReceivableKey receivable_key(maker, key, rai::CurrentChain(),
+                                           block->Hash());
+    rai::TokenReceivable receivable(maker, value, block->Height(), info.type_,
+                                    rai::TokenSource::REFUND);
+    rai::ErrorCode error_code = UpdateLedgerReceivable_(
+        transaction, receivable_key, receivable, info, block);
+    IF_NOT_SUCCESS_RETURN(error_code);
 
     order_info.finished_by_ = rai::OrderInfo::FinishedBy::CANCEL;
     order_info.finished_height_ = block->Height();
@@ -3135,8 +3178,7 @@ rai::TokenError rai::Token::ProcessSwapCancel_(
     }
     observers.push_back(std::bind(order_observer_, maker, order_height));
 
-    rai::OrderIndex order_index =
-        MakeOrderIndex_(order_info, maker, order_height);
+    rai::OrderIndex order_index = order_info.GetIndex(maker, order_height);
     error = ledger_.OrderIndexDel(transaction, order_index);
     if (error)
     {
@@ -3146,14 +3188,14 @@ rai::TokenError rai::Token::ProcessSwapCancel_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
     }
 
-    rai::ErrorCode error_code =
+    error_code =
         UpdateLedgerAccountOrdersDec_(transaction, block->Account());
     IF_NOT_SUCCESS_RETURN(error_code);
     observers.push_back(
         std::bind(account_swap_info_observer_, block->Account()));
 
     return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS,
-                               keys);
+                               observers, keys);
 }
 
 rai::TokenError rai::Token::ProcessSwapPing_(
@@ -3164,7 +3206,12 @@ rai::TokenError rai::Token::ProcessSwapPing_(
     auto ping =
         std::static_pointer_cast<rai::ExtensionTokenSwapPing>(swap.sub_data_);
 
-    return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS);
+    rai::ErrorCode error_code = UpdateLedgerAccountSwapPing_(
+        transaction, ping->maker_, block->Timestamp(), observers);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS,
+                               observers);
 }
 
 rai::TokenError rai::Token::ProcessSwapPong_(
@@ -3172,7 +3219,12 @@ rai::TokenError rai::Token::ProcessSwapPong_(
     const rai::ExtensionTokenSwap& swap,
     std::vector<std::function<void()>>& observers)
 {
-    return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS);
+    rai::ErrorCode error_code = UpdateLedgerAccountSwapPong_(
+        transaction, block->Account(), block->Timestamp(), observers);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    return UpdateLedgerCommon_(transaction, block, rai::ErrorCode::SUCCESS,
+                               observers);
 }
 
 rai::TokenError rai::Token::ProcessUnmap_(
@@ -3449,16 +3501,20 @@ rai::ErrorCode rai::Token::PurgeTakeWaiting_(
 
 rai::ErrorCode rai::Token::UpdateLedgerCommon_(
     rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
-    rai::ErrorCode status, const std::vector<rai::TokenKey>& tokens)
+    rai::ErrorCode status, std::vector<std::function<void()>>& observers,
+    const std::vector<rai::TokenKey>& tokens)
 {
     return UpdateLedgerCommon_(transaction, block, status, rai::TokenValue(0),
-                               rai::TokenBlock::ValueOp::NONE, tokens);
+                               rai::TokenBlock::ValueOp::NONE, observers,
+                               tokens);
 }
 
 rai::ErrorCode rai::Token::UpdateLedgerCommon_(
     rai::Transaction& transaction, const std::shared_ptr<rai::Block>& block,
     rai::ErrorCode status, const rai::TokenValue& value,
-    rai::TokenBlock::ValueOp value_op, const std::vector<rai::TokenKey>& tokens)
+    rai::TokenBlock::ValueOp value_op,
+    std::vector<std::function<void()>>& observers,
+    const std::vector<rai::TokenKey>& tokens)
 {
     rai::Account account = block->Account();
     uint64_t height = block->Height();
@@ -3581,10 +3637,7 @@ rai::ErrorCode rai::Token::UpdateLedgerCommon_(
         pairs.emplace_back(token, account_token_info);
     }
 
-    if (account_observer_)
-    {
-        account_observer_(account, info, pairs);
-    }
+    observers.push_back(std::bind(account_observer_, account, info, pairs));
 
     return rai::ErrorCode::SUCCESS;
 }
@@ -3771,7 +3824,7 @@ rai::ErrorCode rai::Token::UpdateLedgerTokenTransfer_(
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerTokenIdTransfer_: get token info failed, "
+            "Token::UpdateLedgerTokenTransfer_: get token info failed, "
             "token.chain=",
             token.chain_, ", token.address=", token.address_.StringHex()));
         return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
@@ -3782,7 +3835,7 @@ rai::ErrorCode rai::Token::UpdateLedgerTokenTransfer_(
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerTokenIdTransfer_: put token info failed, "
+            "Token::UpdateLedgerTokenTransfer_: put token info failed, "
             "token.chain=",
             token.chain_, ", token.address=", token.address_.StringHex()));
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
@@ -3797,7 +3850,7 @@ rai::ErrorCode rai::Token::UpdateLedgerTokenTransfer_(
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerTokenIdTransfer_: put token transfer failed, "
+            "Token::UpdateLedgerTokenTransfer_: put token transfer failed, "
             "token.chain=",
             token.chain_, ", token.address=", token.address_.StringHex(),
             ", account=", account.StringAccount(), ", height=", height));
@@ -4037,6 +4090,69 @@ rai::ErrorCode rai::Token::UpdateLedgerSwapIndex_(
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::ErrorCode rai::Token::UpdateLedgerAccountSwapPing_(
+    rai::Transaction& transaction, const rai::Account& account, uint64_t ping,
+    std::vector<std::function<void()>>& observers)
+{
+    rai::AccountSwapInfo info;
+    bool error = ledger_.AccountSwapInfoGet(transaction, account, info);
+    if (error)
+    {
+        info = rai::AccountSwapInfo();
+    }
+
+    if (ping <= info.ping_)
+    {
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    info.ping_ = ping;
+    
+    error = ledger_.AccountSwapInfoPut(transaction, account, info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::UpdateLedgerAccountSwapPing_: put account swap info, "
+            "account=", account.StringAccount()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+
+    observers.push_back(std::bind(account_swap_info_observer_, account));
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Token::UpdateLedgerAccountSwapPong_(
+    rai::Transaction& transaction, const rai::Account& account, uint64_t pong, std::vector<std::function<void()>>& observers)
+{
+    rai::AccountSwapInfo info;
+    bool error = ledger_.AccountSwapInfoGet(transaction, account, info);
+    if (error)
+    {
+        info = rai::AccountSwapInfo();
+    }
+
+    if (pong <= info.pong_)
+    {
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    info.pong_ = pong;
+    
+    error = ledger_.AccountSwapInfoPut(transaction, account, info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::UpdateLedgerAccountSwapPong_: put account swap info, "
+            "account=", account.StringAccount()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+
+    observers.push_back(std::bind(account_swap_info_observer_, account));
+
+    return rai::ErrorCode::SUCCESS;
+}
+
 bool rai::Token::CheckInquiryValue_(const rai::OrderInfo& order,
                                     const rai::TokenValue& value) const
 {
@@ -4161,56 +4277,11 @@ bool rai::Token::CheckOrderCirculable_(rai::ErrorCode& error_code,
     return false;
 }
 
-rai::OrderIndex rai::Token::MakeOrderIndex_(const rai::OrderInfo& info,
-                                            const rai::Account& maker,
-                                            uint64_t height) const
-{
-    if (info.type_offer_ == rai::TokenType::_20
-        && info.type_want_ == rai::TokenType::_20)
-    {
-        rai::SwapRate rate(info.value_offer_, info.value_want_);
-        return rai::OrderIndex(info.token_offer_.chain_,
-                               info.token_offer_.address_,
-                               info.token_want_.chain_,
-                               info.token_want_.address_, rate, maker, height);
-    }
-    else if (info.type_offer_ == rai::TokenType::_20
-             && info.type_want_ == rai::TokenType::_721)
-    {
-        rai::SwapRate rate(info.value_offer_, 1);
-        return rai::OrderIndex(
-            info.token_offer_.chain_, info.token_offer_.address_,
-            info.token_want_.chain_, info.token_want_.address_,
-            info.value_want_, rate, maker, height);
-    }
-    else if (info.type_offer_ == rai::TokenType::_721
-             && info.type_want_ == rai::TokenType::_20)
-    {
-        rai::SwapRate rate(1, info.value_want_);
-        return rai::OrderIndex(info.token_offer_.chain_,
-                               info.token_offer_.address_, info.value_offer_,
-                               info.token_want_.chain_,
-                               info.token_want_.address_, rate, maker, height);
-    }
-    else if (info.type_offer_ == rai::TokenType::_721
-             && info.type_want_ == rai::TokenType::_721)
-    {
-        rai::SwapRate rate(1, 1);
-        return rai::OrderIndex(
-            info.token_offer_.chain_, info.token_offer_.address_,
-            info.value_offer_, info.token_want_.chain_,
-            info.token_want_.address_, info.value_want_, rate, maker, height);
-    }
-    else
-    {
-        return rai::OrderIndex();
-    }
-}
-
 void rai::Token::MakeOrderPtree_(const rai::Account& account, uint64_t height,
                                  const rai::OrderInfo& order_info,
                                  const rai::AccountSwapInfo& account_swap_info,
-                                 uint16_t credit, rai::Ptree& ptree) const
+                                 uint16_t credit, uint64_t created_at,
+                                 rai::Ptree& ptree) const
 {
     rai::Ptree maker;
     MakeAccountSwapInfoPtree_(account, account_swap_info, credit, maker);
@@ -4243,6 +4314,7 @@ void rai::Token::MakeOrderPtree_(const rai::Account& account, uint64_t height,
     ptree.put("finished_by", finished_by);
     ptree.put("finished_height", std::to_string(order_info.finished_height_));
     ptree.put("hash", order_info.hash_.StringHex());
+    ptree.put("created_at", std::to_string(created_at));
 }
 
 void rai::Token::MakeAccountSwapInfoPtree_(const rai::Account& account,
@@ -4255,6 +4327,8 @@ void rai::Token::MakeAccountSwapInfoPtree_(const rai::Account& account,
     ptree.put("total_orders", std::to_string(info.total_orders_));
     ptree.put("active_swaps", std::to_string(info.active_swaps_));
     ptree.put("total_swaps", std::to_string(info.total_swaps_));
+    ptree.put("ping", std::to_string(info.ping_));
+    ptree.put("pong", std::to_string(info.pong_));
     ptree.put("credit", std::to_string(credit));
     ptree.put("limited", rai::BoolToString(credit * rai::SWAPS_PER_CREDIT
                                            <= info.active_swaps_));

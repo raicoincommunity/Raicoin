@@ -64,6 +64,7 @@ private:
     bool GetTradeHeight_(uint64_t&);
     bool GetTaker_(rai::Account&);
     bool GetInquiryHeight_(uint64_t&);
+    bool GetOrder_(rai::Account&, uint64_t&);
     bool PutTokenBlock_(rai::Transaction&, uint64_t, const rai::TokenBlock&,
                         rai::Ptree&);
 

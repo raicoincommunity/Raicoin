@@ -44,20 +44,21 @@ public:
     {
     public:
         Entry(const rai::AppBlockQuery&);
-        rai::AccountHeight key_;
+        rai::Account account_;
         std::chrono::steady_clock::time_point wakeup_;
+        uint64_t height_;
         uint64_t retries_;
         uint64_t count_;
     };
 
 private:
     rai::App& app_;
-    mutable std::mutex mutex_; 
+    mutable std::mutex mutex_;
     boost::multi_index_container<
         Entry,
         boost::multi_index::indexed_by<
-            boost::multi_index::ordered_unique<boost::multi_index::member<
-                Entry, rai::AccountHeight, &Entry::key_>>,
+            boost::multi_index::hashed_unique<boost::multi_index::member<
+                Entry, rai::Account, &Entry::account_>>,
             boost::multi_index::ordered_non_unique<boost::multi_index::member<
                 Entry, std::chrono::steady_clock::time_point,
                 &Entry::wakeup_>>>>

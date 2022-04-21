@@ -200,7 +200,7 @@ void rai::AppBootstrap::ReceiveAccountHeadMessage(
         {
             return;
         }
-        syncing = count_ < rai::AppBootstrap::INITIAL_FULL_BOOTSTRAPS;
+        syncing = count_ == 1;
 
         if (more)
         {
@@ -265,6 +265,7 @@ void rai::AppBootstrap::ProcessAccountHeads(
 
         if (i.head_ == info.head_)
         {
+            RemoveSyncingAccount(i.account_);
             continue;
         }
 

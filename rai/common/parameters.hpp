@@ -95,8 +95,8 @@ uint32_t constexpr FORK_ELECTION_ROUNDS_THRESHOLD = 5;
 uint32_t constexpr AIRDROP_ACCOUNTS = 10000;
 uint64_t constexpr AIRDROP_INVITED_ONLY_DURATION = 180 * 86400;
 uint64_t constexpr AIRDROP_DURATION = 4 * 360 * 86400;
-uint64_t constexpr MAKER_KEEPLIVE_INTERVAL = 86400;
 size_t constexpr MAX_EXTENSIONS_SIZE = 256;
+uint64_t constexpr SWAP_PING_PONG_INTERVAL = 60;
 
 // Votes from qualified representatives will be broadcasted
 const rai::Amount QUALIFIED_REP_WEIGHT = rai::Amount(256 * rai::RAI);

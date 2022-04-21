@@ -300,6 +300,16 @@ bool rai::TokenKey::Valid() const
     return chain_ != rai::Chain::INVALID && !address_.IsZero();
 }
 
+bool rai::TokenKey::operator==(const rai::TokenKey& other) const
+{
+    return chain_ == other.chain_ && address_ == other.address_;
+}
+
+bool rai::TokenKey::operator!=(const rai::TokenKey& other) const
+{
+    return !(*this == other);
+}
+
 rai::TokenTransfer::TokenTransfer()
     : token_(), ts_comp_(0), account_(0), height_(0)
 {
@@ -1077,6 +1087,47 @@ bool rai::OrderInfo::Finished() const
            || finished_height_ != rai::Block::INVALID_HEIGHT;
 }
 
+rai::OrderIndex rai::OrderInfo::GetIndex(const rai::Account& maker,
+                                         uint64_t order_height) const
+{
+    if (type_offer_ == rai::TokenType::_20 && type_want_ == rai::TokenType::_20)
+    {
+        rai::SwapRate rate(value_offer_, value_want_);
+        return rai::OrderIndex(token_offer_.chain_, token_offer_.address_,
+                               token_want_.chain_, token_want_.address_, rate,
+                               maker, order_height);
+    }
+    else if (type_offer_ == rai::TokenType::_20
+             && type_want_ == rai::TokenType::_721)
+    {
+        rai::SwapRate rate(value_offer_, 1);
+        return rai::OrderIndex(token_offer_.chain_, token_offer_.address_,
+                               token_want_.chain_, token_want_.address_,
+                               value_want_, rate, maker, order_height);
+    }
+    else if (type_offer_ == rai::TokenType::_721
+             && type_want_ == rai::TokenType::_20)
+    {
+        rai::SwapRate rate(1, value_want_);
+        return rai::OrderIndex(token_offer_.chain_, token_offer_.address_,
+                               value_offer_, token_want_.chain_,
+                               token_want_.address_, rate, maker, order_height);
+    }
+    else if (type_offer_ == rai::TokenType::_721
+             && type_want_ == rai::TokenType::_721)
+    {
+        rai::SwapRate rate(1, 1);
+        return rai::OrderIndex(token_offer_.chain_, token_offer_.address_,
+                               value_offer_, token_want_.chain_,
+                               token_want_.address_, value_want_, rate, maker,
+                               order_height);
+    }
+    else
+    {
+        return rai::OrderIndex();
+    }
+}
+
 rai::OrderSwapIndex::OrderSwapIndex()
     : maker_(0),
       order_height_(rai::Block::INVALID_HEIGHT),
@@ -1328,7 +1379,9 @@ rai::AccountSwapInfo::AccountSwapInfo()
       active_swaps_(0),
       total_swaps_(0),
       trusted_(0),
-      blocked_(0)
+      blocked_(0),
+      ping_(0),
+      pong_(0)
 {
 }
 
@@ -1340,6 +1393,8 @@ void rai::AccountSwapInfo::Serialize(rai::Stream& stream) const
     rai::Write(stream, total_swaps_);
     rai::Write(stream, trusted_);
     rai::Write(stream, blocked_);
+    rai::Write(stream, ping_);
+    rai::Write(stream, pong_);
 }
 
 bool rai::AccountSwapInfo::Deserialize(rai::Stream& stream)
@@ -1356,6 +1411,10 @@ bool rai::AccountSwapInfo::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, trusted_);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, blocked_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, ping_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, pong_);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -3295,6 +3354,20 @@ rai::Iterator rai::Ledger::OrderIndexUpperBound(
 
     return OrderIndexUpperBound(transaction, token_offer, type_offer,
                                 token_want, type_want);
+}
+
+rai::Iterator rai::Ledger::OrderIndexLowerBound(
+    rai::Transaction& transaction, const rai::OrderIndex& index) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        index.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.order_index_, key);
+    return rai::Iterator(std::move(store_it));
 }
 
 bool rai::Ledger::OrderCount(rai::Transaction& transaction, size_t& count) const

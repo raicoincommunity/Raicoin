@@ -879,6 +879,7 @@ void rai::AppRpcHandler::SynchronizingAccounts()
 {
     uint64_t count = 0;
     bool error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
     if (error || count == 0 || count > 100)
     {
         count = 1000;

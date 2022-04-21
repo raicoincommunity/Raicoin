@@ -216,10 +216,12 @@ private:
                                      std::vector<std::function<void()>>&);
     rai::ErrorCode UpdateLedgerCommon_(
         rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
+        std::vector<std::function<void()>>&,
         const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
     rai::ErrorCode UpdateLedgerCommon_(
         rai::Transaction&, const std::shared_ptr<rai::Block>&, rai::ErrorCode,
         const rai::TokenValue&, rai::TokenBlock::ValueOp,
+        std::vector<std::function<void()>>&,
         const std::vector<rai::TokenKey>& = std::vector<rai::TokenKey>());
     rai::ErrorCode UpdateLedgerReceivable_(rai::Transaction&,
                                            const rai::TokenReceivableKey&,
@@ -254,6 +256,12 @@ private:
                                           const rai::SwapInfo&,
                                           const rai::Account&, uint64_t,
                                           uint64_t);
+    rai::ErrorCode UpdateLedgerAccountSwapPing_(
+        rai::Transaction&, const rai::Account&, uint64_t,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode UpdateLedgerAccountSwapPong_(
+        rai::Transaction&, const rai::Account&, uint64_t,
+        std::vector<std::function<void()>>&);
 
     bool CheckInquiryValue_(const rai::OrderInfo&,
                             const rai::TokenValue&) const;
@@ -262,10 +270,8 @@ private:
     bool CheckOrderCirculable_(rai::ErrorCode&, rai::Transaction&,
                                const rai::OrderInfo&, const rai::Account&,
                                const rai::Account&) const;
-    rai::OrderIndex MakeOrderIndex_(const rai::OrderInfo&, const rai::Account&,
-                                    uint64_t) const;
     void MakeOrderPtree_(const rai::Account&, uint64_t, const rai::OrderInfo&,
-                         const rai::AccountSwapInfo&, uint16_t,
+                         const rai::AccountSwapInfo&, uint16_t, uint64_t,
                          rai::Ptree&) const;
     void MakeAccountSwapInfoPtree_(const rai::Account&,
                                    const rai::AccountSwapInfo&, uint16_t,
