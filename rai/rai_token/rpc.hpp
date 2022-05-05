@@ -46,6 +46,7 @@ public:
     void TakerSwaps();
     void TokenBlock();
     void TokenIdInfo();
+    void TokenIdOwner();
     void TokenInfo();
     void TokenMaxId();
     void TokenReceivables();

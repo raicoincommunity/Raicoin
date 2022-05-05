@@ -39,6 +39,19 @@ void rai::AccountTokenBalanceTopic::Serialize(rai::Stream& stream) const
     }
 }
 
+rai::TokenIdOwnerTopic::TokenIdOwnerTopic(const rai::TokenKey& token,
+                                          const rai::TokenValue& id)
+    : token_(token), id_(id)
+{
+}
+
+void rai::TokenIdOwnerTopic::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, token_.chain_);
+    rai::Write(stream, token_.address_.bytes);
+    rai::Write(stream, id_.bytes);
+}
+
 rai::TokenTopics::TokenTopics(rai::Token& token) : token_(token)
 {
     token_.observers_.account_swap_info_.Add(
@@ -56,6 +69,13 @@ rai::TokenTopics::TokenTopics(rai::Token& token) : token_(token)
                rai::TokenType type,
                const boost::optional<rai::TokenValue>& id_o) {
             NotifyAccountTokenBalance(account, token, type, id_o);
+        });
+
+    token_.observers_.token_id_transfer_.Add(
+        [this](const rai::TokenKey& key, const rai::TokenValue& id,
+               const rai::TokenIdInfo& info, const rai::Account& account,
+               bool receive) {
+            NotifyTokenIdOwner(key, id, info, account, receive);
         });
 }
 
@@ -152,5 +172,34 @@ void rai::TokenTopics::NotifyAccountTokenBalance(
     P::PutId(ptree, token_.provider_info_.id_);
     P::AppendFilter(ptree, P::Filter::APP_TOPIC, topic.StringHex());
     
+    token_.topics_.Notify(topic, ptree);
+}
+
+void rai::TokenTopics::NotifyTokenIdOwner(const rai::TokenKey& key,
+                                          const rai::TokenValue& id,
+                                          const rai::TokenIdInfo& info,
+                                          const rai::Account& account,
+                                          bool receive)
+{
+    rai::TokenIdOwnerTopic owner_topic(key, id);
+    rai::Topic topic = rai::AppTopics::CalcTopic(
+        rai::AppTopicType::TOKEN_ID_OWNER, owner_topic);
+    if (!token_.topics_.Subscribed(topic))
+    {
+        return;
+    }
+
+    rai::Ptree ptree;
+    token_.TokenKeyToPtree(key, ptree);
+    ptree.put("token_id", id.StringDec());
+
+    rai::Account owner = receive ? account : rai::Account(0);
+    ptree.put("owner", owner.StringAccount());
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_ID_OWNER);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_TOPIC, topic.StringHex());
+
     token_.topics_.Notify(topic, ptree);
 }

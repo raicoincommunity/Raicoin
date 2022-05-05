@@ -371,7 +371,7 @@ void rai::Token::ProcessTakeNackBlock(const rai::Account& taker,
         error_code = take_nack->CheckData();
         IF_NOT_SUCCESS_RETURN_VOID(error_code);
         if (take_nack->taker_ != taker) return;
-        if (take_nack->inquiry_height_) return;
+        if (take_nack->inquiry_height_ != inquiry_height) return;
 
         error = ledger_.TakeNackBlockPut(transaction, taker, inquiry_height,
                                          *block);
@@ -656,6 +656,41 @@ void rai::Token::PurgeTakeNackBlock(const rai::Account& taker,
         });
 }
 
+rai::Account rai::Token::GetTokenIdOwner(rai::Transaction& transaction,
+                                         const rai::TokenKey& token,
+                                         const rai::TokenValue& id)
+{
+    rai::Iterator i = ledger_.TokenIdTransferLowerBound(transaction, token, id);
+    rai::Iterator n =
+        ledger_.TokenIdTransferUpperBound(transaction, token, id, 0);
+    if (i == n)
+    {
+        return rai::Account(0);
+    }
+
+    rai::TokenIdTransferKey key;
+    rai::Account owner;
+    uint64_t height;
+    bool error = ledger_.TokenIdTransferGet(i, key, owner, height);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "GetTokenIdOwner: TokenIdTransferGet "
+            "failed, chain=",
+            key.token_.chain_, ", address=", token.address_.StringHex(),
+            ", id=", key.id_.StringDec()));
+        return rai::Account(0);
+    }
+
+    rai::AccountTokenId account_token_id(owner, token, id);
+    if (ledger_.AccountTokenIdExist(transaction, account_token_id))
+    {
+        return owner;
+    }
+    
+    return rai::Account(0);
+}
+
 void rai::Token::TokenKeyToPtree(const rai::TokenKey& key,
                                  rai::Ptree& ptree) const
 {
@@ -842,14 +877,6 @@ bool rai::Token::MakeSwapPtree(rai::Transaction& transaction,
     ptree.put("maker_signature", swap_info.maker_signature_.StringHex());
     ptree.put("trade_previous", swap_info.trade_previous_.StringHex());
 
-    rai::Ptree maker_balance;
-    error = MakeAccountTokenBalancePtree(
-        transaction, swap_info.maker_, order_info.token_offer_,
-        order_info.type_offer_, order_info.value_offer_, error_info,
-        maker_balance);
-    IF_ERROR_RETURN(error, true);
-    ptree.put_child("maker_balance", maker_balance);
-
     rai::Ptree taker_balance;
     error = MakeAccountTokenBalancePtree(
         transaction, account, order_info.token_want_, order_info.type_want_,
@@ -990,6 +1017,8 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_MAKER_SWAPS);
     info.actions_.push_back(P::Action::TOKEN_TAKER_SWAPS);
     info.actions_.push_back(P::Action::TOKEN_SEARCH_ORDERS);
+    info.actions_.push_back(P::Action::TOKEN_SUBMIT_TAKE_NACK_BLOCK);
+    info.actions_.push_back(P::Action::TOKEN_ID_OWNER);
     // todo:
 
     return info;
@@ -2380,6 +2409,10 @@ rai::TokenError rai::Token::ProcessSwapInquiry_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
+    error_code =
+        UpdateLedgerAccountTotalSwapsInc_(transaction, block->Account());
+    IF_NOT_SUCCESS_RETURN(error_code);
+
     error_code = UpdateLedgerCommon_(transaction, block,
                                      rai::ErrorCode::SUCCESS, observers, keys);
     IF_NOT_SUCCESS_RETURN(error_code);
@@ -2515,11 +2548,16 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
-    error_code = UpdateLedgerAccountSwapsInc_(transaction, swap_info.maker_);
+    error_code =
+        UpdateLedgerAccountTotalSwapsInc_(transaction, swap_info.maker_);
+    IF_NOT_SUCCESS_RETURN(error_code);
+    error_code =
+        UpdateLedgerAccountActiveSwapsInc_(transaction, swap_info.maker_);
     IF_NOT_SUCCESS_RETURN(error_code);
     observers.push_back(
         std::bind(account_swap_info_observer_, swap_info.maker_));
-    error_code = UpdateLedgerAccountSwapsInc_(transaction, inquiry_ack->taker_);
+    error_code =
+        UpdateLedgerAccountActiveSwapsInc_(transaction, inquiry_ack->taker_);
     IF_NOT_SUCCESS_RETURN(error_code);
     observers.push_back(
         std::bind(account_swap_info_observer_, inquiry_ack->taker_));
@@ -2981,11 +3019,13 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
         take_ack->inquiry_height_, block->Timestamp());
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    error_code = UpdateLedgerAccountSwapsDec_(transaction, swap_info.maker_);
+    error_code =
+        UpdateLedgerAccountActiveSwapsDec_(transaction, swap_info.maker_);
     IF_NOT_SUCCESS_RETURN(error_code);
     observers.push_back(
         std::bind(account_swap_info_observer_, swap_info.maker_));
-    error_code = UpdateLedgerAccountSwapsDec_(transaction, take_ack->taker_);
+    error_code =
+        UpdateLedgerAccountActiveSwapsDec_(transaction, take_ack->taker_);
     IF_NOT_SUCCESS_RETURN(error_code);
     observers.push_back(
         std::bind(account_swap_info_observer_, take_ack->taker_));
@@ -3893,7 +3933,8 @@ rai::ErrorCode rai::Token::UpdateLedgerTokenIdTransfer_(
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerTokenIdTransfer_: put token id transfer failed, "
+            "Token::UpdateLedgerTokenIdTransfer_: put token id transfer "
+            "failed, "
             "token.chain=",
             token.chain_, ", token.address=", token.address_.StringHex(),
             ", id=", id.StringDec()));
@@ -3964,7 +4005,34 @@ rai::ErrorCode rai::Token::UpdateLedgerAccountOrdersDec_(
     return rai::ErrorCode::SUCCESS;
 }
 
-rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsInc_(
+rai::ErrorCode rai::Token::UpdateLedgerAccountActiveSwapsInc_(
+    rai::Transaction& transaction, const rai::Account& account)
+{
+    rai::AccountSwapInfo info;
+    bool error = ledger_.AccountSwapInfoGet(transaction, account, info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::UpdateLedgerAccountActiveSwapsInc_: failed to account swap info, "
+            "account=", account.StringAccount()));
+        return rai::ErrorCode::APP_PROCESS_HALT;
+    }
+
+    ++info.active_swaps_;
+    
+    error = ledger_.AccountSwapInfoPut(transaction, account, info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::UpdateLedgerAccountActiveSwapsInc_: put account swap info, "
+            "account=", account.StringAccount()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Token::UpdateLedgerAccountTotalSwapsInc_(
     rai::Transaction& transaction, const rai::Account& account)
 {
     rai::AccountSwapInfo info;
@@ -3974,14 +4042,13 @@ rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsInc_(
         info = rai::AccountSwapInfo();
     }
 
-    ++info.active_swaps_;
     ++info.total_swaps_;
     
     error = ledger_.AccountSwapInfoPut(transaction, account, info);
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerAccountSwapsInc_: put account swap info, "
+            "Token::UpdateLedgerAccountTotalSwapsInc_: put account swap info, "
             "account=", account.StringAccount()));
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
@@ -3989,7 +4056,7 @@ rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsInc_(
     return rai::ErrorCode::SUCCESS;
 }
 
-rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsDec_(
+rai::ErrorCode rai::Token::UpdateLedgerAccountActiveSwapsDec_(
     rai::Transaction& transaction, const rai::Account& account)
 {
     rai::AccountSwapInfo info;
@@ -3997,7 +4064,7 @@ rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsDec_(
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerAccountSwapsDec_: get account swap info, "
+            "Token::UpdateLedgerAccountActiveSwapsDec_: get account swap info, "
             "account=",
             account.StringAccount()));
         return rai::ErrorCode::APP_PROCESS_HALT;
@@ -4005,10 +4072,11 @@ rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsDec_(
 
     if (info.active_swaps_ == 0)
     {
-        rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerAccountSwapsDec_: active swaps underflow, "
-            "account=",
-            account.StringAccount()));
+        rai::Log::Error(
+            rai::ToString("Token::UpdateLedgerAccountActiveSwapsDec_: active "
+                          "swaps underflow, "
+                          "account=",
+                          account.StringAccount()));
         return rai::ErrorCode::APP_PROCESS_HALT;
     }
 
@@ -4018,8 +4086,9 @@ rai::ErrorCode rai::Token::UpdateLedgerAccountSwapsDec_(
     if (error)
     {
         rai::Log::Error(rai::ToString(
-            "Token::UpdateLedgerAccountSwapsDec_: put account swap info, "
-            "account=", account.StringAccount()));
+            "Token::UpdateLedgerAccountActiveSwapsDec_: put account swap info, "
+            "account=",
+            account.StringAccount()));
         return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
     }
 
@@ -4206,7 +4275,9 @@ bool rai::Token::CheckTakeAckValue_(const rai::OrderInfo& order,
         if (ack_value.IsZero()) return true;
         if (ack_value > order.left_) return true;
         if (ack_value < order.min_offer_ && ack_value != order.left_)
+        {
             return true;
+        }
         rai::uint512_t offer_s(order.value_offer_.Number());
         rai::uint512_t want_s(order.value_want_.Number());
         rai::uint512_t take_s(take_value.Number());

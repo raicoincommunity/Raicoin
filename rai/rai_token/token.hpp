@@ -97,7 +97,8 @@ public:
     void SubmitTakeNackBlock(const rai::Account&, uint64_t,
                              const std::shared_ptr<rai::Block>&);
     void PurgeTakeNackBlock(const rai::Account&, uint64_t);
-
+    rai::Account GetTokenIdOwner(rai::Transaction&, const rai::TokenKey&,
+                                 const rai::TokenValue&);
     void TokenKeyToPtree(const rai::TokenKey&, rai::Ptree&) const;
     void TokenInfoToPtree(const rai::TokenInfo&, rai::Ptree&) const;
     void TokenIdInfoToPtree(const rai::TokenIdInfo&, rai::Ptree&) const;
@@ -247,10 +248,12 @@ private:
                                                  const rai::Account&);
     rai::ErrorCode UpdateLedgerAccountOrdersDec_(rai::Transaction&,
                                                  const rai::Account&);
-    rai::ErrorCode UpdateLedgerAccountSwapsInc_(rai::Transaction&,
-                                                 const rai::Account&);
-    rai::ErrorCode UpdateLedgerAccountSwapsDec_(rai::Transaction&,
-                                                 const rai::Account&);
+    rai::ErrorCode UpdateLedgerAccountActiveSwapsInc_(rai::Transaction&,
+                                                      const rai::Account&);
+    rai::ErrorCode UpdateLedgerAccountTotalSwapsInc_(rai::Transaction&,
+                                                     const rai::Account&);
+    rai::ErrorCode UpdateLedgerAccountActiveSwapsDec_(rai::Transaction&,
+                                                const rai::Account&);
     rai::ErrorCode UpdateLedgerSwapIndex_(rai::Transaction&,
                                           const rai::OrderInfo&,
                                           const rai::SwapInfo&,

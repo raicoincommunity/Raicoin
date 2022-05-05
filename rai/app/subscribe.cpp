@@ -160,6 +160,7 @@ void rai::AppSubscriptions::NotifyAccountSynced(const rai::Account& account)
     P::PutAction(ptree, P::Action::APP_ACCOUNT_SYNC);
     P::PutId(ptree, app_.provider_info_.id_);
     P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+    ptree.put("account", account.StringAccount());
     ptree.put("synchronized", "true");
     Notify(account, ptree);
 }
