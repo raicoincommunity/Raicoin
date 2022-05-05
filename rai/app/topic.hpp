@@ -20,6 +20,7 @@ enum class AppTopicType : uint32_t
     ACCOUNT_SWAP_INFO       = 3,
     ACCOUNT_HEAD            = 4,
     ACCOUNT_TOKEN_BALANCE   = 5,
+    TOKEN_ID_OWNER          = 6,
 
     MAX
 };

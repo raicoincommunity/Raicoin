@@ -33,6 +33,15 @@ public:
     boost::optional<rai::TokenValue> id_o_;
 };
 
+class TokenIdOwnerTopic : public rai::Serializer
+{
+public:
+    TokenIdOwnerTopic(const rai::TokenKey&, const rai::TokenValue&);
+    void Serialize(rai::Stream&) const override;
+    rai::TokenKey token_;
+    rai::TokenValue id_;
+};
+
 class TokenTopics
 {
 public:
@@ -43,6 +52,8 @@ public:
     void NotifyAccountTokenBalance(const rai::Account&, const rai::TokenKey&,
                                    rai::TokenType,
                                    const boost::optional<rai::TokenValue>&);
+    void NotifyTokenIdOwner(const rai::TokenKey&, const rai::TokenValue&,
+                            const rai::TokenIdInfo&, const rai::Account&, bool);
 
     rai::Token& token_;
 };

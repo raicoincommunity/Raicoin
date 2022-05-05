@@ -206,6 +206,14 @@ std::string rai::Provider::ToString(Action action)
         {
             return "search_orders";
         }
+        case rai::Provider::Action::TOKEN_SUBMIT_TAKE_NACK_BLOCK:
+        {
+            return "submit_take_nack_block";
+        }
+        case rai::Provider::Action::TOKEN_ID_OWNER:
+        {
+            return "token_id_owner";
+        }
         default:
         {
             return "";

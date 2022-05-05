@@ -115,6 +115,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         TokenIdInfo();
     }
+    else if (action == "token_id_owner")
+    {
+        TokenIdOwner();
+    }
     else if (action == "token_info")
     {
         TokenInfo();
@@ -1334,7 +1338,7 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
                 response_.put("error", "Failed to get account swap info");
                 return;
             }
-            if (account_swap_info.ping_ < now - rai::SWAP_PING_PONG_INTERVAL)
+            if (account_swap_info.pong_ < now - rai::MAX_TIMESTAMP_DIFF)
             {
                 if (account_swap_info.pong_ + rai::SWAP_PING_PONG_INTERVAL
                     < account_swap_info.ping_)
@@ -1406,6 +1410,7 @@ void rai::TokenRpcHandler::SearchOrdersByPair()
     }
 
     response_.put_child("orders", orders);
+    response_.put("more", rai::BoolToString(i != n));
 }
 
 void rai::TokenRpcHandler::SwapHelperStatus()
@@ -1445,10 +1450,12 @@ void rai::TokenRpcHandler::SubmitTakeNackBlock()
     rai::Account taker;
     bool error = GetTaker_(taker);
     IF_ERROR_RETURN_VOID(error);
+    response_.put("taker", taker.StringAccount());
 
     uint64_t inquiry_height = 0;
     error = GetInquiryHeight_(inquiry_height);
     IF_ERROR_RETURN_VOID(error);
+    response_.put("inquiry_height", std::to_string(inquiry_height));
 
     boost::optional<rai::Ptree&> block_ptree =
         request_.get_child_optional("block");
@@ -1457,6 +1464,7 @@ void rai::TokenRpcHandler::SubmitTakeNackBlock()
         error_code_ = rai::ErrorCode::RPC_MISS_FIELD_BLOCK;
         return;
     }
+    response_.put_child("block", *block_ptree);
 
     std::shared_ptr<rai::Block> block =
         rai::DeserializeBlockJson(error_code_, *block_ptree);
@@ -1640,6 +1648,30 @@ void rai::TokenRpcHandler::TokenIdInfo()
     }
     
     token_.TokenIdInfoToPtree(info, response_);
+}
+
+void rai::TokenRpcHandler::TokenIdOwner()
+{
+    rai::Chain chain;
+    bool error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::TokenAddress address;
+    error = GetTokenAddress_(chain, address);
+    IF_ERROR_RETURN_VOID(error);
+    rai::TokenKey key(chain, address);
+    token_.TokenKeyToPtree(key, response_);
+
+    rai::TokenValue id;
+    error = GetTokenId_(id);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("token_id", id.StringDec());
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Account owner = token_.GetTokenIdOwner(transaction, key, id);
+    response_.put("owner", owner.StringAccount());
 }
 
 void rai::TokenRpcHandler::TokenInfo()

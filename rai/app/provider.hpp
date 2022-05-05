@@ -68,6 +68,8 @@ public:
         TOKEN_MAKER_SWAPS                   = 225,
         TOKEN_TAKER_SWAPS                   = 226,
         TOKEN_SEARCH_ORDERS                 = 227,
+        TOKEN_SUBMIT_TAKE_NACK_BLOCK        = 228,
+        TOKEN_ID_OWNER                      = 229,
 
     };
     static std::string ToString(Action);

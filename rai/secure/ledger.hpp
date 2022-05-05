@@ -823,6 +823,15 @@ public:
     bool TokenTransferPut(rai::Transaction&, const rai::TokenTransfer&);
     bool TokenIdTransferPut(rai::Transaction&, const rai::TokenIdTransferKey&,
                             const rai::Account&, uint64_t);
+    bool TokenIdTransferGet(const rai::Iterator&, rai::TokenIdTransferKey&,
+                            rai::Account&, uint64_t&) const;
+    rai::Iterator TokenIdTransferLowerBound(
+        rai::Transaction&, const rai::TokenKey&, const rai::TokenValue&,
+        uint64_t = std::numeric_limits<uint64_t>::max()) const;
+    rai::Iterator TokenIdTransferUpperBound(rai::Transaction&,
+                                            const rai::TokenKey&,
+                                            const rai::TokenValue&,
+                                            uint64_t) const;
     bool SwapMainAccountPut(rai::Transaction&, const rai::Account&,
                             const rai::Account&);
     bool SwapMainAccountGet(rai::Transaction&, const rai::Account&,

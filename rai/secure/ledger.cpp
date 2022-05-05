@@ -3064,6 +3064,93 @@ bool rai::Ledger::TokenIdTransferPut(
     return false;
 }
 
+bool rai::Ledger::TokenIdTransferGet(const rai::Iterator& it,
+                                     rai::TokenIdTransferKey& transfer_key,
+                                     rai::Account& account,
+                                     uint64_t& height) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = transfer_key.Deserialize(stream_key);
+    IF_ERROR_RETURN(error, true);
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = rai::Read(stream_value, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_value, height);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::TokenIdTransferLowerBound(
+    rai::Transaction& transaction, const rai::TokenKey& token,
+    const rai::TokenValue& id, uint64_t index) const
+{
+    rai::TokenIdTransferKey transfer_key(token, id, index);
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        transfer_key.Serialize(stream);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.token_id_transfer_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::TokenIdTransferUpperBound(
+    rai::Transaction& transaction, const rai::TokenKey& token,
+    const rai::TokenValue& id, uint64_t index) const
+{
+    rai::TokenIdTransferKey transfer_key(token, id, index);
+    do
+    {
+        transfer_key.index_comp_++;
+        if (transfer_key.index_comp_ != 0)
+        {
+            break;
+        }
+
+        transfer_key.id_ += 1;
+        if (transfer_key.id_ != 0)
+        {
+            break;
+        }
+
+        uint32_t chain = static_cast<uint32_t>(transfer_key.token_.chain_);
+        chain++;
+        transfer_key.token_.chain_ = static_cast<rai::Chain>(chain);
+        if (chain != 0)
+        {
+            break;
+        }
+
+        transfer_key.token_.address_ += 1;
+        if (transfer_key.token_.address_ != 0)
+        {
+            break;
+        }
+
+        return rai::Iterator();
+    } while (0);
+
+    return TokenIdTransferLowerBound(transaction, transfer_key.token_,
+                                     transfer_key.id_,
+                                     transfer_key.index_comp_);
+}
+
 bool rai::Ledger::SwapMainAccountPut(rai::Transaction& transaction,
                                      const rai::Account& account,
                                      const rai::Account& main_account)
