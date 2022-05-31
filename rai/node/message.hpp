@@ -12,7 +12,7 @@
 namespace rai
 {
 uint8_t constexpr PROTOCOL_VERSION_MIN   = 1;
-uint8_t constexpr PROTOCOL_VERSION_USING = 1;
+uint8_t constexpr PROTOCOL_VERSION_USING = 2;
 
 // version 1
 enum class MessageType : uint8_t

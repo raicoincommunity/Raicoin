@@ -87,6 +87,7 @@ uint64_t constexpr MIN_CONFIRM_INTERVAL    = 10;
 uint32_t constexpr TRANSACTIONS_PER_CREDIT = 20;
 uint32_t constexpr ORDERS_PER_CREDIT       = 1;
 uint64_t constexpr SWAPS_PER_CREDIT        = 1;
+uint64_t constexpr EXTRA_FORKS_PER_CREDIT  = 1;
 uint16_t constexpr MAX_ACCOUNT_CREDIT      = 65535;
 uint32_t constexpr MAX_ACCOUNT_DAILY_TRANSACTIONS =
     MAX_ACCOUNT_CREDIT * TRANSACTIONS_PER_CREDIT;
@@ -110,6 +111,7 @@ rai::Amount CreditPrice(uint64_t);
 rai::Amount RewardRate(uint64_t);
 rai::Amount RewardAmount(const rai::Amount&, uint64_t, uint64_t);
 uint64_t RewardTimestamp(uint64_t, uint64_t);
-uint16_t MaxAllowedForks(uint64_t);
+uint16_t BaseAllowedForks(uint64_t);
+uint64_t MaxAllowedForks(uint64_t, uint32_t);
 rai::Chain CurrentChain();
 }  // namespace rai

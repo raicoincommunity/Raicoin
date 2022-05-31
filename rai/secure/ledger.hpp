@@ -81,7 +81,7 @@ public:
     bool Deserialize(rai::Stream&);
     bool Confirmed(uint64_t) const;
     bool Valid() const;
-    bool Restricted() const;
+    bool Restricted(uint32_t) const;
 
     rai::BlockType type_;
     uint16_t forks_;

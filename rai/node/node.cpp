@@ -701,9 +701,21 @@ public:
         rai::AccountInfo account_info;
         bool error = node_.ledger_.AccountInfoGet(
             transaction, message.block_->Account(), account_info);
-        if (!error)
+        if (!error && account_info.Valid())
         {
-            if (account_info.Restricted())
+            std::shared_ptr<rai::Block> head(nullptr);
+            error =
+                node_.ledger_.BlockGet(transaction, account_info.head_, head);
+            if (error || head == nullptr)
+            {
+                rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
+                                "NodeMessageVisitor::Publish: hash=",
+                                account_info.head_.StringHex());
+                return;
+            }
+            
+            if (account_info.Restricted(head->Credit())
+                && message.block_->Opcode() != rai::BlockOpcode::CREDIT)
             {
                 rai::Stats::Add(rai::ErrorCode::ACCOUNT_RESTRICTED,
                                 message.block_->Account().StringAccount());

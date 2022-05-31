@@ -1596,7 +1596,7 @@ void rai::Wallets::ProcessAccountChange(
         callback(rai::ErrorCode::BLOCK_TIMESTAMP, block);
         return;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
@@ -1719,11 +1719,6 @@ void rai::Wallets::ProcessAccountCredit(
         callback(rai::ErrorCode::BLOCK_TIMESTAMP, block);
         return;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
-    {
-        callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
-        return;
-    }
 
     uint32_t counter =
         rai::SameDay(timestamp, head->Timestamp()) ? head->Counter() + 1 : 1;
@@ -1824,7 +1819,7 @@ void rai::Wallets::ProcessAccountDestroy(
         callback(rai::ErrorCode::BLOCK_TIMESTAMP, block);
         return;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
@@ -1922,7 +1917,7 @@ void rai::Wallets::ProcessAccountSend(
         callback(rai::ErrorCode::BLOCK_TIMESTAMP, block);
         return;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
         return;
@@ -2105,7 +2100,7 @@ void rai::Wallets::ProcessAccountReceive(
             return;
         }
         
-        if (account_info.forks_ > rai::MaxAllowedForks(timestamp))
+        if (account_info.forks_ > rai::MaxAllowedForks(timestamp, credit))
         {
             callback(rai::ErrorCode::ACCOUNT_RESTRICTED, block);
             return;

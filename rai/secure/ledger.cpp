@@ -153,9 +153,9 @@ bool rai::AccountInfo::Valid() const
     return true;
 }
 
-bool rai::AccountInfo::Restricted() const
+bool rai::AccountInfo::Restricted(uint32_t credit) const
 {
-    return forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp());
+    return forks_ > rai::MaxAllowedForks(rai::CurrentTimestamp(), credit);
 }
 
 rai::AliasInfo::AliasInfo()

@@ -80,6 +80,7 @@ public:
     void NodeAccount();
     void PeerCount();
     void Peers();
+    void PeersGroupByVersion();
     void PeersVerbose();
     void QuerierStatus();
     void ReceivableCount();

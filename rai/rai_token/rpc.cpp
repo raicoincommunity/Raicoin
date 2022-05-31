@@ -103,7 +103,7 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         SwapMainAccount();
     }
-    else if (action == "taker_swap")
+    else if (action == "taker_swaps")
     {
         TakerSwaps();
     }
@@ -169,11 +169,12 @@ void rai::TokenRpcHandler::AccountActiveSwaps()
     IF_NOT_SUCCESS_RETURN_VOID(error_code_);
 
     uint64_t count = 0;
+    uint64_t max = 1000;
     uint64_t now = rai::CurrentTimestamp();
     rai::Ptree swaps;
     rai::Iterator i = token_.ledger_.SwapInfoLowerBound(transaction, account);
     rai::Iterator n = token_.ledger_.SwapInfoUpperBound(transaction, account);
-    for (; i != n && count < 100; ++i)
+    for (; i != n && count < max; ++i)
     {
         uint64_t height;
         rai::SwapInfo info;
@@ -216,7 +217,7 @@ void rai::TokenRpcHandler::AccountActiveSwaps()
         ++count;
     }
 
-    if (count >= 100)
+    if (count >= max)
     {
         response_.put_child("swaps", swaps);
         return;
@@ -233,7 +234,7 @@ void rai::TokenRpcHandler::AccountActiveSwaps()
     uint64_t next = account_info.head_height_ + 1;
     i = token_.ledger_.InquiryWaitingLowerBound(transaction, account, next);
     n = token_.ledger_.InquiryWaitingUpperBound(transaction, account, next);
-    for (; i != n && count < 100; ++i)
+    for (; i != n && count < max; ++i)
     {
         rai::InquiryWaiting waiting;
         error = token_.ledger_.InquiryWaitingGet(i, waiting);
@@ -257,7 +258,7 @@ void rai::TokenRpcHandler::AccountActiveSwaps()
         ++count;
     }
 
-    if (count >= 100)
+    if (count >= max)
     {
         response_.put_child("swaps", swaps);
         return;
@@ -265,7 +266,7 @@ void rai::TokenRpcHandler::AccountActiveSwaps()
 
     i = token_.ledger_.TakeWaitingLowerBound(transaction, account, next);
     n = token_.ledger_.TakeWaitingUpperBound(transaction, account, next);
-    for (; i != n && count < 100; ++i)
+    for (; i != n && count < max; ++i)
     {
         rai::TakeWaiting waiting;
         error = token_.ledger_.TakeWaitingGet(i, waiting);
@@ -725,6 +726,7 @@ void rai::TokenRpcHandler::MakerSwaps()
     }
 
     response_.put_child("swaps", swaps);
+    response_.put("more", rai::BoolToString(i != n));
 }
 
 void rai::TokenRpcHandler::NextAccountTokenLinks()
@@ -1493,7 +1495,7 @@ void rai::TokenRpcHandler::SubmitTakeNackBlock()
         return;
     }
 
-    if (info.status_ != rai::SwapInfo::Status::TAKE)
+    if (info.status_ != rai::SwapInfo::Status::INQUIRY_ACK)
     {
         response_.put("error", "swap status");
         return;
@@ -1588,6 +1590,7 @@ void rai::TokenRpcHandler::TakerSwaps()
     }
 
     response_.put_child("swaps", swaps);
+    response_.put("more", rai::BoolToString(i != n));
 }
 
 void rai::TokenRpcHandler::TokenBlock()

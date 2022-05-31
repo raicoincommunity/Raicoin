@@ -3153,7 +3153,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateSend(
         ShowError(rai::ErrorCode::BLOCK_TIMESTAMP);
         return nullptr;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
         return nullptr;
@@ -3272,7 +3272,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateReceive(
 
         uint64_t timestamp = main_.CurrentTimestamp();
 
-        if (info.forks_ > rai::MaxAllowedForks(timestamp))
+        if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
         {
             ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
             return nullptr;
@@ -3339,7 +3339,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateChange(
         ShowError(rai::ErrorCode::BLOCK_TIMESTAMP);
         return nullptr;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
         return  nullptr;
@@ -3407,7 +3407,7 @@ std::unique_ptr<rai::Block> rai::QtCreateBlock::CreateCredit(
         ShowError(rai::ErrorCode::BLOCK_TIMESTAMP);
         return nullptr;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         ShowError(rai::ErrorCode::ACCOUNT_RESTRICTED);
         return nullptr;
@@ -3884,11 +3884,6 @@ void rai::QtMain::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock)
                 }
                 else
                 {
-                    if (info.Restricted())
-                    {
-                        continue;
-                    }
-
                     std::shared_ptr<rai::Block> block(nullptr);
                     error = ledger.BlockGet(transaction, info.head_, block);
                     if (error)
@@ -3896,6 +3891,11 @@ void rai::QtMain::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock)
                         std::cout << "QtMain::ProcessAutoReceive_: failed to "
                                      "get block, hash="
                                   << info.head_.StringHex() << std::endl;
+                        continue;
+                    }
+
+                    if (info.Restricted(block->Credit()))
+                    {
                         continue;
                     }
 

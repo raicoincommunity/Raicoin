@@ -277,6 +277,10 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         Peers();
     }
+    else if (action == "peers_group_by_version")
+    {
+        PeersGroupByVersion();
+    }
     else if (action == "peers_verbose")
     {
         PeersVerbose();
@@ -495,7 +499,6 @@ void rai::NodeRpcHandler::AccountInfo()
         response_.put("confirmed_height", info.confirmed_height_);
     }
     response_.put("forks", info.forks_);
-    response_.put("restricted", info.Restricted());
 
     std::shared_ptr<rai::Block> head_block(nullptr);
     error = node_.ledger_.BlockGet(transaction, info.head_, head_block);
@@ -504,6 +507,9 @@ void rai::NodeRpcHandler::AccountInfo()
         error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
         return;
     }
+    response_.put("restricted", info.Restricted(head_block->Credit()));
+
+
     rai::Ptree head_ptree;
     head_block->SerializeJson(head_ptree);
     response_.add_child("head_block", head_ptree);
@@ -837,16 +843,28 @@ void rai::NodeRpcHandler::BlockPublish()
     rai::AccountInfo info;
     bool error =
         node_.ledger_.AccountInfoGet(transaction, block->Account(), info);
-    if (!error && info.Restricted())
+    if (!error && info.Valid())
     {
-        error_code_ = rai::ErrorCode::ACCOUNT_RESTRICTED;
-        return;
-    }
+        if (block->Height() <= info.head_height_)
+        {
+            error_code_ = rai::ErrorCode::BLOCK_HEIGHT_DUPLICATED;
+            return;
+        }
 
-    if (info.Valid() && block->Height() <= info.head_height_)
-    {
-        error_code_ = rai::ErrorCode::BLOCK_HEIGHT_DUPLICATED;
-        return;
+        std::shared_ptr<rai::Block> head(nullptr);
+        error = node_.ledger_.BlockGet(transaction, info.head_, head);
+        if (error || head == nullptr)
+        {
+            error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
+            return;
+        }
+
+        if (info.Restricted(head->Credit())
+            && block->Opcode() != rai::BlockOpcode::CREDIT)
+        {
+            error_code_ = rai::ErrorCode::ACCOUNT_RESTRICTED;
+            return;
+        }
     }
 
     node_.ReceiveBlock(block, boost::none);
@@ -1523,6 +1541,52 @@ void rai::NodeRpcHandler::Peers()
         rai::Ptree entry;
         entry.put("account", i->account_.StringAccount());
         entry.put("endpoint", endpoint.str());
+        ptree.push_back(std::make_pair("", entry));
+    }
+    response_.add_child("peers", ptree);
+}
+
+void rai::NodeRpcHandler::PeersGroupByVersion()
+{
+    rai::Amount total(0);
+    std::map<uint8_t, std::pair<uint64_t, rai::Amount>> group;
+    std::vector<rai::Peer> peers = node_.peers_.List();
+    for (auto i = peers.begin(), n = peers.end(); i != n; ++i)
+    {
+        total += i->rep_weight_;
+        auto it = group.find(i->version_);
+        if (it == group.end())
+        {
+            group[i->version_] = std::make_pair(1, i->rep_weight_);
+        }
+        else
+        {
+            it->second.first += 1;
+            it->second.second += i->rep_weight_;
+        }
+    }
+
+    rai::Ptree ptree;
+    for (auto i = group.begin(), n = group.end(); i != n; ++i)
+    {
+        rai::Ptree entry;
+        entry.put("version", std::to_string(uint32_t(i->first)));
+        entry.put("count", std::to_string(i->second.first));
+        rai::Amount weight = i->second.second;
+        entry.put("weight", weight.StringDec());
+        entry.put("weight_in_rai", weight.StringBalance(rai::RAI) + " RAI");
+        if (!total.IsZero())
+        {
+            rai::uint256_t rate = rai::uint256_t(weight.Number()) * 10000
+                                / rai::uint256_t(total.Number());
+            std::string integer = rai::uint256_union(rate / 100).StringDec();
+            std::string decimals = rai::uint256_union(rate % 100).StringDec();
+            if (decimals.size() == 1)
+            {
+                decimals = "0" + decimals;
+            }
+            entry.put("percent", integer + "." + decimals + "%");
+        }
         ptree.push_back(std::make_pair("", entry));
     }
     response_.add_child("peers", ptree);

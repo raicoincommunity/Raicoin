@@ -304,7 +304,7 @@ void rai::Token::ProcessTakeNackBlock(const rai::Account& taker,
             ledger_.SwapInfoGet(transaction, taker, inquiry_height, info);
         if (error) return;
 
-        if (info.status_ != rai::SwapInfo::Status::TAKE) return;
+        if (info.status_ != rai::SwapInfo::Status::INQUIRY_ACK) return;
 
         rai::AccountInfo maker_info;
         error = ledger_.AccountInfoGet(transaction, info.maker_, maker_info);
@@ -876,13 +876,16 @@ bool rai::Token::MakeSwapPtree(rai::Transaction& transaction,
     ptree.put("maker_share", swap_info.maker_share_.StringHex());
     ptree.put("maker_signature", swap_info.maker_signature_.StringHex());
     ptree.put("trade_previous", swap_info.trade_previous_.StringHex());
+    ptree.put("hash", swap_info.hash_.StringHex());
 
-    rai::Ptree taker_balance;
-    error = MakeAccountTokenBalancePtree(
-        transaction, account, order_info.token_want_, order_info.type_want_,
-        order_info.value_want_, error_info, taker_balance);
-    IF_ERROR_RETURN(error, true);
-    ptree.put_child("taker_balance", taker_balance);
+    std::shared_ptr<rai::Block> block;
+    error = ledger_.BlockGet(transaction, swap_info.hash_, block);
+    if (error || block == nullptr)
+    {
+        error_info = "Failed to get swap inquiry block";
+        return true;
+    }
+    ptree.put("created_at", std::to_string(block->Timestamp()));
 
     return false;
 }
@@ -2515,6 +2518,16 @@ rai::TokenError rai::Token::ProcessSwapInquiryAck_(
         return UpdateLedgerCommon_(transaction, block,
                                    rai::ErrorCode::TOKEN_SWAP_TIMEOUT,
                                    observers, keys);
+    }
+
+    error = ledger_.InquiryWaitingDel(transaction, waiting);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("Token::ProcessSwapInquiryAck_: failed to delete "
+                          "inquiry waiting, hash=",
+                          block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
     }
 
     swap_info.status_ = rai::SwapInfo::Status::INQUIRY_ACK;
