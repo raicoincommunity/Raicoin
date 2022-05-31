@@ -600,7 +600,7 @@ rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
         {
             return rai::ErrorCode::BLOCK_TIMESTAMP;
         }
-        if (info.forks_ > rai::MaxAllowedForks(timestamp))
+        if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
         {
             return rai::ErrorCode::ACCOUNT_RESTRICTED;
         }
@@ -675,7 +675,7 @@ rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
     {
         return rai::ErrorCode::ACCOUNT_ACTION_TOO_QUICKLY;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp))
+    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
     {
         return rai::ErrorCode::ACCOUNT_RESTRICTED;
     }

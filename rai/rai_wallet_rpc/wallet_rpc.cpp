@@ -316,7 +316,6 @@ void rai::WalletRpcHandler::AccountInfo()
         response_.put("confirmed_height", info.confirmed_height_);
     }
     response_.put("forks", info.forks_);
-    response_.put("restricted", info.Restricted());
 
     std::shared_ptr<rai::Block> head_block(nullptr);
     error = main_.ledger_.BlockGet(transaction, info.head_, head_block);
@@ -325,6 +324,7 @@ void rai::WalletRpcHandler::AccountInfo()
         error_code_ = rai::ErrorCode::LEDGER_BLOCK_GET;
         return;
     }
+    response_.put("restricted", info.Restricted(head_block->Credit()));
     rai::Ptree head_ptree;
     head_block->SerializeJson(head_ptree);
     response_.add_child("head_block", head_ptree);
@@ -1185,7 +1185,7 @@ void rai::WalletRpc::ProcessAutoCredit_(std::unique_lock<std::mutex>& lock,
 
         rai::AccountInfo info;
         bool error = ledger_.AccountInfoGet(transaction, account, info);
-        if (error || !info.Valid() || info.Restricted())
+        if (error || !info.Valid())
         {
             break;
         }
@@ -1200,14 +1200,18 @@ void rai::WalletRpc::ProcessAutoCredit_(std::unique_lock<std::mutex>& lock,
             break;
         }
 
-        if (block->Counter() < block->Credit() * rai::TRANSACTIONS_PER_CREDIT)
+        if (block->Balance() < rai::CreditPrice(CurrentTimestamp()))
         {
             break;
         }
 
-        if (block->Balance() < rai::CreditPrice(CurrentTimestamp()))
+        if (!info.Restricted(block->Credit()))
         {
-            break;
+            if (block->Counter()
+                < block->Credit() * rai::TRANSACTIONS_PER_CREDIT)
+            {
+                break;
+            }
         }
 
         credit = true;
@@ -1298,11 +1302,6 @@ void rai::WalletRpc::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock,
         }
         else
         {
-            if (info.Restricted())
-            {
-                break;
-            }
-
             std::shared_ptr<rai::Block> block(nullptr);
             error = ledger_.BlockGet(transaction, info.head_, block);
             if (error)
@@ -1310,6 +1309,11 @@ void rai::WalletRpc::ProcessAutoReceive_(std::unique_lock<std::mutex>& lock,
                 rai::Log::Error(
                     "WalletRpc::ProcessReceive_: failed to get block, hash="
                     + info.head_.StringHex());
+                break;
+            }
+
+            if (info.Restricted(block->Credit()))
+            {
                 break;
             }
 

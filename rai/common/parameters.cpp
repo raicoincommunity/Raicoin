@@ -210,7 +210,7 @@ uint64_t rai::RewardTimestamp(uint64_t begin, uint64_t end)
     return result;
 }
 
-uint16_t rai::MaxAllowedForks(uint64_t timestamp)
+uint16_t rai::BaseAllowedForks(uint64_t timestamp)
 {
     uint16_t constexpr min_forks = 4;
     uint16_t constexpr max_forks = 256;
@@ -227,6 +227,12 @@ uint16_t rai::MaxAllowedForks(uint64_t timestamp)
         return max_forks;
     }
     return static_cast<uint16_t>(forks);
+}
+
+uint64_t rai::MaxAllowedForks(uint64_t timestamp, uint32_t credit)
+{
+    return rai::BaseAllowedForks(timestamp)
+           + uint64_t(credit) * rai::EXTRA_FORKS_PER_CREDIT;
 }
 
 rai::Chain rai::CurrentChain()

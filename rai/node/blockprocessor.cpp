@@ -435,7 +435,17 @@ void rai::BlockProcessor::ProcessBlockFork_(
             break;
         }
 
-        if (info.forks_ < rai::MaxAllowedForks(rai::CurrentTimestamp()) + 2)
+        std::shared_ptr<rai::Block> head(nullptr);
+        error = node_.ledger_.BlockGet(transaction, info.head_, head);
+        if (error || head == nullptr)
+        {
+            rai::Stats::AddDetail(rai::ErrorCode::LEDGER_BLOCK_GET,
+                                  "BlockProcessor::ProcessBlockFork_");
+            return;
+        }
+
+        if (info.forks_
+            < rai::MaxAllowedForks(rai::CurrentTimestamp(), head->Credit()) + 2)
         {
             error =
                 ledger_.ForkPut(transaction, account, height, *first, *second);
