@@ -4,6 +4,7 @@
 #include <rai/common/util.hpp>
 #include <rai/common/log.hpp>
 #include <rai/common/numbers.hpp>
+#include <rai/common/chain.hpp>
 
 namespace rai
 {
@@ -33,6 +34,8 @@ public:
     uint32_t election_concurrency_;
     bool enable_rich_list_;
     bool enable_delegator_list_;
+    rai::Url validator_url_;
+    std::vector<std::pair<rai::Chain, rai::SignerAddress>> signers_;
 };
 
 }

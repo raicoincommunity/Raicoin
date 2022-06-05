@@ -103,6 +103,10 @@ std::string rai::BlockOpcodeToString(rai::BlockOpcode opcode)
         {
             return "destroy";
         }
+        case rai::BlockOpcode::BIND:
+        {
+            return "bind";
+        }
         default:
         {
             return std::to_string(static_cast<uint8_t>(opcode));
@@ -136,18 +140,28 @@ rai::BlockOpcode rai::StringToBlockOpcode(const std::string& str)
     {
         return rai::BlockOpcode::DESTROY;
     }
+    else if (str == "bind")
+    {
+        return rai::BlockOpcode::BIND;
+    }
     else
     {
         return rai::BlockOpcode::INVALID;
     }
 }
 
-rai::Block::Block() : signature_checked_(false), signature_error_(false)
+rai::Block::Block()
+    : signature_checked_(false), signature_error_(false), hash_cache_(0)
 {
 }
 
 rai::BlockHash rai::Block::Hash() const
 {
+    if (!hash_cache_.IsZero())
+    {
+        return hash_cache_;
+    }
+
     int ret;
     rai::uint256_union result;
     blake2b_state hash;
@@ -159,6 +173,7 @@ rai::BlockHash rai::Block::Hash() const
 
     ret = blake2b_final(&hash, result.bytes.data(), sizeof(result.bytes));
     assert(0 == ret);
+    hash_cache_ = result;
     return result;
 }
 
@@ -264,6 +279,11 @@ bool rai::Block::CheckSignature_() const
     signature_error_ = rai::ValidateMessage(Account(), Hash(), Signature());
     signature_checked_ = true;
     return signature_error_;
+}
+
+void rai::Block::ClearHashCache_()
+{
+    hash_cache_.Clear();
 }
 
 rai::TxBlock::TxBlock(
@@ -388,6 +408,7 @@ void rai::TxBlock::Serialize(rai::Stream& stream) const
 
 rai::ErrorCode rai::TxBlock::Deserialize(rai::Stream& stream)
 {
+    ClearHashCache_();
     bool error = false;
     
     type_ = rai::BlockType::TX_BLOCK;
@@ -478,6 +499,7 @@ void rai::TxBlock::SerializeJson(rai::Ptree& ptree) const
 
 rai::ErrorCode rai::TxBlock::DeserializeJson(const rai::Ptree& ptree)
 {
+    ClearHashCache_();
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
 
     try
@@ -688,6 +710,16 @@ std::vector<uint8_t> rai::TxBlock::Extensions() const
     return extensions_;
 }
 
+bool rai::TxBlock::HasChain() const
+{
+    return false;
+}
+
+rai::Chain rai::TxBlock::Chain() const
+{
+    return rai::Chain::INVALID;
+}
+
 bool rai::TxBlock::CheckOpcode(rai::BlockOpcode opcode)
 {
     std::vector<rai::BlockOpcode> opcodes = {
@@ -713,8 +745,7 @@ rai::RepBlock::RepBlock(rai::BlockOpcode opcode, uint16_t credit,
                         const rai::BlockHash& previous,
                         const rai::Amount& balance,
                         const rai::uint256_union& link,
-                        const rai::RawKey& private_key,
-                        const rai::PublicKey& public_key)
+                        rai::Chain chain)
     : type_(rai::BlockType::REP_BLOCK),
       opcode_(opcode),
       credit_(credit),
@@ -725,6 +756,30 @@ rai::RepBlock::RepBlock(rai::BlockOpcode opcode, uint16_t credit,
       previous_(previous),
       balance_(balance),
       link_(link),
+      chain_(chain)
+{
+}
+
+rai::RepBlock::RepBlock(rai::BlockOpcode opcode, uint16_t credit,
+                        uint32_t counter, uint64_t timestamp, uint64_t height,
+                        const rai::Account& account,
+                        const rai::BlockHash& previous,
+                        const rai::Amount& balance,
+                        const rai::uint256_union& link,
+                        const rai::RawKey& private_key,
+                        const rai::PublicKey& public_key,
+                        rai::Chain chain)
+    : type_(rai::BlockType::REP_BLOCK),
+      opcode_(opcode),
+      credit_(credit),
+      counter_(counter),
+      timestamp_(timestamp),
+      height_(height),
+      account_(account),
+      previous_(previous),
+      balance_(balance),
+      link_(link),
+      chain_(chain),
       signature_(rai::SignMessage(private_key, public_key, Hash()))
 {
 }
@@ -751,7 +806,7 @@ bool rai::RepBlock::operator==(const rai::RepBlock& other) const
            && (timestamp_ == other.timestamp_) && (height_ == other.height_)
            && (account_ == other.account_) && (previous_ == other.previous_)
            && (balance_ == other.balance_) && (link_ == other.link_)
-           && (signature_ == other.signature_);
+           && (chain_ == other.chain_) && (signature_ == other.signature_);
 }
 
 void rai::RepBlock::Hash(blake2b_state& state) const
@@ -769,6 +824,10 @@ void rai::RepBlock::Hash(blake2b_state& state) const
         rai::Write(stream, previous_.bytes);
         rai::Write(stream, balance_.bytes);
         rai::Write(stream, link_.bytes);
+        if (HasChain())
+        {
+            rai::Write(stream, chain_);
+        }
     }
 
     blake2b_update(&state, bytes.data(), bytes.size());
@@ -791,11 +850,16 @@ void rai::RepBlock::Serialize(rai::Stream& stream) const
     rai::Write(stream, previous_.bytes);
     rai::Write(stream, balance_.bytes);
     rai::Write(stream, link_.bytes);
+    if (HasChain())
+    {
+        rai::Write(stream, chain_);
+    }
     rai::Write(stream, signature_.bytes);
 }
 
 rai::ErrorCode rai::RepBlock::Deserialize(rai::Stream& stream)
 {
+    ClearHashCache_();
     bool error = false;
     
     type_ = rai::BlockType::REP_BLOCK;
@@ -833,6 +897,20 @@ rai::ErrorCode rai::RepBlock::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, link_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
+    if (HasChain())
+    {
+        error = rai::Read(stream, chain_);
+        IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+        if (chain_ == rai::Chain::INVALID)
+        {
+            return rai::ErrorCode::BLOCK_CHAIN;
+        }
+    }
+    else
+    {
+        chain_ = rai::Chain::INVALID;
+    }
+
     error = rai::Read(stream, signature_.bytes);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
@@ -858,11 +936,17 @@ void rai::RepBlock::SerializeJson(rai::Ptree& ptree) const
     {
         ptree.put("link", link_.StringHex());
     }
+    if (HasChain())
+    {
+        ptree.put("chain", rai::ChainToString(chain_));
+        ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    }
     ptree.put("signature", signature_.StringHex());
 }
 
 rai::ErrorCode rai::RepBlock::DeserializeJson(const rai::Ptree& ptree)
 {
+    ClearHashCache_();
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
 
     try
@@ -932,6 +1016,24 @@ rai::ErrorCode rai::RepBlock::DeserializeJson(const rai::Ptree& ptree)
         }
         IF_ERROR_RETURN(error, error_code);
 
+        if (HasChain())
+        {
+            error_code = rai::ErrorCode::JSON_BLOCK_CHAIN_ID;
+            std::string chain_str = ptree.get<std::string>("chain_id");
+            uint32_t chain;
+            error = rai::StringToUint(chain_str, chain);
+            IF_ERROR_RETURN(error, error_code);
+            chain_ = static_cast<rai::Chain>(chain);
+            if (chain_ == rai::Chain::INVALID)
+            {
+                return error_code;
+            }
+        }
+        else
+        {
+            chain_ = rai::Chain::INVALID;
+        }
+
         error_code = rai::ErrorCode::JSON_BLOCK_SIGNATURE;
         std::string signature = ptree.get<std::string>("signature");
         error = signature_.DecodeHex(signature);
@@ -986,6 +1088,10 @@ rai::ErrorCode rai::RepBlock::Visit(rai::BlockVisitor& visitor) const
     else if (opcode_ == rai::BlockOpcode::REWARD)
     {
         return visitor.Reward(*this);
+    }
+    else if (opcode_ == rai::BlockOpcode::BIND)
+    {
+        return visitor.Bind(*this);
     }
     else
     {
@@ -1044,11 +1150,22 @@ std::vector<uint8_t> rai::RepBlock::Extensions() const
     return std::vector<uint8_t>();
 }
 
+bool rai::RepBlock::HasChain() const
+{
+    return opcode_ == rai::BlockOpcode::BIND;
+}
+
+rai::Chain rai::RepBlock::Chain() const
+{
+    return chain_;
+}
+
 bool rai::RepBlock::CheckOpcode(rai::BlockOpcode opcode)
 {
     std::vector<rai::BlockOpcode> opcodes = {
         rai::BlockOpcode::SEND, rai::BlockOpcode::RECEIVE,
-        rai::BlockOpcode::REWARD, rai::BlockOpcode::CREDIT};
+        rai::BlockOpcode::REWARD, rai::BlockOpcode::CREDIT,
+        rai::BlockOpcode::BIND};
 
     return std::find(opcodes.begin(), opcodes.end(), opcode) == opcodes.end();
 }
@@ -1147,6 +1264,7 @@ void rai::AdBlock::Serialize(rai::Stream& stream) const
 
 rai::ErrorCode rai::AdBlock::Deserialize(rai::Stream& stream)
 {
+    ClearHashCache_();
     bool error = false;
     
     type_ = rai::BlockType::AD_BLOCK;
@@ -1216,6 +1334,7 @@ void rai::AdBlock::SerializeJson(rai::Ptree& ptree) const
 
 rai::ErrorCode rai::AdBlock::DeserializeJson(const rai::Ptree& ptree)
 {
+    ClearHashCache_();
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
 
     try
@@ -1393,6 +1512,16 @@ bool rai::AdBlock::HasRepresentative() const
 std::vector<uint8_t> rai::AdBlock::Extensions() const
 {
     return std::vector<uint8_t>();
+}
+
+bool rai::AdBlock::HasChain() const
+{
+    return false;
+}
+
+rai::Chain rai::AdBlock::Chain() const
+{
+    return rai::Chain::INVALID;
 }
 
 bool rai::AdBlock::CheckOpcode(rai::BlockOpcode opcode)
@@ -1644,6 +1773,229 @@ rai::ErrorCode rai::TxBlockBuilder::Send(std::shared_ptr<rai::Block>& block,
         block = std::make_shared<rai::TxBlock>(
             opcode, credit, counter, timestamp, height, account_, previous,
             rep, balance, link, extensions.size(), extensions);
+    }
+
+    previous_ = block;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::RepBlockBuilder::RepBlockBuilder(
+    const rai::Account& account, const std::shared_ptr<rai::Block>& previous)
+    : has_key_(false), account_(account), previous_(previous)
+{
+}
+
+rai::RepBlockBuilder::RepBlockBuilder(
+    const rai::Account& account, const rai::RawKey& private_key,
+    const std::shared_ptr<rai::Block>& previous)
+    : has_key_(true),
+      account_(account),
+      private_key_(private_key),
+      previous_(previous)
+{
+}
+
+rai::ErrorCode rai::RepBlockBuilder::Bind(std::shared_ptr<rai::Block>& block,
+                                          rai::Chain chain,
+                                          const rai::SignerAddress& signer,
+                                          uint64_t now)
+{
+    if (!previous_)
+    {
+        return rai::ErrorCode::BLOCK_OPCODE;
+    }
+
+    if (previous_->Type() != rai::BlockType::REP_BLOCK)
+    {
+        return rai::ErrorCode::BLOCK_TYPE;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::BIND;
+    uint16_t credit = previous_->Credit();
+    uint64_t timestamp =
+        now > previous_->Timestamp() ? now : previous_->Timestamp();
+    if (timestamp > now + 60)
+    {
+        return rai::ErrorCode::BLOCK_TIMESTAMP;
+    }
+
+    uint32_t counter = rai::SameDay(timestamp, previous_->Timestamp())
+                           ? previous_->Counter() + 1
+                           : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        return rai::ErrorCode::BLOCK_COUNTER;
+    }
+
+    uint64_t height = previous_->Height() + 1;
+    rai::BlockHash previous = previous_->Hash();
+    rai::Amount balance = previous_->Balance();
+    rai::uint256_union link(signer);
+
+    if (has_key_)
+    {
+        block = std::make_shared<rai::RepBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            balance, link, private_key_, account_, chain);
+    }
+    else
+    {
+        block = std::make_shared<rai::RepBlock>(opcode, credit, counter,
+                                                timestamp, height, account_,
+                                                previous, balance, link, chain);
+    }
+
+    previous_ = block;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::RepBlockBuilder::Credit(std::shared_ptr<rai::Block>& block,
+                                            uint16_t credit_inc, uint64_t now)
+{
+    if (!previous_)
+    {
+        return rai::ErrorCode::BLOCK_OPCODE;
+    }
+
+    if (previous_->Type() != rai::BlockType::REP_BLOCK)
+    {
+        return rai::ErrorCode::BLOCK_TYPE;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::CREDIT;
+    uint16_t credit = previous_->Credit() + credit_inc;
+    if (credit <= previous_->Credit())
+    {
+        return rai::ErrorCode::BLOCK_CREDIT;
+    }
+    uint64_t timestamp =
+        now > previous_->Timestamp() ? now : previous_->Timestamp();
+    if (timestamp > now + 60)
+    {
+        return rai::ErrorCode::BLOCK_TIMESTAMP;
+    }
+
+    uint32_t counter = rai::SameDay(timestamp, previous_->Timestamp())
+                           ? previous_->Counter() + 1
+                           : 1;
+    if (counter > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+    {
+        return rai::ErrorCode::BLOCK_COUNTER;
+    }
+
+    uint64_t height = previous_->Height() + 1;
+    rai::BlockHash previous = previous_->Hash();
+
+    rai::Amount cost = rai::CreditPrice(timestamp) * credit_inc;
+    if (cost > previous_->Balance())
+    {
+        return rai::ErrorCode::ACCOUNT_ACTION_BALANCE;
+    }
+    rai::Amount balance = previous_->Balance() - cost;
+
+    rai::uint256_union link(0);
+
+    if (has_key_)
+    {
+        block = std::make_shared<rai::RepBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            balance, link, private_key_, account_);
+    }
+    else
+    {
+        block = std::make_shared<rai::RepBlock>(opcode, credit, counter,
+                                                timestamp, height, account_,
+                                                previous, balance, link);
+    }
+
+    previous_ = block;
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::RepBlockBuilder::Receive(
+    std::shared_ptr<rai::Block>& block, const rai::BlockHash& source,
+    const rai::Amount& amount, uint64_t sent_at, uint64_t now)
+{
+    if (amount.IsZero())
+    {
+        return rai::ErrorCode::RECEIVABLE_AMOUNT;
+    }
+
+    rai::BlockOpcode opcode = rai::BlockOpcode::RECEIVE;
+    uint16_t credit = 0;
+    uint64_t timestamp = 0;
+    uint32_t counter = 0;
+    uint64_t height = 0;
+    rai::BlockHash previous;
+    rai::Amount balance;
+    rai::uint256_union link;
+
+    if (!previous_)
+    {
+        credit = 1;
+        timestamp = now >= sent_at ? now : sent_at;
+        if (timestamp > now + 60)
+        {
+            return rai::ErrorCode::BLOCK_TIMESTAMP;
+        }
+        counter = 1;
+        height = 0;
+        previous = 0;
+        if (amount < rai::CreditPrice(timestamp))
+        {
+            return rai::ErrorCode::RECEIVABLE_AMOUNT;
+        }
+        balance = amount - rai::CreditPrice(timestamp);
+        link = source;
+    }
+    else
+    {
+        if (previous_->Type() != rai::BlockType::REP_BLOCK)
+        {
+            return rai::ErrorCode::BLOCK_TYPE;
+        }
+
+        credit = previous_->Credit();
+        timestamp =
+            now > previous_->Timestamp() ? now : previous_->Timestamp();
+        if (timestamp < sent_at)
+        {
+            timestamp = sent_at;
+        }
+        if (timestamp > now + 60)
+        {
+            return rai::ErrorCode::BLOCK_TIMESTAMP;
+        }
+
+        counter = rai::SameDay(timestamp, previous_->Timestamp())
+                      ? previous_->Counter() + 1
+                      : 1;
+        if (counter
+            > static_cast<uint32_t>(credit) * rai::TRANSACTIONS_PER_CREDIT)
+        {
+            return rai::ErrorCode::BLOCK_COUNTER;
+        }
+        height = previous_->Height() + 1;
+        previous = previous_->Hash();
+        balance = previous_->Balance() + amount;
+        if (balance < amount)
+        {
+            return rai::ErrorCode::RECEIVABLE_AMOUNT;
+        }
+        link = source;
+    }
+
+    if (has_key_)
+    {
+        block = std::make_shared<rai::RepBlock>(
+            opcode, credit, counter, timestamp, height, account_, previous,
+            balance, link, private_key_, account_);
+    }
+    else
+    {
+        block = std::make_shared<rai::RepBlock>(opcode, credit, counter,
+                                                timestamp, height, account_,
+                                                previous, balance, link);
     }
 
     previous_ = block;

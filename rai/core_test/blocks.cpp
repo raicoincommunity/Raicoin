@@ -1,10 +1,11 @@
 #include <ed25519-donna/ed25519.h>
 #include <gtest/gtest.h>
 #include <iostream>
-#include <rai/core_test/test_util.hpp>
 #include <rai/common/blocks.hpp>
+#include <rai/core_test/test_util.hpp>
 #include <string>
 #include <vector>
+
 
 namespace
 {
@@ -20,7 +21,7 @@ void DumpSignature(const rai::Block& block)
     signature = rai::SignMessage(raw_key, public_key, block.Hash());
     std::cout << signature.StringHex() << std::endl;
 }
-}
+}  // namespace
 
 TEST(TxBlock, constructor)
 {
@@ -61,12 +62,12 @@ TEST(TxBlock, constructor)
     str += "00000000000000000000000000000001";  // balance
     // link
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
-    str += "0000000B";            // extensions_length
+    str += "0000000B";                // extensions_length
     str += "00020007726169636F696E";  // extensions
 
-    size_t size    = str.size() / 2;
+    size_t size = str.size() / 2;
     uint8_t* bytes = new uint8_t[size];
-    bool ret       = TestDecodeHex(str, bytes, size);
+    bool ret = TestDecodeHex(str, bytes, size);
     EXPECT_EQ(false, ret);
 
     unsigned char hash_expect[32] = "";
@@ -322,7 +323,10 @@ TEST(TxBlock, deserialize_json_opcode)
     str.replace(str.find("receive"), std::string("receive").size(), "change");
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
-    ptree.put<std::string>("signature", "52F671F408E505C72150860F19EB3D66398BB24103DB5A89EF4B94D04F7C29099B6F1A52342C79AEB07C6E2DD3DCC4D81F9735459EBD741757BE09D7ABAD9406");
+    ptree.put<std::string>(
+        "signature",
+        "52F671F408E505C72150860F19EB3D66398BB24103DB5A89EF4B94D04F7C29099B6F1A"
+        "52342C79AEB07C6E2DD3DCC4D81F9735459EBD741757BE09D7ABAD9406");
     rai::TxBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(rai::BlockOpcode::CHANGE, block4.Opcode());
@@ -363,7 +367,7 @@ TEST(TxBlock, deserialize_json_credit)
     rai::TxBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65536",
@@ -388,7 +392,7 @@ TEST(TxBlock, deserialize_json_credit)
     rai::TxBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "0xFFFF",
@@ -413,7 +417,7 @@ TEST(TxBlock, deserialize_json_credit)
     rai::TxBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "01",
@@ -438,7 +442,7 @@ TEST(TxBlock, deserialize_json_credit)
     rai::TxBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "-1",
@@ -463,7 +467,7 @@ TEST(TxBlock, deserialize_json_credit)
     rai::TxBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "",
@@ -543,7 +547,7 @@ TEST(TxBlock, deserialize_json_counter)
     rai::TxBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_COUNTER, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -598,7 +602,7 @@ TEST(TxBlock, deserialize_json_timestamp)
     rai::TxBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -623,7 +627,7 @@ TEST(TxBlock, deserialize_json_timestamp)
     rai::TxBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_TIMESTAMP, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -678,7 +682,7 @@ TEST(TxBlock, deserialize_json_height)
     rai::TxBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -703,7 +707,7 @@ TEST(TxBlock, deserialize_json_height)
     rai::TxBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -728,7 +732,7 @@ TEST(TxBlock, deserialize_json_height)
     rai::TxBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -753,7 +757,7 @@ TEST(TxBlock, deserialize_json_height)
     rai::TxBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -778,7 +782,7 @@ TEST(TxBlock, deserialize_json_height)
     rai::TxBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -893,7 +897,7 @@ TEST(TxBlock, deserialize_json_balance)
     rai::TxBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -918,7 +922,7 @@ TEST(TxBlock, deserialize_json_balance)
     rai::TxBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -943,7 +947,7 @@ TEST(TxBlock, deserialize_json_balance)
     rai::TxBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -968,7 +972,7 @@ TEST(TxBlock, deserialize_json_balance)
     rai::TxBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -993,7 +997,7 @@ TEST(TxBlock, deserialize_json_balance)
     rai::TxBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "1",
@@ -1090,7 +1094,7 @@ TEST(TxBlock, deserialize_json_extensions)
     rai::TxBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -1127,7 +1131,7 @@ TEST(TxBlock, deserialize_json_extensions)
     rai::TxBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::EXTENSIONS_LENGTH, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -1152,7 +1156,7 @@ TEST(TxBlock, deserialize_json_extensions)
     rai::TxBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSION_TYPE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -1177,7 +1181,7 @@ TEST(TxBlock, deserialize_json_extensions)
     rai::TxBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_EXTENSION_VALUE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "transaction",
     "opcode": "send",
     "credit": "65535",
@@ -1260,7 +1264,7 @@ TEST(TxBlock, deserialize)
                        {0, 1, 0, 7, 'r', 'a', 'i', 'c', 'o', 'i', 'n'}, raw_key,
                        public_key);
     std::string str("");
-    str += "01000100000001";  // opcode + credit + counter
+    str += "01000100000001";    // opcode + credit + counter
     str += "000000005BDBC07E";  // timestamp
     str += "0000000000000001";  // height
                                 // account
@@ -1271,7 +1275,7 @@ TEST(TxBlock, deserialize)
     str += "00000000000000000000000000000001";  // balance
     // link
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
-    str += "0000000B";            // extensions_length
+    str += "0000000B";                // extensions_length
     str += "00010007726169636F696E";  // extensions
     // signature
     str +=
@@ -1336,7 +1340,7 @@ TEST(TxBlock, serialize)
     str += "00000000000000000000000000000001";  // balance
     // link
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
-    str += "0000000B";            // extensions_length
+    str += "0000000B";                // extensions_length
     str += "00010007726169636F696E";  // extensions
     // signature
     str +=
@@ -1432,9 +1436,9 @@ TEST(RepBlock, constructor)
     // link
     str += "0000000000000000000000000000000000000000000000000000000000000000";
 
-    size_t size    = str.size() / 2;
+    size_t size = str.size() / 2;
     uint8_t* bytes = new uint8_t[size];
-    bool ret       = TestDecodeHex(str, bytes, size);
+    bool ret = TestDecodeHex(str, bytes, size);
     EXPECT_EQ(false, ret);
 
     unsigned char hash_expect[32] = "";
@@ -1627,7 +1631,7 @@ TEST(RepBlock, deserialize_json_opcode)
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(rai::BlockOpcode::SEND, block1.Opcode());
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "receive",
     "credit": "1",
@@ -1649,7 +1653,10 @@ TEST(RepBlock, deserialize_json_opcode)
     str.replace(str.find("receive"), std::string("receive").size(), "reward");
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
-    ptree.put<std::string>("signature", "D91FF6492BB9BC7878A86EF9B3C883A951D7C1ED20A8A76B96459E1C1BE0D02B4C1D0F4F6CA057F53283FD20C66918597549970E2E3454C95484DB78F9C43503");
+    ptree.put<std::string>(
+        "signature",
+        "D91FF6492BB9BC7878A86EF9B3C883A951D7C1ED20A8A76B96459E1C1BE0D02B4C1D0F"
+        "4F6CA057F53283FD20C66918597549970E2E3454C95484DB78F9C43503");
     rai::RepBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(rai::BlockOpcode::REWARD, block4.Opcode());
@@ -1683,7 +1690,7 @@ TEST(RepBlock, deserialize_json_credit)
     rai::RepBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "65536",
@@ -1701,7 +1708,7 @@ TEST(RepBlock, deserialize_json_credit)
     rai::RepBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "0xFFFF",
@@ -1719,7 +1726,7 @@ TEST(RepBlock, deserialize_json_credit)
     rai::RepBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "01",
@@ -1737,7 +1744,7 @@ TEST(RepBlock, deserialize_json_credit)
     rai::RepBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "-1",
@@ -1755,7 +1762,7 @@ TEST(RepBlock, deserialize_json_credit)
     rai::RepBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "",
@@ -1796,7 +1803,7 @@ TEST(RepBlock, deserialize_json_counter)
     rai::RepBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "65535",
@@ -1814,7 +1821,7 @@ TEST(RepBlock, deserialize_json_counter)
     rai::RepBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_COUNTER, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -1832,7 +1839,7 @@ TEST(RepBlock, deserialize_json_counter)
     rai::RepBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_COUNTER, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -1850,7 +1857,7 @@ TEST(RepBlock, deserialize_json_counter)
     rai::RepBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_COUNTER, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -1891,7 +1898,7 @@ TEST(RepBlock, deserialize_json_timestamp)
     rai::RepBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "65535",
@@ -1909,7 +1916,7 @@ TEST(RepBlock, deserialize_json_timestamp)
     rai::RepBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_TIMESTAMP, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -1950,7 +1957,7 @@ TEST(RepBlock, deserialize_json_height)
     rai::RepBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "65535",
@@ -1968,7 +1975,7 @@ TEST(RepBlock, deserialize_json_height)
     rai::RepBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -1986,7 +1993,7 @@ TEST(RepBlock, deserialize_json_height)
     rai::RepBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2004,7 +2011,7 @@ TEST(RepBlock, deserialize_json_height)
     rai::RepBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2022,7 +2029,7 @@ TEST(RepBlock, deserialize_json_height)
     rai::RepBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_HEIGHT, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2086,7 +2093,7 @@ TEST(RepBlock, deserialize_json_balance)
     rai::RepBlock block1(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "65535",
@@ -2104,7 +2111,7 @@ TEST(RepBlock, deserialize_json_balance)
     rai::RepBlock block2(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2122,7 +2129,7 @@ TEST(RepBlock, deserialize_json_balance)
     rai::RepBlock block3(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2140,7 +2147,7 @@ TEST(RepBlock, deserialize_json_balance)
     rai::RepBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2158,7 +2165,7 @@ TEST(RepBlock, deserialize_json_balance)
     rai::RepBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_BALANCE, error_code);
 
-    str    = R"%%%({
+    str = R"%%%({
     "type": "representative",
     "opcode": "send",
     "credit": "1",
@@ -2246,7 +2253,7 @@ TEST(RepBlock, deserialize)
                         hash, balance, link, raw_key, public_key);
 
     std::string str("");
-    str += "01000100000001";  // opcode + credit + counter
+    str += "01000100000001";    // opcode + credit + counter
     str += "000000005BDBC07E";  // timestamp
     str += "0000000000000001";  // height
                                 // account
@@ -2406,9 +2413,9 @@ TEST(AdBlock, constructor)
     // link
     str += "0000000000000000000000000000000000000000000000000000000000000000";
 
-    size_t size    = str.size() / 2;
+    size_t size = str.size() / 2;
     uint8_t* bytes = new uint8_t[size];
-    bool ret       = TestDecodeHex(str, bytes, size);
+    bool ret = TestDecodeHex(str, bytes, size);
     EXPECT_EQ(false, ret);
 
     unsigned char hash_expect[32] = "";
@@ -2437,7 +2444,6 @@ TEST(AdBlock, constructor)
                                   signature.bytes.end());
     ASSERT_EQ(v3, v4);
 }
-
 
 TEST(AdBlock, equal_or_not)
 {
@@ -2622,7 +2628,10 @@ TEST(AdBlock, deserialize_json_opcode)
     str.replace(str.find("receive"), std::string("receive").size(), "change");
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
-    ptree.put<std::string>("signature", "5355EC310FDAE559519B65070E2A0286F49DE54079D4170F62A212801DF8DD5E36720E53A47A4096E98FE11DDDBE50DBC569EAD3EE350E5907CA394CFB8DAE03");
+    ptree.put<std::string>(
+        "signature",
+        "5355EC310FDAE559519B65070E2A0286F49DE54079D4170F62A212801DF8DD5E36720E"
+        "53A47A4096E98FE11DDDBE50DBC569EAD3EE350E5907CA394CFB8DAE03");
     rai::AdBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(rai::BlockOpcode::CHANGE, block4.Opcode());
@@ -2630,7 +2639,10 @@ TEST(AdBlock, deserialize_json_opcode)
     str.replace(str.find("change"), std::string("change").size(), "destroy");
     stream = std::stringstream(str);
     boost::property_tree::read_json(stream, ptree);
-    ptree.put<std::string>("signature", "9C951A2C381BAD69E8BBA671A9541C9C6AB44FD9E73B369BED2C4BEA6818755D225241C8907B86849B2D3BA9055BAAFBC322E658EDFD48330CE3102DECFCE102");
+    ptree.put<std::string>(
+        "signature",
+        "9C951A2C381BAD69E8BBA671A9541C9C6AB44FD9E73B369BED2C4BEA6818755D225241"
+        "C8907B86849B2D3BA9055BAAFBC322E658EDFD48330CE3102DECFCE102");
     rai::AdBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::SUCCESS, error_code);
     ASSERT_EQ(rai::BlockOpcode::DESTROY, block5.Opcode());
@@ -2722,7 +2734,6 @@ TEST(AdBlock, deserialize_json_credit)
     rai::AdBlock block4(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
 
-
     str = R"%%%({
     "type": "airdrop",
     "opcode": "receive",
@@ -2741,7 +2752,6 @@ TEST(AdBlock, deserialize_json_credit)
     boost::property_tree::read_json(stream, ptree);
     rai::AdBlock block5(error_code, ptree);
     ASSERT_EQ(rai::ErrorCode::JSON_BLOCK_CREDIT, error_code);
-
 
     str = R"%%%({
     "type": "airdrop",
@@ -3246,7 +3256,7 @@ TEST(AdBlock, deserialize)
     rai::AdBlock block(rai::BlockOpcode::DESTROY, 1, 1, 1541128318, 1, account,
                        hash, representive, balance, link, raw_key, public_key);
     std::string str("");
-    str += "06000100000001";  // opcode + credit + counter
+    str += "06000100000001";    // opcode + credit + counter
     str += "000000005BDBC07E";  // timestamp
     str += "0000000000000001";  // height
                                 // account
@@ -3259,7 +3269,8 @@ TEST(AdBlock, deserialize)
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
     // signature
     str +=
-        "2E119431BA93B502C2B0E3A8AF45C7561830FE7B952C19ACF60A2E425BC9201D425110488907CBEE54E54FA1FEF446AB0ED4DAF41321E027D8C28FC65D151107";
+        "2E119431BA93B502C2B0E3A8AF45C7561830FE7B952C19ACF60A2E425BC9201D425110"
+        "488907CBEE54E54FA1FEF446AB0ED4DAF41321E027D8C28FC65D151107";
 
     std::vector<uint8_t> bytes;
     bool error = TestDecodeHex(str, bytes);
@@ -3277,7 +3288,6 @@ TEST(AdBlock, deserialize)
 
 TEST(AdBlock, serialize)
 {
-
     rai::Account account;
     rai::BlockHash hash;
     rai::Account representive;
@@ -3305,7 +3315,7 @@ TEST(AdBlock, serialize)
         rai::VectorStream stream(bytes);
         block.Serialize(stream);
     }
-                       
+
     std::string str("");
     str += "0306000100000001";  // type + opcode + credit + counter
     str += "000000005BDBC07E";  // timestamp
@@ -3320,7 +3330,8 @@ TEST(AdBlock, serialize)
     str += "B0311EA55708D6A53C75CDBF88300259C6D018522FE3D4D0A242E431F9E8B6D0";
     // signature
     str +=
-        "2E119431BA93B502C2B0E3A8AF45C7561830FE7B952C19ACF60A2E425BC9201D425110488907CBEE54E54FA1FEF446AB0ED4DAF41321E027D8C28FC65D151107";
+        "2E119431BA93B502C2B0E3A8AF45C7561830FE7B952C19ACF60A2E425BC9201D425110"
+        "488907CBEE54E54FA1FEF446AB0ED4DAF41321E027D8C28FC65D151107";
     std::vector<uint8_t> bytes_expect;
     bool error = TestDecodeHex(str, bytes_expect);
     ASSERT_FALSE(error);

@@ -26,6 +26,8 @@
 #include <rai/node/rewarder.hpp>
 #include <rai/node/rpc.hpp>
 #include <rai/node/config.hpp>
+#include <rai/node/bindingcache.hpp>
+#include <rai/node/validator.hpp>
 
 namespace rai
 {
@@ -264,6 +266,8 @@ public:
     rai::RpcHandlerMaker RpcHandlerMaker();
     rai::Amount Supply();
     void ReceiveWsMessage(const std::shared_ptr<rai::Ptree>&);
+    boost::optional<rai::SignerAddress> BindingQuery(const rai::Account&,
+                                                     rai::Chain);
 
     template <typename T>
     void Background(T action)
@@ -309,6 +313,8 @@ public:
     rai::Rewarder rewarder_;
     rai::ActiveAccounts active_accounts_;
     std::shared_ptr<rai::WebsocketClient> websocket_;
+    rai::BindingCaches binding_caches_;
+    rai::Validator validator_;
 };
 
 } // namespace rai

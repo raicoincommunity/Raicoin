@@ -110,3 +110,9 @@ rai::Chain rai::StringToChain(const std::string& str)
         return rai::Chain::INVALID;
     }
 }
+
+rai::Chain rai::GetChainFromBlockLink(const rai::uint256_union& link)
+{
+    return static_cast<rai::Chain>(
+        static_cast<uint32_t>((link.Number() >> 216) & 0xFFFFFFFF));
+}

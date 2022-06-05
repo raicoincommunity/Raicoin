@@ -319,6 +319,10 @@ void rai::BlockProcessor::ProcessBlock_(const std::shared_ptr<rai::Block>& block
             case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_PUT:
             case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_DEL:
             case rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT:
+            case rai::ErrorCode::BLOCK_PROCESS_CHAIN:
+            case rai::ErrorCode::BLOCK_PROCESS_BINDING_COUNT:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_PUT:
+            case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT:
             {
                 break;
             }
@@ -768,6 +772,10 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicAppend_(
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_PUT:
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_DEL:
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_ACCOUNT_INFO_PUT:
+        case rai::ErrorCode::BLOCK_PROCESS_CHAIN:
+        case rai::ErrorCode::BLOCK_PROCESS_BINDING_COUNT:
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_PUT:
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT:
         {
             transaction.Abort();
             return error_code;
@@ -900,6 +908,9 @@ rai::ErrorCode rai::BlockProcessor::ProcessBlockDynamicRollback_(
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_ROLLBACK_BLOCK_PUT:
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_RECEIVABLE_INFO_PUT:
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_REWARDABLE_INFO_PUT:
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT:
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_DEL:
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_DEL:
         {
             transaction.Abort();
             return error_code;
@@ -1675,6 +1686,88 @@ public:
         return rai::ErrorCode::SUCCESS;
     }
 
+    rai::ErrorCode Bind(const rai::Block& block) override
+    {
+        rai::ErrorCode error_code = CheckCommon(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        rai::AccountInfo account_info;
+        bool error = ledger_.AccountInfoGet(transaction_, block.Account(),
+                                            account_info);
+        bool account_exists = !error && account_info.Valid();
+        if (!account_exists)
+        {
+            if (block.Height() != 0)
+            {
+                return rai::ErrorCode::BLOCK_PROCESS_GAP_PREVIOUS;
+            }
+            return rai::ErrorCode::BLOCK_PROCESS_OPCODE;
+        }
+
+        std::shared_ptr<rai::Block> head_block(nullptr);
+        error = ledger_.BlockGet(transaction_, account_info.head_, head_block);
+        IF_ERROR_RETURN(error, rai::ErrorCode::BLOCK_PROCESS_LEDGER_BLOCK_GET);
+
+        error_code = CheckSuccessorCommon(block, *head_block, account_info);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (block.Credit() != head_block->Credit())
+        {
+            return rai::ErrorCode::BLOCK_PROCESS_CREDIT;
+        }
+
+        error_code = CheckCounterIncrease(*head_block, block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        if (block.Balance() != head_block->Balance())
+        {
+            return rai::ErrorCode::BLOCK_PROCESS_BALANCE;
+        }
+
+        if (!block.HasChain() || block.Chain() == rai::Chain::INVALID)
+        {
+            return rai::ErrorCode::BLOCK_PROCESS_CHAIN;
+        }
+
+        uint64_t count;
+        error = ledger_.BindingCountGet(transaction_, block.Account(), count);
+        if (error)
+        {
+            count = 0;
+        }
+        else
+        {
+            if (count >= rai::AllowedBindings(head_block->Credit()))
+            {
+                return rai::ErrorCode::BLOCK_PROCESS_BINDING_COUNT;
+            }
+        }
+
+        rai::BindingEntry entry(block.Chain(), block.Link());
+        error = ledger_.BindingEntryPut(transaction_, block.Account(),
+                                        block.Height(), entry);
+        IF_ERROR_RETURN(error,
+                        rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_PUT);
+
+        ++count;
+        error = ledger_.BindingCountPut(transaction_, block.Account(), count);
+        IF_ERROR_RETURN(error,
+                        rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT);
+
+        error_code = PutBlockSuccessor(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = UpdateAccountInfo(block, account_info);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        UpdateRepInfo(*head_block, block);
+
+        error_code = PutRewardableInfo(*head_block, block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        return rai::ErrorCode::SUCCESS;
+    }
+
     rai::Transaction& transaction_;
     rai::Ledger& ledger_;
 };
@@ -2102,6 +2195,100 @@ public:
     {
         rai::ErrorCode error_code = Check(block);
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = DeleteBlockSuccessor(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = PutRollbackBlock(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = UpdateAccountInfo(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = DeleteRewardableInfo(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        UpdateRepWeight(block);
+
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    rai::ErrorCode Bind(const rai::Block& block) override
+    {
+        rai::ErrorCode error_code = Check(block);
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = rai::ErrorCode::SUCCESS;
+        std::string error_info;
+        do
+        {
+            rai::BindingEntry entry;
+            bool error = ledger_.BindingEntryGet(transaction_, block.Account(),
+                                                 block.Height(), entry);
+            if (error)
+            {
+                error_info = rai::ToString(
+                    "RollbackBlockVisitor::Bind: failed to get binding entry, "
+                    "hash=",
+                    block.Hash().StringHex());
+                error_code = rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+                break;
+            }
+
+            uint64_t count = 0;
+            error =
+                ledger_.BindingCountGet(transaction_, block.Account(), count);
+            if (error)
+            {
+                error_info = rai::ToString(
+                    "RollbackBlockVisitor::Bind: failed to get binding count, "
+                    "hash=",
+                    block.Hash().StringHex());
+                error_code = rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+                break;
+            }
+            else if (count == 0)
+            {
+                error_info = rai::ToString(
+                    "RollbackBlockVisitor::Bind: binding count is 0, "
+                    "hash=",
+                    block.Hash().StringHex());
+                error_code = rai::ErrorCode::BLOCK_PROCESS_LEDGER_INCONSISTENT;
+                break;
+            }
+
+            error = ledger_.BindingEntryDel(transaction_, block.Account(),
+                                            block.Height());
+            IF_ERROR_RETURN(
+                error, rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_DEL);
+
+            --count;
+            if (count == 0)
+            {
+                error = ledger_.BindingCountDel(transaction_, block.Account());
+                IF_ERROR_RETURN(
+                    error,
+                    rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_DEL);
+            }
+            else
+            {
+                error = ledger_.BindingCountPut(transaction_, block.Account(),
+                                                count);
+                IF_ERROR_RETURN(
+                    error,
+                    rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT);
+            }
+        } while (0);
+
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            if (!error_info.empty())
+            {
+                rai::Log::Error(error_info);
+                rai::Stats::AddDetail(error_code, error_info);
+            }
+            return error_code;
+        }
 
         error_code = DeleteBlockSuccessor(block);
         IF_NOT_SUCCESS_RETURN(error_code);

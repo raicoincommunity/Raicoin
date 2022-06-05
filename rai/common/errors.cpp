@@ -550,6 +550,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to get nack block from ledger";
         }
+        case rai::ErrorCode::BLOCK_CHAIN:
+        {
+            return "Invalid block chain field";
+        }
+        case rai::ErrorCode::BINDING_IGNORED:
+        {
+            return "Binding ignored";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -820,6 +828,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse token extension swap ack_height from json";
         }
+        case rai::ErrorCode::JSON_BLOCK_CHAIN_ID:
+        {
+            return "Failed to parse chain id from json";
+        }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {
             return "Failed to parse version from config file";
@@ -1017,6 +1029,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_CONFIG_ELECTION_CONCURRENCY:
         {
             return "Failed to parse election concurrency from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_VALIDATOR_URL:
+        {
+            return "Failed to parse validator_url from config file";
         }
         case rai::ErrorCode::RPC_GENERIC:
         {
@@ -1314,6 +1330,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid order_height field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_CHAIN_ID:
+        {
+            return "[RPC] The chain_id field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_CHAIN_ID:
+        {
+            return "[RPC] Invalid chain_id field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";
@@ -1453,6 +1477,30 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::BLOCK_PROCESS_LEDGER_FORK_PUT:
         {
             return "Failed to put fork to ledger";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_CHAIN:
+        {
+            return "Invalid block chain field";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_BINDING_COUNT:
+        {
+            return "Binding count exceeds limit";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_PUT:
+        {
+            return "Failed to put bingding entry to ledger";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT:
+        {
+            return "Failed to put binding count to ledger";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_DEL:
+        {
+            return "Failed to delete binding entry from ledger";
+        }
+        case rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_COUNT_DEL:
+        {
+            return "Failed to delete binding count from ledger";
         }
         case rai::ErrorCode::BLOCK_PROCESS_ROLLBACK_REWARDED:
         {

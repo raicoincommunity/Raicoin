@@ -100,6 +100,8 @@ protected:
     bool GetTimestamp_(uint64_t&);
     bool GetNext_(rai::Account&);
     bool GetAccountTypes_(std::vector<rai::BlockType>&);
+    bool GetChain_(rai::Chain&);
+    bool GetChainById_(rai::Chain&);
 };
 
 std::unique_ptr<rai::Rpc> MakeRpc(boost::asio::io_service&,

@@ -1144,6 +1144,54 @@ rai::ErrorCode rai::BootstrapMessage::Check_() const
     return rai::ErrorCode::SUCCESS;
 }
 
+rai::WeightMessage::WeightMessage(rai::ErrorCode& error_code, rai::Stream& stream,
+                                const rai::MessageHeader& header)
+    : Message(header)
+{
+    error_code = Deserialize(stream);
+}
+
+void rai::WeightMessage::Serialize(rai::Stream& stream) const
+{
+    header_.Serialize(stream);
+    rai::Write(stream, request_id_.bytes);
+    rai::Write(stream, rep_.bytes);
+
+    if (GetFlag(rai::MessageFlags::ACK))
+    {
+        rai::Write(stream, epoch_);
+        rai::Write(stream, weight_.bytes);
+        rai::Write(stream, replier_.bytes);
+    }
+}
+
+rai::ErrorCode rai::WeightMessage::Deserialize(rai::Stream& stream)
+{
+    bool error = rai::Read(stream, request_id_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, rep_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    if (GetFlag(rai::MessageFlags::ACK))
+    {
+        error = rai::Read(stream, epoch_);
+        IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+        error = rai::Read(stream, weight_.bytes);
+        IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+        error = rai::Read(stream, replier_.bytes);
+        IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+void rai::WeightMessage::Visit(rai::MessageVisitor& visitor)
+{
+    visitor.Weight(*this);
+}
 
 rai::MessageParser::MessageParser(rai::MessageVisitor& visitor)
     : visitor_(visitor)

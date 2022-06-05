@@ -321,7 +321,8 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       bootstrap_(*this),
       bootstrap_listener_(*this, service, config.address_, config.port_),
       subscriptions_(*this),
-      rewarder_(*this, config_.forward_reward_to_, config_.daily_forward_times_)
+      rewarder_(*this, config_.forward_reward_to_, config_.daily_forward_times_),
+      validator_(*this, service_, config.validator_url_)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -970,6 +971,20 @@ public:
             message.block_second_, weight);
     }
 
+    void Weight(const rai::WeightMessage& message) override
+    {
+        if (message.GetFlag(rai::MessageFlags::ACK))
+        {
+            node_.validator_.ProcessWeightQueryAck(message);
+        }
+        else
+        {
+            // todo:
+        }
+        // todo:
+    }
+
+
 private:
     rai::Node& node_;
     rai::Endpoint sender_;
@@ -1488,6 +1503,25 @@ void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
         }
         active_accounts_.Add(block->Account());
     } while (0);
+
+    // update binding caches
+    do
+    {
+        if (result.error_code_ != rai::ErrorCode::SUCCESS)
+        {
+            break;
+        }
+
+        if (result.operation_ == rai::BlockOperation::APPEND)
+        {
+            binding_caches_.Update(block, true);
+        }
+        else if (result.operation_ == rai::BlockOperation::ROLLBACK)
+        {
+            binding_caches_.Update(block, false);
+        }
+    } while (0);
+    
 }
 
 void rai::Node::Ongoing(const std::function<void()>& process,
@@ -1972,3 +2006,59 @@ void rai::Node::ReceiveWsMessage(const std::shared_ptr<rai::Ptree>& message)
     handler.Process();
 }
 
+boost::optional<rai::SignerAddress> rai::Node::BindingQuery(
+    const rai::Account& account, rai::Chain chain)
+{
+    boost::optional<rai::SignerAddress> result(boost::none);
+    result = binding_caches_.Query(account, chain);
+    if (result)
+    {
+        return result;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, false);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return result;
+    }
+
+    rai::Iterator i = ledger_.BindingEntryLowerBound(transaction, account);
+    rai::Iterator n = ledger_.BindingEntryUpperBound(transaction, account);
+    for (; i != n; ++i)
+    {
+        rai::Account account_l;
+        uint64_t height;
+        rai::BindingEntry entry;
+        bool error = ledger_.BindingEntryGet(i, account_l, height, entry);
+        if (error)
+        {
+            rai::Log::Error(
+                rai::ToString("Node::BindingEntryGet: failed to get entry from "
+                              "ledger, account=",
+                              account.StringAccount()));
+            break;
+        }
+
+        if (account != account_l)
+        {
+            rai::Log::Error(rai::ToString(
+                "Node::BindingEntryGet: account mismatch, account=",
+                account.StringAccount(),
+                ", account_l=", account_l.StringAccount()));
+            break;
+        }
+
+        if (entry.chain_ == chain)
+        {
+            result = entry.signer_;
+            break;
+        }
+    }
+
+    if (result)
+    {
+        binding_caches_.Insert(account, chain, *result);
+    }
+    return result;
+}

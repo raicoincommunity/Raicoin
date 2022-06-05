@@ -135,6 +135,18 @@ public:
     rai::Account account_;
 };
 
+class BindingEntry
+{
+public:
+    BindingEntry() = default;
+    BindingEntry(rai::Chain, const rai::SignerAddress&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::Chain chain_;
+    rai::SignerAddress signer_;
+};
+
 class TokenKey
 {
 public:
@@ -729,6 +741,21 @@ public:
                                           const rai::Prefix&);
     rai::Iterator AliasDnsIndexUpperBound(rai::Transaction&, const rai::Prefix&,
                                           size_t = 64);
+    bool BindingCountPut(rai::Transaction&, const rai::Account&, uint64_t);
+    bool BindingCountGet(rai::Transaction&, const rai::Account&,
+                         uint64_t&) const;
+    bool BindingCountDel(rai::Transaction&, const rai::Account&);
+    bool BindingEntryPut(rai::Transaction&, const rai::Account&, uint64_t,
+                         const rai::BindingEntry&);
+    bool BindingEntryGet(rai::Transaction&, const rai::Account&, uint64_t,
+                         rai::BindingEntry&) const;
+    bool BindingEntryGet(const rai::Iterator&, rai::Account&, uint64_t&,
+                         rai::BindingEntry&) const;
+    bool BindingEntryDel(rai::Transaction&, const rai::Account&, uint64_t);
+    rai::Iterator BindingEntryLowerBound(rai::Transaction&,
+                                         const rai::Account&) const;
+    rai::Iterator BindingEntryUpperBound(rai::Transaction&,
+                                         const rai::Account&) const;
     bool AccountTokenInfoPut(rai::Transaction&, const rai::Account&, rai::Chain,
                              const rai::TokenAddress&,
                              const rai::AccountTokenInfo&);
@@ -762,7 +789,7 @@ public:
                            uint64_t);
     bool AccountTokenIdGet(rai::Transaction&, const rai::AccountTokenId&,
                            uint64_t&) const;
-    bool AccountTokenIdGet(rai::Iterator&, rai::AccountTokenId&,
+    bool AccountTokenIdGet(const rai::Iterator&, rai::AccountTokenId&,
                            uint64_t&) const;
     bool AccountTokenIdDel(rai::Transaction&, const rai::AccountTokenId&);
     bool AccountTokenIdExist(rai::Transaction&,
