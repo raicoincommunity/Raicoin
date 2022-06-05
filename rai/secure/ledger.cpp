@@ -100,7 +100,7 @@ void rai::AccountInfo::Serialize(rai::Stream& stream) const
 bool rai::AccountInfo::Deserialize(rai::Stream& stream)
 {
     bool error = false;
-    error      = rai::Read(stream, type_);
+    error = rai::Read(stream, type_);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, forks_);
     IF_ERROR_RETURN(error, true);
@@ -266,6 +266,28 @@ bool rai::AliasIndex::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, prefix_.bytes);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
+rai::BindingEntry::BindingEntry(rai::Chain chain,
+                                const rai::SignerAddress& signer)
+    : chain_(chain), signer_(signer)
+{
+}
+
+void rai::BindingEntry::Serialize(rai::Stream& stream) const
+{
+    rai::Write(stream, chain_);
+    rai::Write(stream, signer_.bytes);
+}
+
+bool rai::BindingEntry::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = rai::Read(stream, chain_);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, signer_.bytes);
     IF_ERROR_RETURN(error, true);
     return false;
 }
@@ -879,14 +901,11 @@ rai::OrderIndex::OrderIndex(rai::Chain chain_offer,
 {
 }
 
-rai::OrderIndex::OrderIndex(rai::Chain chain_offer,
-                            const rai::TokenAddress& address_offer,
-                            const rai::TokenValue& id_offer,
-                            rai::Chain chain_want,
-                            const rai::TokenAddress& address_want,
-                            const rai::TokenValue& id_want,
-                            const rai::SwapRate& rate,
-                            const rai::Account& maker, uint64_t height)
+rai::OrderIndex::OrderIndex(
+    rai::Chain chain_offer, const rai::TokenAddress& address_offer,
+    const rai::TokenValue& id_offer, rai::Chain chain_want,
+    const rai::TokenAddress& address_want, const rai::TokenValue& id_want,
+    const rai::SwapRate& rate, const rai::Account& maker, uint64_t height)
     : token_offer_(chain_offer, address_offer),
       type_offer_(rai::TokenType::_721),
       token_want_(chain_want, address_want),
@@ -1460,7 +1479,6 @@ bool rai::InquiryWaiting::Deserialize(rai::Stream& stream)
     return false;
 }
 
-
 rai::TakeWaiting::TakeWaiting()
     : maker_(0),
       trade_height_(rai::Block::INVALID_HEIGHT),
@@ -1469,10 +1487,9 @@ rai::TakeWaiting::TakeWaiting()
 {
 }
 
-rai::TakeWaiting::TakeWaiting(const rai::Account& maker,
-                                    uint64_t trade_height,
-                                    const rai::Account& taker,
-                                    uint64_t inquiry_height)
+rai::TakeWaiting::TakeWaiting(const rai::Account& maker, uint64_t trade_height,
+                              const rai::Account& taker,
+                              uint64_t inquiry_height)
     : maker_(maker),
       trade_height_(trade_height),
       taker_(taker),
@@ -1594,7 +1611,6 @@ bool rai::WalletInfo::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, true);
     return false;
 }
-
 
 void rai::WalletAccountInfo::Serialize(rai::Stream& stream) const
 {
@@ -1718,7 +1734,6 @@ bool rai::Ledger::AccountInfoDel(rai::Transaction& transaction,
 
 rai::Iterator rai::Ledger::AccountInfoBegin(rai::Transaction& transaction)
 {
-
     rai::StoreIterator store_it(transaction.mdb_transaction_, store_.accounts_);
     return rai::Iterator(std::move(store_it));
 }
@@ -1751,8 +1766,7 @@ bool rai::Ledger::NextAccountInfo(rai::Transaction& transaction,
     rai::MdbVal key(account);
     rai::StoreIterator store_it(transaction.mdb_transaction_, store_.accounts_,
                                 key);
-    if (store_it->first.Data() == nullptr
-        || store_it->first.Size() == 0)
+    if (store_it->first.Data() == nullptr || store_it->first.Size() == 0)
     {
         return true;
     }
@@ -2134,6 +2148,191 @@ rai::Iterator rai::Ledger::AliasDnsIndexUpperBound(
     return AliasDnsIndexLowerBound(transaction, index);  // lower bound !
 }
 
+bool rai::Ledger::BindingCountPut(rai::Transaction& transaction,
+                                  const rai::Account& account, uint64_t count)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes;
+    {
+        rai::VectorStream stream(bytes);
+        rai::Write(stream, count);
+    }
+    rai::MdbVal key(account);
+    rai::MdbVal value(bytes.size(), bytes.data());
+    bool error = store_.Put(transaction.mdb_transaction_, store_.binding_count_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::BindingCountGet(rai::Transaction& transaction,
+                                  const rai::Account& account,
+                                  uint64_t& count) const
+{
+    rai::MdbVal key(account);
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_, store_.binding_count_,
+                            key, value);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = rai::Read(stream, count);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+bool rai::Ledger::BindingCountDel(rai::Transaction& transaction,
+                                  const rai::Account& account)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    rai::MdbVal key(account);
+    return store_.Del(transaction.mdb_transaction_, store_.binding_count_, key,
+                      nullptr);
+}
+
+bool rai::Ledger::BindingEntryPut(rai::Transaction& transaction,
+                                  const rai::Account& account, uint64_t height,
+                                  const rai::BindingEntry& entry)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, ~height);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        entry.Serialize(stream);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_,
+                            store_.binding_entries_, key, value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+bool rai::Ledger::BindingEntryGet(rai::Transaction& transaction,
+                                  const rai::Account& account, uint64_t height,
+                                  rai::BindingEntry& entry) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, ~height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_,
+                            store_.binding_entries_, key, value);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BufferStream stream(value.Data(), value.Size());
+    error = entry.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+bool rai::Ledger::BindingEntryGet(const rai::Iterator& it,
+                                  rai::Account& account, uint64_t& height,
+                                  rai::BindingEntry& entry) const
+{
+    auto data = it.store_it_->first.Data();
+    auto size = it.store_it_->first.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_key(data, size);
+    bool error = rai::Read(stream_key, account.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream_key, height);
+    IF_ERROR_RETURN(error, true);
+    height = ~height;
+
+    data = it.store_it_->second.Data();
+    size = it.store_it_->second.Size();
+    if (data == nullptr || size == 0)
+    {
+        return true;
+    }
+    rai::BufferStream stream_value(data, size);
+    error = entry.Deserialize(stream_value);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+bool rai::Ledger::BindingEntryDel(rai::Transaction& transaction,
+                                  const rai::Account& account, uint64_t height)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, ~height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    bool error = store_.Del(transaction.mdb_transaction_,
+                            store_.binding_entries_, key, nullptr);
+    IF_ERROR_RETURN(error, true);
+
+    return false;
+}
+
+rai::Iterator rai::Ledger::BindingEntryLowerBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    uint64_t height = std::numeric_limits<uint64_t>::max();
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, account.bytes);
+        rai::Write(stream, ~height);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::StoreIterator store_it(transaction.mdb_transaction_,
+                                store_.binding_entries_, key);
+    return rai::Iterator(std::move(store_it));
+}
+
+rai::Iterator rai::Ledger::BindingEntryUpperBound(
+    rai::Transaction& transaction, const rai::Account& account) const
+{
+    rai::Account account_next(account + 1);
+    if (account_next.IsZero())
+    {
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    }
+
+    return BindingEntryLowerBound(transaction, account_next);
+}
+
 bool rai::Ledger::AccountTokenInfoPut(rai::Transaction& transaction,
                                       const rai::Account& account,
                                       rai::Chain chain,
@@ -2440,7 +2639,7 @@ bool rai::Ledger::AccountTokenIdGet(rai::Transaction& transaction,
     return rai::Read(stream, receive_at);
 }
 
-bool rai::Ledger::AccountTokenIdGet(rai::Iterator& it,
+bool rai::Ledger::AccountTokenIdGet(const rai::Iterator& it,
                                     rai::AccountTokenId& id,
                                     uint64_t& receive_at) const
 {
@@ -2598,8 +2797,8 @@ bool rai::Ledger::TokenBlockGet(rai::Transaction& transaction,
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
-    bool error = store_.Get(transaction.mdb_transaction_,
-                            store_.token_block_, key, value);
+    bool error = store_.Get(transaction.mdb_transaction_, store_.token_block_,
+                            key, value);
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     error = block.Deserialize(stream);
@@ -2612,8 +2811,7 @@ bool rai::Ledger::TokenBlockGet(rai::Transaction& transaction,
 
 bool rai::Ledger::TokenBlockSuccessorSet(rai::Transaction& transaction,
                                          const rai::Account& account,
-                                         uint64_t height,
-                                         uint64_t successor)
+                                         uint64_t height, uint64_t successor)
 {
     rai::TokenBlock block;
     bool error = TokenBlockGet(transaction, account, height, block);
@@ -2671,8 +2869,8 @@ bool rai::Ledger::TokenInfoGet(rai::Transaction& transaction,
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
-    bool error = store_.Get(transaction.mdb_transaction_,
-                            store_.token_info_, key, value);
+    bool error = store_.Get(transaction.mdb_transaction_, store_.token_info_,
+                            key, value);
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
@@ -2729,8 +2927,8 @@ bool rai::Ledger::TokenReceivableGet(
 }
 
 bool rai::Ledger::TokenReceivableGet(const rai::Iterator& it,
-                        rai::TokenReceivableKey& receivable_key,
-                        rai::TokenReceivable& receivable) const
+                                     rai::TokenReceivableKey& receivable_key,
+                                     rai::TokenReceivable& receivable) const
 {
     auto data = it.store_it_->first.Data();
     auto size = it.store_it_->first.Size();
@@ -2869,8 +3067,8 @@ bool rai::Ledger::TokenIdInfoPut(rai::Transaction& transaction,
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value(bytes_value.size(), bytes_value.data());
-    bool error = store_.Put(transaction.mdb_transaction_,
-                            store_.token_id_info_, key, value);
+    bool error = store_.Put(transaction.mdb_transaction_, store_.token_id_info_,
+                            key, value);
     IF_ERROR_RETURN(error, error);
 
     return false;
@@ -2956,8 +3154,8 @@ bool rai::Ledger::TokenHolderPut(rai::Transaction& transaction,
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value(bytes_value.size(), bytes_value.data());
-    bool error = store_.Put(transaction.mdb_transaction_,
-                            store_.token_holders_, key, value);
+    bool error = store_.Put(transaction.mdb_transaction_, store_.token_holders_,
+                            key, value);
     IF_ERROR_RETURN(error, error);
 
     return false;
@@ -3241,8 +3439,8 @@ bool rai::Ledger::OrderInfoPut(rai::Transaction& transaction,
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value(bytes_value.size(), bytes_value.data());
-    bool error = store_.Put(transaction.mdb_transaction_,
-                            store_.order_info_, key, value);
+    bool error = store_.Put(transaction.mdb_transaction_, store_.order_info_,
+                            key, value);
     IF_ERROR_RETURN(error, error);
 
     return false;
@@ -3260,8 +3458,8 @@ bool rai::Ledger::OrderInfoGet(rai::Transaction& transaction,
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
-    bool error = store_.Get(transaction.mdb_transaction_,
-                            store_.order_info_, key, value);
+    bool error = store_.Get(transaction.mdb_transaction_, store_.order_info_,
+                            key, value);
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
@@ -3494,8 +3692,8 @@ bool rai::Ledger::SwapInfoPut(rai::Transaction& transaction,
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value(bytes_value.size(), bytes_value.data());
-    bool error = store_.Put(transaction.mdb_transaction_,
-                            store_.swap_info_, key, value);
+    bool error =
+        store_.Put(transaction.mdb_transaction_, store_.swap_info_, key, value);
     IF_ERROR_RETURN(error, error);
 
     return false;
@@ -3513,15 +3711,15 @@ bool rai::Ledger::SwapInfoGet(rai::Transaction& transaction,
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
-    bool error = store_.Get(transaction.mdb_transaction_,
-                            store_.swap_info_, key, value);
+    bool error =
+        store_.Get(transaction.mdb_transaction_, store_.swap_info_, key, value);
     IF_ERROR_RETURN(error, true);
     rai::BufferStream stream(value.Data(), value.Size());
     return info.Deserialize(stream);
 }
 
 bool rai::Ledger::SwapInfoGet(const rai::Iterator& it, rai::Account& account,
-                               uint64_t& height, rai::SwapInfo& info) const
+                              uint64_t& height, rai::SwapInfo& info) const
 {
     auto data = it.store_it_->first.Data();
     auto size = it.store_it_->first.Size();
@@ -3549,8 +3747,8 @@ bool rai::Ledger::SwapInfoGet(const rai::Iterator& it, rai::Account& account,
     return false;
 }
 
-rai::Iterator rai::Ledger::SwapInfoLowerBound(
-    rai::Transaction& transaction, const rai::Account& account) const
+rai::Iterator rai::Ledger::SwapInfoLowerBound(rai::Transaction& transaction,
+                                              const rai::Account& account) const
 {
     return SwapInfoLowerBound(transaction, account,
                               std::numeric_limits<uint64_t>::max());
@@ -3719,8 +3917,8 @@ bool rai::Ledger::TakeWaitingPut(rai::Transaction& transaction,
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     uint8_t junk = 0;
     rai::MdbVal value(sizeof(junk), &junk);
-    bool error = store_.Put(transaction.mdb_transaction_,
-                            store_.take_waiting_, key, value);
+    bool error = store_.Put(transaction.mdb_transaction_, store_.take_waiting_,
+                            key, value);
     IF_ERROR_RETURN(error, error);
 
     return false;
@@ -4415,8 +4613,7 @@ bool rai::Ledger::BlockDel(rai::Transaction& transaction,
 bool rai::Ledger::BlockCount(rai::Transaction& transaction, size_t& count) const
 {
     MDB_stat stat;
-    auto ret =
-        mdb_stat(transaction.mdb_transaction_, store_.blocks_, &stat);
+    auto ret = mdb_stat(transaction.mdb_transaction_, store_.blocks_, &stat);
     if (ret != MDB_SUCCESS)
     {
         assert(0);
@@ -5028,7 +5225,6 @@ rai::Iterator rai::Ledger::ReceivableInfoLowerBound(
     return rai::Iterator(std::move(store_it));
 }
 
-
 rai::Iterator rai::Ledger::ReceivableInfoUpperBound(
     rai::Transaction& transaction, const rai::Account& account)
 {
@@ -5097,7 +5293,6 @@ bool rai::Ledger::RewardableInfoGet(rai::Transaction& transaction,
     return info.Deserialize(stream);
 }
 
-
 bool rai::Ledger::RewardableInfoGet(const rai::Iterator& it,
                                     rai::Account& destination,
                                     rai::BlockHash& hash,
@@ -5147,7 +5342,6 @@ bool rai::Ledger::RewardableInfoDel(rai::Transaction& transaction,
     return store_.Del(transaction.mdb_transaction_, store_.rewardables_, key,
                       nullptr);
 }
-
 
 rai::Iterator rai::Ledger::RewardableInfoLowerBound(
     rai::Transaction& transaction, const rai::Account& account)
@@ -5276,7 +5470,6 @@ bool rai::Ledger::SourcePut(rai::Transaction& transaction,
     {
         return true;
     }
-
 
     rai::MdbVal key(source);
     uint8_t junk = 0;
@@ -5456,7 +5649,7 @@ bool rai::Ledger::WalletInfoGetAll(
         {
             continue;
         }
-        
+
         data = it->second.Data();
         size = it->second.Size();
         if (data == nullptr || size == 0)
@@ -5564,7 +5757,7 @@ bool rai::Ledger::WalletAccountInfoGetAll(
     }
     rai::MdbVal key_end(bytes_key_end.size(), bytes_key_end.data());
     rai::StoreIterator end(transaction.mdb_transaction_, store_.wallets_,
-                          key_end);
+                           key_end);
 
     for (; it != end; ++it)
     {
@@ -5588,7 +5781,7 @@ bool rai::Ledger::WalletAccountInfoGetAll(
             assert(0);
             return true;
         }
-        
+
         data = it->second.Data();
         size = it->second.Size();
         if (data == nullptr || size == 0)
@@ -5658,9 +5851,7 @@ bool rai::Ledger::SelectedWalletIdGet(rai::Transaction& transaction,
     return false;
 }
 
-
-bool rai::Ledger::VersionPut(rai::Transaction& transaction,
-                                      uint32_t version)
+bool rai::Ledger::VersionPut(rai::Transaction& transaction, uint32_t version)
 {
     if (!transaction.write_)
     {
@@ -5688,7 +5879,7 @@ bool rai::Ledger::VersionPut(rai::Transaction& transaction,
 }
 
 bool rai::Ledger::VersionGet(rai::Transaction& transaction,
-                                      uint32_t& version) const
+                             uint32_t& version) const
 {
     std::vector<uint8_t> bytes_key;
     {
@@ -6060,7 +6251,7 @@ void rai::Ledger::UpdateDelegatorList_(const rai::Account& account,
     else
     {
         delegator_list_.modify(it, [&](rai::DelegatorListEntry& data) {
-            data.rep_    = rep;
+            data.rep_ = rep;
             data.weight_ = weight;
             data.type_ = type;
         });

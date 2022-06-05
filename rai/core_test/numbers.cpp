@@ -110,6 +110,11 @@ TEST(uint128_union, arithmetic_operator)
     result = 1;
     result -= 2;
     ASSERT_EQ(rai::uint128_t(-1), result.Number());
+
+    result = 2;
+    ASSERT_EQ(6, (result * 3).Number());
+    result = number;
+    ASSERT_EQ(number * 2, (result * 2).Number());
 }
 
 TEST(uint128_union, hex)

@@ -49,6 +49,9 @@ public:
     void AccountSubscribe();
     void AccountUnsubscribe();
     void ActiveAccountHeads();
+    void BindingQuery();
+    void BindingEntries();
+    void BindingCount();
     void BlockConfirm();
     void BlockCount();
     void BlockDump();

@@ -10,6 +10,7 @@
 #include <rai/common/blocks.hpp>
 #include <rai/common/errors.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/chain.hpp>
 #include <rai/secure/common.hpp>
 #include <rai/node/blockquery.hpp>
 
@@ -67,6 +68,7 @@ public:
     void QueueAction(const rai::RewarderAction&, const rai::RewarderCallback&);
     void Run();
     void Send();
+    rai::ErrorCode Bind(rai::Chain, const rai::SignerAddress&);
     uint32_t SendInterval() const;
     void Start();
     void Status(rai::Ptree&) const;

@@ -17,15 +17,17 @@ uint8_t constexpr PROTOCOL_VERSION_USING = 2;
 // version 1
 enum class MessageType : uint8_t
 {
-    INVALID   = 0,
-    HANDSHAKE = 1,
-    KEEPLIVE  = 2,
-    PUBLISH   = 3,
-    CONFIRM   = 4,
-    QUERY     = 5,
-    FORK      = 6,
-    CONFLICT  = 7,
-    BOOTSTRAP = 8,
+    INVALID     = 0,
+    HANDSHAKE   = 1,
+    KEEPLIVE    = 2,
+    PUBLISH     = 3,
+    CONFIRM     = 4,
+    QUERY       = 5,
+    FORK        = 6,
+    CONFLICT    = 7,
+    BOOTSTRAP   = 8,
+    WEIGHT      = 9,
+    SIGN        = 10,
 
     MAX
 };
@@ -315,6 +317,25 @@ private:
     rai::ErrorCode Check_() const;
 };
 
+class WeightMessage : public Message
+{
+public:
+    WeightMessage(rai::ErrorCode&, rai::Stream&, const rai::MessageHeader&);
+    WeightMessage(uint64_t, rai::QueryBy, const rai::Account&, uint64_t,
+                 const rai::BlockHash&);
+    virtual ~WeightMessage() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void Visit(rai::MessageVisitor&) override;
+    rai::uint256_union request_id_;
+    rai::Account rep_;
+
+    // only in response
+    uint32_t epoch_;
+    rai::Amount weight_;
+    rai::Account replier_;
+};
+
 class MessageVisitor
 {
 public:
@@ -326,6 +347,7 @@ public:
     virtual void Query(const rai::QueryMessage&)         = 0;
     virtual void Fork(const rai::ForkMessage&)           = 0;
     virtual void Conflict(const rai::ConflictMessage&)   = 0;
+    virtual void Weight(const rai::WeightMessage&)       = 0;
 };
 
 class MessageParser

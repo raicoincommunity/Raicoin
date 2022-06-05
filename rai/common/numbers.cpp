@@ -147,6 +147,12 @@ rai::uint128_union& rai::uint128_union::operator-=(
     return *this;
 }
 
+rai::uint128_union rai::uint128_union::operator*(
+    const rai::uint128_union& other) const
+{
+    return rai::uint128_union(Number() * other.Number());
+}
+
 rai::uint128_t rai::uint128_union::Number() const
 {
     rai::uint128_t result;

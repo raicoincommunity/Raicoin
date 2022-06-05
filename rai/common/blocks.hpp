@@ -6,15 +6,16 @@
 #include <rai/common/errors.hpp>
 #include <rai/common/numbers.hpp>
 #include <rai/common/util.hpp>
+#include <rai/common/chain.hpp>
 
 namespace rai
 {
 enum class BlockType : uint8_t
 {
-    INVALID     = 0,
-    TX_BLOCK    = 1,  // Transaction Block
-    REP_BLOCK   = 2,  // Representive Block
-    AD_BLOCK    = 3,  // Airdrop Block
+    INVALID         = 0,
+    TX_BLOCK        = 1,  // Transaction Block
+    REP_BLOCK       = 2,  // Representive Block
+    AD_BLOCK        = 3,  // Airdrop Block
 };
 std::string BlockTypeToString(rai::BlockType);
 rai::BlockType StringToBlockType(const std::string&);
@@ -28,6 +29,7 @@ enum class BlockOpcode : uint8_t
     CREDIT  = 4,
     REWARD  = 5,
     DESTROY = 6,
+    BIND    = 7,
 };
 std::string BlockOpcodeToString(rai::BlockOpcode);
 rai::BlockOpcode StringToBlockOpcode(const std::string&);
@@ -70,17 +72,22 @@ public:
     virtual rai::Account Representative() const               = 0;
     virtual bool HasRepresentative() const                    = 0;
     virtual std::vector<uint8_t> Extensions() const           = 0;
+    virtual bool HasChain() const                             = 0;
+    virtual rai::Chain Chain() const                          = 0;
 
     static uint64_t constexpr INVALID_HEIGHT =
         std::numeric_limits<uint64_t>::max();
 
 protected:
     bool CheckSignature_() const;
+    void ClearHashCache_();
 
 private:
     mutable bool signature_checked_;
     mutable bool signature_error_;
+    mutable rai::BlockHash hash_cache_;
 };
+
 
 // Transaction Block
 class TxBlock : public Block
@@ -125,6 +132,8 @@ public:
     bool HasRepresentative() const override;
 
     std::vector<uint8_t> Extensions() const override;
+    bool HasChain() const override;
+    rai::Chain Chain() const override;
 
     static bool CheckOpcode(rai::BlockOpcode);
     static bool CheckExtensionsLength(uint32_t);
@@ -153,8 +162,11 @@ class RepBlock : public Block
 public:
     RepBlock(rai::BlockOpcode, uint16_t, uint32_t, uint64_t, uint64_t,
              const rai::Account&, const rai::BlockHash&, const rai::Amount&,
+             const rai::uint256_union&, rai::Chain = rai::Chain::INVALID);
+    RepBlock(rai::BlockOpcode, uint16_t, uint32_t, uint64_t, uint64_t,
+             const rai::Account&, const rai::BlockHash&, const rai::Amount&,
              const rai::uint256_union&, const rai::RawKey&,
-             const rai::PublicKey&);
+             const rai::PublicKey&, rai::Chain = rai::Chain::INVALID);
     RepBlock(rai::ErrorCode&, rai::Stream&);
     RepBlock(rai::ErrorCode&, const rai::Ptree&);
     virtual ~RepBlock() = default;
@@ -184,6 +196,8 @@ public:
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
     std::vector<uint8_t> Extensions() const override;
+    bool HasChain() const override;
+    rai::Chain Chain() const override;
 
     static bool CheckOpcode(rai::BlockOpcode);
 
@@ -198,6 +212,7 @@ private:
     rai::BlockHash previous_;
     rai::Amount balance_;
     rai::uint256_union link_;
+    rai::Chain chain_;
     rai::Signature signature_;
 };
 
@@ -237,6 +252,8 @@ public:
     rai::Account Representative() const override;
     bool HasRepresentative() const override;
     std::vector<uint8_t> Extensions() const override;
+    bool HasChain() const override;
+    rai::Chain Chain() const override;
 
     static bool CheckOpcode(rai::BlockOpcode);
 
@@ -264,26 +281,12 @@ public:
     virtual rai::ErrorCode Credit(const rai::Block&)  = 0;
     virtual rai::ErrorCode Reward(const rai::Block&)  = 0;
     virtual rai::ErrorCode Destroy(const rai::Block&) = 0;
+    virtual rai::ErrorCode Bind(const rai::Block&)    = 0;
 
     virtual ~BlockVisitor() = default;
 };
 
-class BlockBuilder
-{
-public:
-    virtual rai::ErrorCode Change(std::shared_ptr<rai::Block>&,
-                                  const rai::Account&, uint64_t,
-                                  const std::vector<uint8_t>&) = 0;
-    virtual rai::ErrorCode Receive(std::shared_ptr<rai::Block>&,
-                                   const rai::BlockHash&, const rai::Amount&,
-                                   uint64_t, uint64_t,
-                                   const std::vector<uint8_t>&) = 0;
-    virtual rai::ErrorCode Send(std::shared_ptr<rai::Block>&,
-                                const rai::Account&, const rai::Amount&,
-                                uint64_t, const std::vector<uint8_t>&) = 0;
-};
-
-class TxBlockBuilder : public BlockBuilder
+class TxBlockBuilder
 {
 public:
     TxBlockBuilder(const rai::Account&, const rai::Account&,
@@ -293,19 +296,38 @@ public:
 
     rai::ErrorCode Change(
         std::shared_ptr<rai::Block>&, const rai::Account&, uint64_t,
-        const std::vector<uint8_t>& = std::vector<uint8_t>()) override;
+        const std::vector<uint8_t>& = std::vector<uint8_t>());
     rai::ErrorCode Receive(
         std::shared_ptr<rai::Block>&, const rai::BlockHash&, const rai::Amount&,
         uint64_t, uint64_t,
-        const std::vector<uint8_t>& = std::vector<uint8_t>()) override;
+        const std::vector<uint8_t>& = std::vector<uint8_t>());
     rai::ErrorCode Send(
         std::shared_ptr<rai::Block>&, const rai::Account&, const rai::Amount&,
         uint64_t,
-        const std::vector<uint8_t>& = std::vector<uint8_t>()) override;
+        const std::vector<uint8_t>& = std::vector<uint8_t>());
 
     bool has_key_;
     rai::Account account_;
     rai::Account rep_;
+    rai::RawKey private_key_;
+    std::shared_ptr<rai::Block> previous_;
+};
+
+class RepBlockBuilder
+{
+public:
+    RepBlockBuilder(const rai::Account&, const std::shared_ptr<rai::Block>&);
+    RepBlockBuilder(const rai::Account&, const rai::RawKey&,
+                    const std::shared_ptr<rai::Block>&);
+
+    rai::ErrorCode Bind(std::shared_ptr<rai::Block>&, rai::Chain,
+                        const rai::SignerAddress&, uint64_t);
+    rai::ErrorCode Credit(std::shared_ptr<rai::Block>&, uint16_t,  uint64_t);
+    rai::ErrorCode Receive(std::shared_ptr<rai::Block>&, const rai::BlockHash&,
+                           const rai::Amount&, uint64_t, uint64_t);
+
+    bool has_key_;
+    rai::Account account_;
     rai::RawKey private_key_;
     std::shared_ptr<rai::Block> previous_;
 };

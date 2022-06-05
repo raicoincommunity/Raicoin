@@ -38,7 +38,9 @@ rai::Store::Store(rai::ErrorCode& error_code,
       order_swap_index_(0),
       token_swap_index_(0),
       take_nack_block_(0),
-      maker_swap_index_(0)
+      maker_swap_index_(0),
+      binding_count_(0),
+      binding_entries_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {

@@ -25,10 +25,12 @@ enum class Chain : uint32_t
     MAX
 };
 std::string ChainToString(Chain);
-Chain StringToChain(const std::string&);
+rai::Chain StringToChain(const std::string&);
 inline bool IsRaicoin(Chain chain)
 {
     return chain == Chain::RAICOIN || chain == Chain::RAICOIN_TEST;
 }
+
+rai::Chain GetChainFromBlockLink(const rai::uint256_union&);
 
 }  // namespace rai

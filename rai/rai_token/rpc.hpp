@@ -54,7 +54,6 @@ public:
     void TokenReceivablesSummary();
 
 private:
-    bool GetChain_(rai::Chain&);
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);
     bool GetTokenType_(rai::TokenType&);
     bool GetTokenId_(rai::TokenValue&, const std::string& = "token_id");

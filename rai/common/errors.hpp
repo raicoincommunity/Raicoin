@@ -143,6 +143,8 @@ enum class ErrorCode : int
     RECEIVABLE_AMOUNT                    = 133,
     SEND_AMOUNT                          = 134,
     LEDGER_TAKE_NACK_BLOCK_GET           = 135,
+    BLOCK_CHAIN                          = 136,
+    BINDING_IGNORED                      = 137,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                                    = 200,
@@ -246,6 +248,7 @@ enum class ErrorCode : int
     JSON_CONFIG_APP                      = 296,
     JSON_CONFIG_NODE_ADDRESS             = 297,
     JSON_CONFIG_ELECTION_CONCURRENCY     = 298,
+    JSON_CONFIG_VALIDATOR_URL            = 299,
 
     // RPC errors: 300 ~ 399
     RPC_GENERIC                         = 300,
@@ -322,6 +325,8 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_INQUIRY_HEIGHT    = 371,
     RPC_MISS_FIELD_ORDER_HEIGHT         = 372,
     RPC_INVALID_FIELD_ORDER_HEIGHT      = 373,
+    RPC_MISS_FIELD_CHAIN_ID             = 374,
+    RPC_INVALID_FIELD_CHAIN_ID          = 375,
 
 
     // Block process errors: 400 ~ 499
@@ -361,6 +366,12 @@ enum class ErrorCode : int
     BLOCK_PROCESS_LEDGER_FORK_DEL             = 433,
     BLOCK_PROCESS_LEDGER_FORK_GET             = 434,
     BLOCK_PROCESS_LEDGER_FORK_PUT             = 435,
+    BLOCK_PROCESS_CHAIN                       = 436,
+    BLOCK_PROCESS_BINDING_COUNT               = 437,
+    BLOCK_PROCESS_LEDGER_BINDING_ENTRY_PUT    = 438,
+    BLOCK_PROCESS_LEDGER_BINDING_COUNT_PUT    = 439,
+    BLOCK_PROCESS_LEDGER_BINDING_ENTRY_DEL    = 440,
+    BLOCK_PROCESS_LEDGER_BINDING_COUNT_DEL    = 441,
 
     BLOCK_PROCESS_ROLLBACK_REWARDED          = 488,
     BLOCK_PROCESS_CONFIRM_BLOCK_MISS         = 489,
@@ -530,6 +541,8 @@ enum class ErrorCode : int
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_MAIN_ACCOUNT    = 1014,
     JSON_BLOCK_EXTENSION_TOKEN_UNMAP_EXTRA_DATA     = 1015,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_ACK_HEIGHT      = 1016,
+    JSON_BLOCK_CHAIN_ID                             = 1017,
+
     
     MAX = 1100
 };

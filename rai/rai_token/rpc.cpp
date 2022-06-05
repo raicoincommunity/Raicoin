@@ -1906,25 +1906,6 @@ void rai::TokenRpcHandler::TokenReceivablesSummary()
     response_.put_child("tokens", tokens);
 }
 
-bool rai::TokenRpcHandler::GetChain_(rai::Chain& chain)
-{
-    auto chain_o = request_.get_optional<std::string>("chain");
-    if (!chain_o)
-    {
-        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_CHAIN;
-        return true;
-    }
-
-    chain = rai::StringToChain(*chain_o);
-    if (chain == rai::Chain::INVALID)
-    {
-        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CHAIN;
-        return true;
-    }
-
-    return false;
-}
-
 bool rai::TokenRpcHandler::GetTokenAddress_(rai::Chain chain,
                                             rai::TokenAddress& address)
 {

@@ -32,6 +32,7 @@ public:
     rai::uint128_union operator-(const rai::uint128_union&) const;
     rai::uint128_union& operator+=(const rai::uint128_union&);
     rai::uint128_union& operator-=(const rai::uint128_union&);
+    rai::uint128_union operator*(const rai::uint128_union&) const;
     rai::uint128_t Number() const;
     void Clear();
     bool IsZero() const;
@@ -109,6 +110,7 @@ using UniqueId      = uint256_union;
 using TokenValue    = uint256_union;
 using TokenAddress  = uint256_union;
 using Topic         = uint256_union;
+using SignerAddress = uint256_union;
 
 class AccountParser
 {

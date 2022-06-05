@@ -657,6 +657,106 @@ void rai::NodeRpcHandler::ActiveAccountHeads()
     response_.put_child("heads", heads);
 }
 
+void rai::NodeRpcHandler::BindingQuery()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChainById_(chain);
+    if (error)
+    {
+        if (error_code_ != rai::ErrorCode::RPC_MISS_FIELD_CHAIN_ID)
+        {
+            return;
+        }
+        error_code_ = rai::ErrorCode::SUCCESS;
+        error = GetChain_(chain);
+        IF_ERROR_RETURN_VOID(error);
+    }
+    response_.put("chain", rai::ChainToString(chain));
+    response_.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
+
+    boost::optional<rai::SignerAddress> signer_o =
+        node_.BindingQuery(account, chain);
+    if (!signer_o)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+
+    response_.put("signer", signer_o->StringHex());
+}
+
+void rai::NodeRpcHandler::BindingEntries()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint64_t count = 0;
+    rai::Ptree entries;
+    rai::Iterator i =
+        node_.ledger_.BindingEntryLowerBound(transaction, account);
+    rai::Iterator n =
+        node_.ledger_.BindingEntryUpperBound(transaction, account);
+    for (; i != n; ++i)
+    {
+        rai::Ptree entry_ptree;
+        rai::Account account_l;
+        uint64_t height;
+        rai::BindingEntry entry;
+        bool error = node_.ledger_.BindingEntryGet(i, account_l, height, entry);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "NodeRpcHandler::BindingEntries: failed to get entry from "
+                "ledger, account=",
+                account.StringAccount()));
+            break;
+        }
+
+        ++count;
+        entry_ptree.put("account", account_l.StringAccount());
+        entry_ptree.put("height", std::to_string(height));
+        entry_ptree.put("chain", rai::ChainToString(entry.chain_));
+        entry_ptree.put("chain_id",
+                        std::to_string(static_cast<uint32_t>(entry.chain_)));
+        entry_ptree.put("signer", entry.signer_.StringHex());
+        entries.push_back(std::make_pair("", entry_ptree));
+    }
+
+    response_.put_child("entries", entries);
+    response_.put("count", std::to_string(count));
+}
+
+void rai::NodeRpcHandler::BindingCount()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Transaction transaction(error_code_, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint64_t count = 0;
+    error = node_.ledger_.BindingCountGet(transaction, account, count);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+
+    response_.put("count", std::to_string(count));
+}
+
 void rai::NodeRpcHandler::BlockConfirm()
 {
     rai::Account account;

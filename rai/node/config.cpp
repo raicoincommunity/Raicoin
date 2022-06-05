@@ -124,6 +124,19 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
         {
             enable_delegator_list_ = *enable_delegator_list_o;
         }
+
+        error_code = rai::ErrorCode::JSON_CONFIG_VALIDATOR_URL;
+        auto validator_url = ptree.get_optional<std::string>("validator_url");
+        if (validator_url && !validator_url->empty())
+        {
+            bool error = validator_url_.Parse(*validator_url);
+            IF_ERROR_RETURN(error, error_code);
+            if (validator_url_.protocol_ != "ws"
+                && validator_url_.protocol_ != "wss")
+            {
+                return error_code;
+            }
+        }
     }
     catch (const std::exception&)
     {
@@ -134,7 +147,7 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
 
 void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
 {
-    ptree.put("version", "5");
+    ptree.put("version", "6");
     ptree.put("address", address_.to_string());
     ptree.put("port", port_);
     ptree.put("io_threads", io_threads_);
@@ -155,6 +168,7 @@ void rai::NodeConfig::SerializeJson(rai::Ptree& ptree) const
     ptree.put("election_concurrency", std::to_string(election_concurrency_));
     ptree.put("enable_rich_list", enable_rich_list_);
     ptree.put("enable_delegator_list", enable_delegator_list_);
+    ptree.put("validator_url", validator_url_.String());
 }
 
 rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,

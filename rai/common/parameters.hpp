@@ -98,6 +98,9 @@ uint64_t constexpr AIRDROP_INVITED_ONLY_DURATION = 180 * 86400;
 uint64_t constexpr AIRDROP_DURATION = 4 * 360 * 86400;
 size_t constexpr MAX_EXTENSIONS_SIZE = 256;
 uint64_t constexpr SWAP_PING_PONG_INTERVAL = 60;
+uint64_t constexpr BASE_ALLOWED_BINDINGS = 16;
+uint64_t constexpr EXTRA_BINDINGS_PER_CREDIT = 1;
+uint64_t constexpr MAX_ALLOWED_BINDINGS = 2048;
 
 // Votes from qualified representatives will be broadcasted
 const rai::Amount QUALIFIED_REP_WEIGHT = rai::Amount(256 * rai::RAI);
@@ -113,5 +116,6 @@ rai::Amount RewardAmount(const rai::Amount&, uint64_t, uint64_t);
 uint64_t RewardTimestamp(uint64_t, uint64_t);
 uint16_t BaseAllowedForks(uint64_t);
 uint64_t MaxAllowedForks(uint64_t, uint32_t);
+uint64_t AllowedBindings(uint32_t);
 rai::Chain CurrentChain();
 }  // namespace rai

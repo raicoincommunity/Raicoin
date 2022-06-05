@@ -575,6 +575,46 @@ bool rai::RpcHandler::GetAccountTypes_(std::vector<rai::BlockType>& types)
     return false;
 }
 
+bool rai::RpcHandler::GetChain_(rai::Chain& chain)
+{
+    auto chain_o = request_.get_optional<std::string>("chain");
+    if (!chain_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_CHAIN;
+        return true;
+    }
+
+    chain = rai::StringToChain(*chain_o);
+    if (chain == rai::Chain::INVALID)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CHAIN;
+        return true;
+    }
+
+    return false;
+}
+
+bool rai::RpcHandler::GetChainById_(rai::Chain& chain)
+{
+    auto chain_id_o = request_.get_optional<std::string>("chain_id");
+    if (!chain_id_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_CHAIN_ID;
+        return true;
+    }
+
+    uint32_t chain_id = 0;
+    bool error = rai::StringToUint(*chain_id_o, chain_id);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_CHAIN_ID;
+        return true;
+    }
+    chain = static_cast<rai::Chain>(chain_id);
+
+    return false;
+}
+
 std::unique_ptr<rai::Rpc> rai::MakeRpc(boost::asio::io_service& service,
                                        const rai::RpcConfig& config,
                                        const rai::RpcHandlerMaker& maker)

@@ -348,6 +348,24 @@ void rai::Rewarder::Send()
                 [](rai::ErrorCode, const std::shared_ptr<rai::Block>&) {});
 }
 
+rai::ErrorCode rai::Rewarder::Bind(rai::Chain chain,
+                                   const rai::SignerAddress& signer)
+{
+    if (node_.Status() != rai::NodeStatus::RUN)
+    {
+        return rai::ErrorCode::NODE_STATUS;
+    }
+
+    boost::optional<rai::SignerAddress> signer_o =
+        node_.BindingQuery(node_.account_, chain);
+    if (signer_o && *signer_o == signer)
+    {
+        return rai::ErrorCode::BINDING_IGNORED;
+    }
+
+    // todo:
+}
+
 uint32_t rai::Rewarder::SendInterval() const
 {
     if (daily_send_times_ == 0)
