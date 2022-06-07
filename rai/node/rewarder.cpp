@@ -142,6 +142,17 @@ void rai::Rewarder::Add(const rai::RewarderInfo& info)
     condition_.notify_all();
 }
 
+void rai::Rewarder::AddReceivable(const rai::BlockHash& hash,
+                                  const rai::Amount& amount)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        rai::AutoReceivable receivable{hash, amount};
+        receivables_.insert(receivable);
+    }
+    condition_.notify_all();
+}
+
 void rai::Rewarder::UpToDate()
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -206,7 +217,7 @@ void rai::Rewarder::QueueAction(const rai::RewarderAction& action,
 }
 
 void rai::Rewarder::Run()
-{ 
+{
     std::unique_lock<std::mutex> lock(mutex_);
     while (!stopped_)
     {
@@ -222,113 +233,36 @@ void rai::Rewarder::Run()
             continue;
         }
 
-        if (!actions_.empty())
+        int64_t sleep = -1;
+        std::shared_ptr<rai::Block> block(nullptr);
+        do
         {
-            auto action = actions_.front();
-            actions_.pop_front();
-            lock.unlock();
+            ScheduleAutoCredit_(lock, block, sleep);
+            if (block != nullptr || sleep >= 0) break;
 
-            std::shared_ptr<rai::Block> block(nullptr);
-            rai::ErrorCode error_code = action.first(block);
-            if (error_code == rai::ErrorCode::SUCCESS && block != nullptr)
-            {
-                lock.lock();
-                block_ = block;
-                lock.unlock();
-                node_.block_processor_.Add(block);
-            }
-            else
-            {
-                rai::Stats::Add(error_code);
-            }
-            
-            action.second(error_code, block);
+            ScheduleActions_(lock, block, sleep);
+            if (block != nullptr || sleep >= 0) break;
+
+            ScheduleAutoReceive_(lock, block, sleep);
+            if (block != nullptr || sleep >= 0) break;
+
+            ScheduleRewards_(lock, block, sleep);
+        } while (0);
+
+        if (block != nullptr)
+        {
+            block_ = block;
+            lock.unlock();
+            node_.block_processor_.Add(block);
             lock.lock();
         }
-        else if (!waitings_.empty() || !rewardables_.empty())
+        else if (sleep < 0)
         {
-            uint64_t sleep = 0;
-            auto now = rai::CurrentTimestamp();
-            while (!waitings_.empty())
-            {
-                auto it = waitings_.get<rai::RewarderInfoByTime>().begin();
-                if (it->timestamp_ > now)
-                {
-                    sleep = it->timestamp_ - now;
-                    break;
-                }
-                rewardables_.insert(*it);
-                waitings_.get<rai::RewarderInfoByTime>().erase(it);
-            }
-
-            auto it = rewardables_.get<rai::RewarderInfoByAmount>().begin();
-            if (it == rewardables_.get<rai::RewarderInfoByAmount>().end())
-            {
-                condition_.wait_for(lock, std::chrono::seconds(sleep));
-                continue;
-            }
-            rai::RewarderInfo info(*it);
-            lock.unlock();
-
-            std::shared_ptr<rai::Block> block(nullptr);
-            rai::ErrorCode error_code =
-                ProcessReward_(info.amount_, info.hash_, block);
-            if (error_code == rai::ErrorCode::SUCCESS && block != nullptr)
-            {
-                lock.lock();
-                block_ = block;
-                lock.unlock();
-                node_.block_processor_.Add(block);
-            }
-            else
-            {
-                rai::Stats::Add(error_code);
-            }
-
-            lock.lock();
-            uint32_t delay = 0;
-            if (error_code == rai::ErrorCode::SUCCESS)
-            {
-                rewardables_.erase(info.hash_);
-                delay = 1;
-            }
-            else if (error_code == rai::ErrorCode::LEDGER_REWARDABLE_INFO_GET
-                     || error_code == rai::ErrorCode::REWARDER_AMOUNT
-                     || error_code == rai::ErrorCode::LEDGER_BLOCK_GET)
-            {
-                rewardables_.erase(info.hash_);
-            }
-            else if (error_code == rai::ErrorCode::ACCOUNT_ACTION_TOO_QUICKLY)
-            {
-                delay = 1;
-            }
-            else if (error_code == rai::ErrorCode::REWARDER_TIMESTAMP
-                     || error_code
-                            == rai::ErrorCode::
-                                   REWARDER_REWARDABLE_LESS_THAN_CREDIT)
-            {
-                delay = 5;
-            }
-            else if (error_code == rai::ErrorCode::ACCOUNT_RESTRICTED)
-            {
-                delay = 60;
-            }
-            else
-            {
-                rai::Stats::Add(rai::ErrorCode::GENERIC, "Rewarder::Run");
-                rewardables_.erase(info.hash_);
-            }
-            
-            if (delay > 0)
-            {
-                condition_.wait_for(lock, std::chrono::seconds(delay));
-                continue;
-            }
+            condition_.wait_for(lock, std::chrono::seconds(300));
         }
-        else
+        else if (sleep > 0)
         {
-            condition_.wait(lock);
-            continue;
+            condition_.wait_for(lock, std::chrono::seconds(sleep));
         }
     }
 }
@@ -356,6 +290,14 @@ rai::ErrorCode rai::Rewarder::Bind(rai::Chain chain,
         return rai::ErrorCode::NODE_STATUS;
     }
 
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!up_to_date_)
+        {
+            return rai::ErrorCode::NODE_STATUS;
+        }
+    }
+
     boost::optional<rai::SignerAddress> signer_o =
         node_.BindingQuery(node_.account_, chain);
     if (signer_o && *signer_o == signer)
@@ -363,7 +305,11 @@ rai::ErrorCode rai::Rewarder::Bind(rai::Chain chain,
         return rai::ErrorCode::BINDING_IGNORED;
     }
 
-    // todo:
+    QueueAction(std::bind(&rai::Rewarder::ProcessBind_, this, chain, signer,
+                          std::placeholders::_1),
+                [](rai::ErrorCode, const std::shared_ptr<rai::Block>&) {});
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 uint32_t rai::Rewarder::SendInterval() const
@@ -430,6 +376,189 @@ void rai::Rewarder::Sync()
     rai::Transaction transaction(error_code, node_.ledger_, false);
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
 
+    SyncReceivables_(transaction);
+    SyncRewardables_(transaction);
+}
+
+bool rai::Rewarder::CanReceive(const rai::ReceivableInfo& info) const
+{
+    if (info.amount_ < MinReceivableAmount())
+    {
+        return false;
+    }
+
+    if (info.timestamp_ > rai::CurrentTimestamp() + 60)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+rai::Amount rai::Rewarder::MinReceivableAmount() const
+{
+    rai::uint128_t price = rai::CreditPrice(rai::CurrentTimestamp()).Number();
+    rai::Amount amount = price / rai::TRANSACTIONS_PER_CREDIT;
+    if (price % rai::TRANSACTIONS_PER_CREDIT != 0)
+    {
+        amount += 1;
+    }
+    return rai::Amount(amount);
+}
+
+void rai::Rewarder::ScheduleAutoCredit_(std::unique_lock<std::mutex>& lock,
+                                        std::shared_ptr<rai::Block>& block,
+                                        int64_t& sleep)
+{
+    lock.unlock();
+
+    rai::ErrorCode error_code = ProcessCredit_(block);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code);
+    }
+
+    lock.lock();
+}
+
+void rai::Rewarder::ScheduleActions_(std::unique_lock<std::mutex>& lock,
+                                         std::shared_ptr<rai::Block>& block,
+                                         int64_t& sleep)
+{
+    if (actions_.empty())
+    {
+        return;
+    }
+    auto action = actions_.front();
+    actions_.pop_front();
+    lock.unlock();
+
+    rai::ErrorCode error_code = action.first(block);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code);
+    }
+    
+    action.second(error_code, block);
+    lock.lock();
+
+}
+
+void rai::Rewarder::ScheduleAutoReceive_(std::unique_lock<std::mutex>& lock,
+                                         std::shared_ptr<rai::Block>& block,
+                                         int64_t& sleep)
+{
+    auto& index = receivables_.get<rai::AutoReceivableByAmount>();
+    auto it = index.begin();
+    if (it == index.end())
+    {
+        return;
+    }
+    rai::BlockHash hash = it->hash_;
+    index.erase(it);
+    lock.unlock();
+
+    rai::ErrorCode error_code = ProcessReceive_(hash, block);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code);
+    }
+
+    lock.lock();
+}
+
+void rai::Rewarder::ScheduleRewards_(std::unique_lock<std::mutex>& lock,
+                                     std::shared_ptr<rai::Block>& block,
+                                     int64_t& sleep)
+{
+    auto now = rai::CurrentTimestamp();
+    while (!waitings_.empty())
+    {
+        auto it = waitings_.get<rai::RewarderInfoByTime>().begin();
+        if (it->timestamp_ > now)
+        {
+            sleep = it->timestamp_ - now;
+            break;
+        }
+        rewardables_.insert(*it);
+        waitings_.get<rai::RewarderInfoByTime>().erase(it);
+    }
+
+    auto it = rewardables_.get<rai::RewarderInfoByAmount>().begin();
+    if (it == rewardables_.get<rai::RewarderInfoByAmount>().end())
+    {
+        return;
+    }
+    rai::RewarderInfo info(*it);
+    lock.unlock();
+
+    rai::ErrorCode error_code = ProcessReward_(info.amount_, info.hash_, block);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code);
+    }
+
+    lock.lock();
+    if (error_code == rai::ErrorCode::SUCCESS)
+    {
+        rewardables_.erase(info.hash_);
+        sleep = 1;
+    }
+    else if (error_code == rai::ErrorCode::LEDGER_REWARDABLE_INFO_GET
+                || error_code == rai::ErrorCode::REWARDER_AMOUNT
+                || error_code == rai::ErrorCode::LEDGER_BLOCK_GET)
+    {
+        rewardables_.erase(info.hash_);
+        sleep = 0;
+    }
+    else if (error_code == rai::ErrorCode::ACCOUNT_ACTION_TOO_QUICKLY)
+    {
+        sleep = 1;
+    }
+    else if (error_code == rai::ErrorCode::REWARDER_TIMESTAMP
+                || error_code
+                    == rai::ErrorCode::
+                            REWARDER_REWARDABLE_LESS_THAN_CREDIT)
+    {
+        sleep = 5;
+    }
+    else if (error_code == rai::ErrorCode::ACCOUNT_RESTRICTED)
+    {
+        sleep = 60;
+    }
+    else
+    {
+        rai::Stats::AddDetail(rai::ErrorCode::GENERIC, "Rewarder::Run");
+        rewardables_.erase(info.hash_);
+        sleep = 0;
+    }
+}
+
+void rai::Rewarder::SyncReceivables_(rai::Transaction& transaction)
+{
+    ConfirmReceivables_(transaction);
+    rai::ReceivableInfos receivables;
+    bool error = node_.ledger_.ReceivableInfosGet(
+        transaction, node_.account_, rai::ReceivableInfosType::CONFIRMED,
+        receivables, 100, 100);
+    if (error)
+    {
+        rai::Stats::Add(rai::ErrorCode::LEDGER_RECEIVABLES_GET,
+                        "Rewarder::SyncReceivables_");
+        return;
+    }
+
+    for (const auto& i : receivables)
+    {
+        if (CanReceive(i.first))
+        {
+            AddReceivable(i.second, i.first.amount_);
+        }
+    }
+}
+
+void rai::Rewarder::SyncRewardables_(rai::Transaction& transaction)
+{
     std::vector<rai::RewarderInfo> confirms;
     std::unordered_map<rai::Account, std::shared_ptr<rai::Block>> elections;
     rai::Account account(node_.account_);
@@ -508,7 +637,6 @@ bool rai::Rewarder::Confirm_(std::unique_lock<std::mutex>& lock)
         rai::Transaction transaction(error_code, node_.ledger_, false);
         if (error_code != rai::ErrorCode::SUCCESS)
         {
-            // log
             rai::Stats::Add(error_code, "Rewarder::Confirm");
             ret = true;
             break;
@@ -545,6 +673,48 @@ bool rai::Rewarder::Confirm_(std::unique_lock<std::mutex>& lock)
 
     lock.lock();
     return ret;
+}
+
+void rai::Rewarder::ConfirmReceivables_(rai::Transaction& transaction)
+{
+    rai::ReceivableInfos receivables;
+    bool error = node_.ledger_.ReceivableInfosGet(
+        transaction, node_.account_, rai::ReceivableInfosType::NOT_CONFIRMED,
+        receivables);
+    if (error)
+    {
+        rai::Stats::Add(rai::ErrorCode::LEDGER_RECEIVABLES_GET,
+                        "Rewarder::ConfirmReceivables_");
+        return;
+    }
+
+    std::unordered_set<rai::Account> accounts;
+    for (const auto& i : receivables)
+    {
+        accounts.insert(i.first.source_);
+    }
+    for (const auto& i : accounts)
+    {
+        rai::AccountInfo info;
+        bool error = node_.ledger_.AccountInfoGet(transaction, i, info);
+        IF_ERROR_RETURN_VOID(error);
+
+        if (info.confirmed_height_ == info.head_height_)
+        {
+            continue;
+        }
+
+        std::shared_ptr<rai::Block> block(nullptr);
+        error = node_.ledger_.BlockGet(transaction, info.head_, block);
+        if (error)
+        {
+            rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
+                            "Rewarder::SyncReceivables_");
+            continue;
+        }
+
+        node_.StartElection(block);
+    }
 }
 
 rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
@@ -618,7 +788,7 @@ rai::ErrorCode rai::Rewarder::ProcessReward_(const rai::Amount& amount,
         {
             return rai::ErrorCode::BLOCK_TIMESTAMP;
         }
-        if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
+        if (info.Restricted(credit))
         {
             return rai::ErrorCode::ACCOUNT_RESTRICTED;
         }
@@ -666,8 +836,6 @@ rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
     error = node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
     if (error || !info.Valid())
     {
-        error_code = rai::ErrorCode::LEDGER_ACCOUNT_INFO_GET;
-        rai::Stats::AddDetail(error_code, "Rewarder::ProcessSend_");
         return error_code;
     }
 
@@ -693,7 +861,7 @@ rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
     {
         return rai::ErrorCode::ACCOUNT_ACTION_TOO_QUICKLY;
     }
-    if (info.forks_ > rai::MaxAllowedForks(timestamp, credit))
+    if (info.Restricted(credit))
     {
         return rai::ErrorCode::ACCOUNT_RESTRICTED;
     }
@@ -715,6 +883,151 @@ rai::ErrorCode rai::Rewarder::ProcessSend_(const rai::Account& destination,
         balance, link, private_key, node_.account_);
 
     return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::Rewarder::ProcessReceive_(const rai::BlockHash& hash,
+                                              std::shared_ptr<rai::Block>& block)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    rai::ReceivableInfo receivable;
+    bool error = node_.ledger_.ReceivableInfoGet(transaction, node_.account_,
+                                                 hash, receivable);
+    IF_ERROR_RETURN(error, error_code);
+
+    std::shared_ptr<rai::Block> head(nullptr);
+    rai::AccountInfo info;
+    error = node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
+    if (error || !info.Valid())
+    {
+        if (receivable.amount_ < rai::CreditPrice(rai::CurrentTimestamp()))
+        {
+            return error_code;
+        }
+    }
+    else
+    {
+        error = node_.ledger_.BlockGet(transaction, info.head_, head);
+        if (error || head == nullptr)
+        {
+            error_code = rai::ErrorCode::LEDGER_BLOCK_GET;
+            rai::Stats::AddDetail(error_code, "Rewarder::ProcessReceive_");
+            return error_code;
+        }
+
+        if (info.Restricted(head->Credit()))
+        {
+            return rai::ErrorCode::ACCOUNT_RESTRICTED;
+        }
+    }
+
+    rai::RawKey private_key;
+    node_.key_.Get(private_key);
+
+    rai::RepBlockBuilder builder(node_.account_, private_key, head);
+    return builder.Receive(block, hash, receivable.amount_,
+                           receivable.timestamp_, rai::CurrentTimestamp());
+}
+
+rai::ErrorCode rai::Rewarder::ProcessBind_(rai::Chain chain,
+                                           const rai::SignerAddress& signer,
+                                           std::shared_ptr<rai::Block>& block)
+{
+    boost::optional<rai::SignerAddress> signer_o =
+        node_.BindingQuery(node_.account_, chain);
+    if (signer_o && *signer_o == signer)
+    {
+        return rai::ErrorCode::BINDING_IGNORED;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    rai::AccountInfo info;
+    bool error =
+        node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
+    if (error || !info.Valid())
+    {
+        error_code = rai::ErrorCode::LEDGER_ACCOUNT_INFO_GET;
+        rai::Stats::AddDetail(error_code, "Rewarder::ProcessBind_");
+        return error_code;
+    }
+
+    std::shared_ptr<rai::Block> head(nullptr);
+    error = node_.ledger_.BlockGet(transaction, info.head_, head);
+    if (error || head == nullptr)
+    {
+        error_code = rai::ErrorCode::LEDGER_BLOCK_GET;
+        rai::Stats::AddDetail(error_code, "Rewarder::ProcessBind_");
+        return error_code;
+    }
+
+    if (info.Restricted(head->Credit()))
+    {
+        return rai::ErrorCode::ACCOUNT_RESTRICTED;
+    }
+
+    rai::RawKey private_key;
+    node_.key_.Get(private_key);
+
+    rai::RepBlockBuilder builder(node_.account_, private_key, head);
+    return builder.Bind(block, chain, signer, rai::CurrentTimestamp());
+}
+
+rai::ErrorCode rai::Rewarder::ProcessCredit_(std::shared_ptr<rai::Block>& block)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, node_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    rai::AccountInfo info;
+    bool error =
+        node_.ledger_.AccountInfoGet(transaction, node_.account_, info);
+    if (error || !info.Valid())
+    {
+        return error_code;
+    }
+
+    std::shared_ptr<rai::Block> head(nullptr);
+    error = node_.ledger_.BlockGet(transaction, info.head_, head);
+    if (error || head == nullptr)
+    {
+        error_code = rai::ErrorCode::LEDGER_BLOCK_GET;
+        rai::Stats::AddDetail(error_code, "Rewarder::ProcessCredit_");
+        return error_code;
+    }
+
+    do
+    {
+        if (info.Restricted(head->Credit())) break;
+        if (head->Limited()) break;
+
+        uint64_t count = 0;
+        error =
+            node_.ledger_.BindingCountGet(transaction, node_.account_, count);
+        if (!error && count >= rai::AllowedBindings(head->Credit())
+            && count < rai::MAX_ALLOWED_BINDINGS)
+        {
+            break;
+        }
+
+        return error_code;
+    } while (0);
+
+    if (head->Balance() < rai::CreditPrice(rai::CurrentTimestamp()))
+    {
+        rai::Stats::AddDetail(error_code, "Rewarder::ProcessCredit_");
+        return rai::ErrorCode::ACCOUNT_ACTION_BALANCE;
+    }
+
+    rai::RawKey private_key;
+    node_.key_.Get(private_key);
+
+    rai::RepBlockBuilder builder(node_.account_, private_key, head);
+    return builder.Credit(block, 1, rai::CurrentTimestamp());
 }
 
 rai::QueryCallback rai::Rewarder::QueryCallback_(

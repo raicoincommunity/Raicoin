@@ -276,11 +276,7 @@ public:
     }
 
     static size_t constexpr PEERS_PER_BROADCAST = 16;
- 
-private:
-    std::atomic<rai::NodeStatus> status_;
 
-public:
     rai::NodeConfig config_;
     boost::asio::io_service& service_;
     rai::Alarm& alarm_;
@@ -315,6 +311,21 @@ public:
     std::shared_ptr<rai::WebsocketClient> websocket_;
     rai::BindingCaches binding_caches_;
     rai::Validator validator_;
+
+private:
+    void ConfirmRequestAck_(const rai::BlockProcessResult&,
+                            const std::shared_ptr<rai::Block>&);
+    void ElectNextFork_(const rai::BlockProcessResult&,
+                        const std::shared_ptr<rai::Block>&);
+    void UpdateActiveAccounts_(const rai::BlockProcessResult&,
+                               const std::shared_ptr<rai::Block>&);
+    void UpdateBindingCaches_(const rai::BlockProcessResult&,
+                              const std::shared_ptr<rai::Block>&);
+    void ProcessReceivable_(const rai::BlockProcessResult&,
+                            const std::shared_ptr<rai::Block>&);
+
+    std::atomic<rai::NodeStatus> status_;
+
 };
 
 } // namespace rai

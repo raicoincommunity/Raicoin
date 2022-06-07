@@ -1007,7 +1007,8 @@ public:
                             size_t = std::numeric_limits<size_t>::max());
     bool ReceivableInfosGet(rai::Transaction&, const rai::Account&,
                             rai::ReceivableInfosType, rai::ReceivableInfos&,
-                            size_t = std::numeric_limits<size_t>::max());
+                            size_t = std::numeric_limits<size_t>::max(),
+                            size_t = 10000);
     bool ReceivableInfoDel(rai::Transaction&, const rai::Account&,
                            const rai::BlockHash&);
     bool ReceivableInfoCount(rai::Transaction&, size_t&) const;

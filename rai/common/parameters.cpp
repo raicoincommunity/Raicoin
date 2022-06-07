@@ -268,3 +268,14 @@ rai::Chain rai::CurrentChain()
         }
     }
 }
+
+uint32_t rai::CrossChainEpoch(uint64_t now)
+{
+
+    return now / rai::CROSS_CHAIN_EPOCH_INTERVAL;
+}
+
+uint64_t rai::CrossChainEpochTimestamp(uint32_t epoch)
+{
+    return uint64_t(epoch) * uint64_t(rai::CROSS_CHAIN_EPOCH_INTERVAL);
+}

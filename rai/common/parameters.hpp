@@ -101,6 +101,7 @@ uint64_t constexpr SWAP_PING_PONG_INTERVAL = 60;
 uint64_t constexpr BASE_ALLOWED_BINDINGS = 16;
 uint64_t constexpr EXTRA_BINDINGS_PER_CREDIT = 1;
 uint64_t constexpr MAX_ALLOWED_BINDINGS = 2048;
+uint32_t constexpr CROSS_CHAIN_EPOCH_INTERVAL = 3 * 24 * 60 * 60;
 
 // Votes from qualified representatives will be broadcasted
 const rai::Amount QUALIFIED_REP_WEIGHT = rai::Amount(256 * rai::RAI);
@@ -118,4 +119,6 @@ uint16_t BaseAllowedForks(uint64_t);
 uint64_t MaxAllowedForks(uint64_t, uint32_t);
 uint64_t AllowedBindings(uint32_t);
 rai::Chain CurrentChain();
+uint32_t CrossChainEpoch(uint64_t);
+uint64_t CrossChainEpochTimestamp(uint32_t);
 }  // namespace rai

@@ -5113,12 +5113,19 @@ bool rai::Ledger::ReceivableInfosGet(rai::Transaction& transaction,
                                      const rai::Account& account,
                                      rai::ReceivableInfosType type,
                                      rai::ReceivableInfos& receivables,
-                                     size_t max_size)
+                                     size_t max_size, size_t max_search)
 {
+    size_t count = 0;
     rai::Iterator i = ReceivableInfoLowerBound(transaction, account);
     rai::Iterator n = ReceivableInfoUpperBound(transaction, account);
     for (; i != n; ++i)
     {
+        if (count >= max_search)
+        {
+            break;
+        }
+        ++count;
+
         rai::Account ignore;
         rai::BlockHash hash;
         rai::ReceivableInfo info;
