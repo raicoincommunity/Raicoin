@@ -103,6 +103,10 @@ void rai::BlockProcessor::Add(const std::shared_ptr<rai::Block>& block)
     auto ret = blocks_.insert(block_info);
     if (!ret.second)
     {
+        rai::BlockProcessResult result{rai::BlockOperation::DROP,
+                                       rai::ErrorCode::SUCCESS, 0};
+        block_observer_(result, block);
+        node_.dumpers_.block_.Dump(result, block);
         return;
     }
 

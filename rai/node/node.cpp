@@ -322,7 +322,7 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
       bootstrap_listener_(*this, service, config.address_, config.port_),
       subscriptions_(*this),
       rewarder_(*this, config_.forward_reward_to_, config_.daily_forward_times_),
-      validator_(*this, service_, config.validator_url_)
+      validator_(*this, service_, alarm_, config.validator_url_)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -413,6 +413,7 @@ void rai::Node::Start()
     network_.Start();
     bootstrap_listener_.Start();
     rewarder_.Start();
+    validator_.Start();
     Ongoing(std::bind(&rai::Node::ResolvePreconfiguredPeers, this),
             std::chrono::seconds(300));
     Ongoing(std::bind(&rai::Peers::SynCookies, &peers_),
@@ -462,6 +463,7 @@ void rai::Node::Stop()
     {
         websocket_->Close();
     }
+    validator_.Stop();
     bootstrap_.Stop();
     bootstrap_listener_.Stop();
     alarm_.Stop();
@@ -979,11 +981,20 @@ public:
         }
         else
         {
-            // todo:
+            rai::WeightMessage response(message);
+            response.ClearFlag(rai::MessageFlags::RELAY);
+            response.SetFlag(rai::MessageFlags::ACK);
+            node_.validator_.QueryWeight(message.rep_, response.epoch_,
+                                         response.weight_);
+            response.replier_ = node_.account_;
+            node_.Send(response, sender_,
+                       [](rai::Node& node, const rai::Endpoint& peer_endpoint,
+                          const std::string& error) {
+                           std::cout << "Failed to send weight_ack message to "
+                                     << peer_endpoint << std::endl;
+                       });
         }
-        // todo:
     }
-
 
 private:
     rai::Node& node_;
@@ -1410,118 +1421,18 @@ void rai::Node::Push(const std::shared_ptr<rai::Block>& block)
 }
 
 void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
-                                   const std::shared_ptr<rai::Block>& block)
+                                 const std::shared_ptr<rai::Block>& block)
 {
-    // confirm request ack
-    do
+    ConfirmRequestAck_(result, block);
+    ElectNextFork_(result, block);
+    UpdateActiveAccounts_(result, block);
+    UpdateBindingCaches_(result, block);
+    ProcessReceivable_(result, block);
+
+    if (result.operation_ == rai::BlockOperation::DROP)
     {
-        if (result.operation_ != rai::BlockOperation::APPEND)
-        {
-            break;
-        }
-        if (result.error_code_ != rai::ErrorCode::SUCCESS
-            && result.error_code_ != rai::ErrorCode::BLOCK_PROCESS_EXISTS)
-        {
-            break;
-        }
-        auto to = confirm_requests_.Remove(block->Hash());
-        Confirm(to, block);
-    } while (0);
-
-    // recent blocks
-    do
-    {
-        if (result.operation_ == rai::BlockOperation::DROP)
-        {
-            recent_blocks_.Remove(block->Hash());
-        }
-    } while (0);
-
-    // start election for next fork
-    do
-    {
-        if (result.operation_ != rai::BlockOperation::CONFIRM)
-        {
-            break;
-        }
-        if (result.error_code_ != rai::ErrorCode::SUCCESS)
-        {
-            break;
-        }
-
-        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
-        rai::Transaction transaction(error_code, ledger_, false);
-        if (error_code != rai::ErrorCode::SUCCESS)
-        {
-            break;
-        }
-
-        rai::Account account(block->Account());
-        uint64_t height = block->Height();
-        height++;
-        std::shared_ptr<rai::Block> first(nullptr);
-        std::shared_ptr<rai::Block> second(nullptr);
-        bool error =
-            ledger_.NextFork(transaction, account, height, first, second);
-        if (error || account != block->Account())
-        {
-            break;
-        }
-
-        rai::AccountInfo info;
-        error = ledger_.AccountInfoGet(transaction, account, info);
-        if (error || !info.Valid())
-        {
-            break;
-        }
-
-        if (height > info.head_height_)
-        {
-            break;
-        }
-
-        if (info.confirmed_height_ != rai::Block::INVALID_HEIGHT
-            && info.confirmed_height_ >= height)
-        {
-            break;
-        }
-
-        StartElection(first, second);
-    } while (0);
-
-    // update active accounts
-    do
-    {
-        if (result.error_code_ != rai::ErrorCode::SUCCESS)
-        {
-            break;
-        }
-        if (result.operation_ != rai::BlockOperation::APPEND
-            && result.operation_ != rai::BlockOperation::ROLLBACK)
-        {
-            break;
-        }
-        active_accounts_.Add(block->Account());
-    } while (0);
-
-    // update binding caches
-    do
-    {
-        if (result.error_code_ != rai::ErrorCode::SUCCESS)
-        {
-            break;
-        }
-
-        if (result.operation_ == rai::BlockOperation::APPEND)
-        {
-            binding_caches_.Update(block, true);
-        }
-        else if (result.operation_ == rai::BlockOperation::ROLLBACK)
-        {
-            binding_caches_.Update(block, false);
-        }
-    } while (0);
-    
+        recent_blocks_.Remove(block->Hash());
+    }
 }
 
 void rai::Node::Ongoing(const std::function<void()>& process,
@@ -2061,4 +1972,146 @@ boost::optional<rai::SignerAddress> rai::Node::BindingQuery(
         binding_caches_.Insert(account, chain, *result);
     }
     return result;
+}
+
+void rai::Node::ConfirmRequestAck_(const rai::BlockProcessResult& result,
+                                   const std::shared_ptr<rai::Block>& block)
+{
+    if (result.operation_ != rai::BlockOperation::APPEND)
+    {
+        return;
+    }
+    if (result.error_code_ != rai::ErrorCode::SUCCESS
+        && result.error_code_ != rai::ErrorCode::BLOCK_PROCESS_EXISTS)
+    {
+        return;
+    }
+    auto to = confirm_requests_.Remove(block->Hash());
+    Confirm(to, block);
+}
+
+void rai::Node::ElectNextFork_(const rai::BlockProcessResult& result,
+                               const std::shared_ptr<rai::Block>& block)
+{
+    if (result.operation_ != rai::BlockOperation::CONFIRM)
+    {
+        return;
+    }
+    if (result.error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, ledger_, false);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    rai::Account account(block->Account());
+    uint64_t height = block->Height();
+    height++;
+    std::shared_ptr<rai::Block> first(nullptr);
+    std::shared_ptr<rai::Block> second(nullptr);
+    bool error = ledger_.NextFork(transaction, account, height, first, second);
+    if (error || account != block->Account())
+    {
+        return;
+    }
+
+    rai::AccountInfo info;
+    error = ledger_.AccountInfoGet(transaction, account, info);
+    if (error || !info.Valid())
+    {
+        return;
+    }
+
+    if (height > info.head_height_)
+    {
+        return;
+    }
+
+    if (info.confirmed_height_ != rai::Block::INVALID_HEIGHT
+        && info.confirmed_height_ >= height)
+    {
+        return;
+    }
+
+    StartElection(first, second);
+}
+
+void rai::Node::UpdateActiveAccounts_(const rai::BlockProcessResult& result,
+                                      const std::shared_ptr<rai::Block>& block)
+{
+    if (result.error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+    if (result.operation_ != rai::BlockOperation::APPEND
+        && result.operation_ != rai::BlockOperation::ROLLBACK)
+    {
+        return;
+    }
+    active_accounts_.Add(block->Account());
+}
+
+void rai::Node::UpdateBindingCaches_(const rai::BlockProcessResult& result,
+                                     const std::shared_ptr<rai::Block>& block)
+{
+    if (result.error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    if (result.operation_ == rai::BlockOperation::APPEND)
+    {
+        binding_caches_.Update(block, true);
+    }
+    else if (result.operation_ == rai::BlockOperation::ROLLBACK)
+    {
+        binding_caches_.Update(block, false);
+    }
+}
+
+void rai::Node::ProcessReceivable_(const rai::BlockProcessResult& result,
+                                   const std::shared_ptr<rai::Block>& block)
+{
+    if (result.error_code_ != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    if (block->Opcode() != rai::BlockOpcode::SEND || block->Link() != account_)
+    {
+        return;
+    }
+
+    if (result.operation_ == rai::BlockOperation::APPEND)
+    {
+        StartElection(block);
+    }
+    else if (result.operation_ == rai::BlockOperation::CONFIRM)
+    {
+        rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+        rai::Transaction transaction(error_code, ledger_, false);
+        if (error_code != rai::ErrorCode::SUCCESS)
+        {
+            return;
+        }
+
+        rai::ReceivableInfo info;
+        bool error = ledger_.ReceivableInfoGet(transaction, account_,
+                                               block->Hash(), info);
+        IF_ERROR_RETURN_VOID(error);
+
+        if (rewarder_.CanReceive(info))
+        {
+            rewarder_.AddReceivable(block->Hash(), info.amount_);
+        }
+    }
+    else
+    {
+        // do nothing
+    }
 }

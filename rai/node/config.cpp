@@ -203,6 +203,12 @@ rai::ErrorCode rai::NodeConfig::UpgradeJson(bool& upgraded, uint32_t version,
         }
         case 5:
         {
+            upgraded = true;
+            error_code = UpgradeV5V6(ptree);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 6:
+        {
             break;
         }
         default:
@@ -260,6 +266,15 @@ rai::ErrorCode rai::NodeConfig::UpgradeV4V5(rai::Ptree& ptree) const
     ptree.put("version", 5);
 
     ptree.put("election_concurrency", std::to_string(election_concurrency_));
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::NodeConfig::UpgradeV5V6(rai::Ptree& ptree) const
+{
+    ptree.put("version", 6);
+
+    ptree.put("validator_url", validator_url_.String());
 
     return rai::ErrorCode::SUCCESS;
 }

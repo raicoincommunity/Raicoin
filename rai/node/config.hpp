@@ -20,6 +20,7 @@ public:
     rai::ErrorCode UpgradeV2V3(rai::Ptree&) const;
     rai::ErrorCode UpgradeV3V4(rai::Ptree&) const;
     rai::ErrorCode UpgradeV4V5(rai::Ptree&) const;
+    rai::ErrorCode UpgradeV5V6(rai::Ptree&) const;
 
     static uint32_t constexpr DEFAULT_DAILY_FORWARD_TIMES = 12;
 
