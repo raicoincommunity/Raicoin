@@ -289,6 +289,44 @@ public:
     rai::TokenSource source_;
 };
 
+class TokenUnmapInfo
+{
+public:
+    TokenUnmapInfo();
+    TokenUnmapInfo(const rai::TokenKey&, rai::TokenType, const rai::TokenValue&,
+                   const rai::Account&, const rai::BlockHash&, uint64_t);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    rai::TokenType type_;
+    rai::TokenValue value_;
+    rai::Account to_;
+    rai::BlockHash source_tx_;
+    uint64_t extra_data_;
+    rai::BlockHash target_tx_;
+    uint64_t target_height_;
+};
+
+class TokenWrapInfo
+{
+public:
+    TokenWrapInfo();
+    TokenWrapInfo(const rai::TokenKey&, rai::TokenType, const rai::TokenValue&,
+                  rai::Chain, const rai::Account&, const rai::BlockHash&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    rai::TokenType type_;
+    rai::TokenValue value_;
+    rai::Chain to_chain_;
+    rai::Account to_account_;
+    rai::BlockHash source_tx_;
+    rai::BlockHash target_tx_;
+    uint64_t target_height_;
+};
+
 class TokenIdInfo
 {
 public:
@@ -835,6 +873,28 @@ public:
     rai::Iterator TokenReceivableUpperBound(rai::Transaction&,
                                             const rai::Account&,
                                             const rai::TokenKey&) const;
+    bool TokenUnmapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
+                           const rai::TokenUnmapInfo&);
+    bool TokenUnmapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
+                           rai::TokenUnmapInfo&) const;
+    bool TokenUnmapInfoGet(const rai::Iterator&, rai::Account&, uint64_t&,
+                           rai::TokenUnmapInfo&) const;
+    rai::Iterator TokenUnmapInfoLowerBound(
+        rai::Transaction&, const rai::Account&,
+        uint64_t = std::numeric_limits<uint64_t>::max()) const;
+    rai::Iterator TokenUnmapInfoUpperBound(rai::Transaction&,
+                                           const rai::Account&) const;
+    bool TokenWrapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
+                          const rai::TokenWrapInfo&);
+    bool TokenWrapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
+                          rai::TokenWrapInfo&) const;
+    bool TokenWrapInfoGet(const rai::Iterator&, rai::Account&, uint64_t&,
+                          rai::TokenWrapInfo&) const;
+    rai::Iterator TokenWrapInfoLowerBound(
+        rai::Transaction&, const rai::Account&,
+        uint64_t = std::numeric_limits<uint64_t>::max()) const;
+    rai::Iterator TokenWrapInfoUpperBound(rai::Transaction&,
+                                          const rai::Account&) const;
     bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,

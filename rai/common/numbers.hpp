@@ -111,6 +111,7 @@ using TokenValue    = uint256_union;
 using TokenAddress  = uint256_union;
 using Topic         = uint256_union;
 using SignerAddress = uint256_union;
+using EvmChainId    = uint256_union;
 
 class AccountParser
 {

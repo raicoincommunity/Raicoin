@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <rai/common/numbers.hpp>
+#include <rai/common/errors.hpp>
 
 namespace rai
 {
@@ -20,6 +21,7 @@ enum class Chain : uint32_t
     ETHEREUM_TEST_KOVAN         = 10031,
     ETHEREUM_TEST_RINKEBY       = 10032,
     ETHEREUM_TEST_GOERLI        = 10033,
+    ETHEREUM_TEST_SEPOLIA       = 10034,
     BINANCE_SMART_CHAIN_TEST    = 10040,
 
     MAX
@@ -31,6 +33,6 @@ inline bool IsRaicoin(Chain chain)
     return chain == Chain::RAICOIN || chain == Chain::RAICOIN_TEST;
 }
 
-rai::Chain GetChainFromBlockLink(const rai::uint256_union&);
+rai::ErrorCode CheckWrapToChain(Chain chain);
 
 }  // namespace rai

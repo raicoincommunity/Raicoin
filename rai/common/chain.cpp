@@ -48,6 +48,10 @@ std::string rai::ChainToString(rai::Chain chain)
         {
             return "ethereum goerli testnet";
         }
+        case rai::Chain::ETHEREUM_TEST_SEPOLIA:
+        {
+            return "ethereum sepolia testnet";
+        }
         case rai::Chain::BINANCE_SMART_CHAIN_TEST:
         {
             return "binance smart chain testnet";
@@ -101,6 +105,10 @@ rai::Chain rai::StringToChain(const std::string& str)
     {
         return rai::Chain::ETHEREUM_TEST_GOERLI;
     }
+    else if ("ethereum sepolia testnet" == str)
+    {
+        return rai::Chain::ETHEREUM_TEST_SEPOLIA;
+    }
     else if ("binance smart chain testnet" == str)
     {
         return rai::Chain::BINANCE_SMART_CHAIN_TEST;
@@ -111,8 +119,41 @@ rai::Chain rai::StringToChain(const std::string& str)
     }
 }
 
-rai::Chain rai::GetChainFromBlockLink(const rai::uint256_union& link)
+rai::ErrorCode rai::CheckWrapToChain(Chain chain)
 {
-    return static_cast<rai::Chain>(
-        static_cast<uint32_t>((link.Number() >> 216) & 0xFFFFFFFF));
+    switch (chain)
+    {
+        case rai::Chain::INVALID:
+        {
+            return rai::ErrorCode::TOKEN_WRAP_TO_INVALID_CHAIN;
+        }
+        case rai::Chain::RAICOIN:
+        case rai::Chain::BITCOIN:
+        {
+            return rai::ErrorCode::TOKEN_WRAP_TO_UNSUPPORTED_CHAIN;
+        }
+        case rai::Chain::ETHEREUM:
+        case rai::Chain::BINANCE_SMART_CHAIN:
+        {
+            return rai::ErrorCode::SUCCESS;
+        }
+        case rai::Chain::RAICOIN_TEST:
+        case rai::Chain::BITCOIN_TEST:
+        {
+            return rai::ErrorCode::TOKEN_WRAP_TO_UNSUPPORTED_CHAIN;
+        }
+        case rai::Chain::ETHEREUM_TEST_ROPSTEN:
+        case rai::Chain::ETHEREUM_TEST_KOVAN:
+        case rai::Chain::ETHEREUM_TEST_RINKEBY:
+        case rai::Chain::ETHEREUM_TEST_GOERLI:
+        case rai::Chain::ETHEREUM_TEST_SEPOLIA:
+        case rai::Chain::BINANCE_SMART_CHAIN_TEST:
+        {
+            return rai::ErrorCode::SUCCESS;
+        }
+        default:
+        {
+            return rai::ErrorCode::TOKEN_WRAP_TO_UNKNOWN_CHAIN;
+        }
+    }
 }
