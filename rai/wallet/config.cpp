@@ -63,7 +63,7 @@ std::vector<std::string> DefaultPreconfiguredReps()
     }
     return result;
 }
-};  // namespace
+}  // namespace
 
 rai::WalletConfig::WalletConfig() : server_("wss")
 {

@@ -46,6 +46,8 @@ public:
     rai::ObserverContainer<const rai::Account&, uint64_t,
                            const std::shared_ptr<rai::Block>&>
         take_nack_block_submitted_;
+    rai::ObserverContainer<const rai::Account&, uint64_t> token_unmap_;
+    rai::ObserverContainer<const rai::Account&, uint64_t> token_wrap_;
 };
 
 class TokenError
@@ -307,5 +309,7 @@ private:
     std::function<void(const rai::Account&, uint64_t,
                        const std::shared_ptr<rai::Block>&)>
         take_nack_block_submitted_observer_;
+    std::function<void(const rai::Account&, uint64_t)> token_unmap_observer_;
+    std::function<void(const rai::Account&, uint64_t)> token_wrap_observer_;
 };
 }

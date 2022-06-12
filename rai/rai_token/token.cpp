@@ -591,6 +591,32 @@ void rai::Token::Start()
             });
         };
 
+    token_unmap_observer_ = [token](const rai::Account& account,
+                                    uint64_t height) {
+        auto token_s = token.lock();
+        if (token_s == nullptr) return;
+
+        token_s->Background([token, account, height]() {
+            if (auto token_s = token.lock())
+            {
+                token_s->observers_.token_unmap_.Notify(account, height);
+            }
+        });
+    };
+
+    token_wrap_observer_ = [token](const rai::Account& account,
+                                   uint64_t height) {
+        auto token_s = token.lock();
+        if (token_s == nullptr) return;
+
+        token_s->Background([token, account, height]() {
+            if (auto token_s = token.lock())
+            {
+                token_s->observers_.token_wrap_.Notify(account, height);
+            }
+        });
+    };
+
     App::Start();
 }
 
@@ -1515,7 +1541,7 @@ rai::TokenError rai::Token::ProcessBurn_(
         if (error)
         {
             rai::Log::Error(rai::ToString(
-                "Token::ProcessMint_: del account token id, hash=",
+                "Token::ProcessBurn_: del account token id, hash=",
                 block->Hash().StringHex()));
             return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
         }
@@ -3296,8 +3322,172 @@ rai::TokenError rai::Token::ProcessUnmap_(
         return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
     }
 
-    // todo: cross chain
-    return rai::ErrorCode::APP_PROCESS_WAITING;
+    rai::AccountTokenInfo account_token_info;
+    bool error = ledger_.AccountTokenInfoGet(
+        transaction, block->Account(), unmap->token_.chain_,
+        unmap->token_.address_, account_token_info);
+    if (error)
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_EMPTY,
+                                   observers);
+    }
+    if (account_token_info.balance_.IsZero())
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO,
+                                   observers);
+    }
+
+    rai::TokenKey key(unmap->token_.chain_, unmap->token_.address_);
+    std::vector<rai::TokenKey> keys;
+    keys.push_back(key);
+    rai::TokenInfo info;
+    error = ledger_.TokenInfoGet(transaction, key, info);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("Token::ProcessUnmap_: get token info failed, hash=",
+                          block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
+    }
+
+    if (unmap->token_.type_ != info.type_)
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
+    }
+
+    rai::TokenValue balance(account_token_info.balance_);
+    rai::TokenValue local_supply(0);
+    if (info.type_ == rai::TokenType::_20)
+    {
+        if (unmap->value_ > account_token_info.balance_)
+        {
+            return UpdateLedgerCommon_(
+                transaction, block,
+                rai::ErrorCode::TOKEN_UNMAP_MORE_THAN_BALANCE, observers, keys);
+        }
+        balance = account_token_info.balance_ - unmap->value_;
+
+        if (unmap->value_ > info.local_supply_)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessUnmap_: unmap more than local supply, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
+        }
+        local_supply = info.local_supply_ - unmap->value_;
+
+        observers.push_back(std::bind(account_token_balance_observer_,
+                                      block->Account(), key, info.type_,
+                                      boost::none));
+    }
+    else if (info.type_ == rai::TokenType::_721)
+    {
+        rai::TokenValue token_id = unmap->value_;
+        rai::AccountTokenId account_token_id(block->Account(), key, token_id);
+        if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
+        {
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
+        }
+        balance = account_token_info.balance_ - 1;
+
+        if (info.local_supply_ < 1)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessUnmap_: token local supply underflow, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_HALT; // Ledger inconsistency
+        }
+        local_supply = info.local_supply_ - 1;
+
+        rai::TokenIdInfo token_id_info;
+        error =
+            ledger_.TokenIdInfoGet(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessUnmap_: get token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_HALT; // Ledger inconsistency
+        }
+        token_id_info.unmapped_ = true;
+        error =
+            ledger_.TokenIdInfoPut(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessUnmap_: put token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+
+        error = ledger_.AccountTokenIdDel(transaction, account_token_id);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessUnmap_: delete account token id failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
+        }
+
+        error_code = UpdateLedgerTokenIdTransfer_(
+            transaction, key, unmap->value_, block->Account(), block->Height());
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        observers.push_back(std::bind(token_id_transfer_observer_, key,
+                                      unmap->value_, token_id_info,
+                                      block->Account(), false));
+        observers.push_back(std::bind(account_token_balance_observer_,
+                                      block->Account(), key, info.type_,
+                                      token_id));
+    }
+    else
+    {
+        rai::Log::Error(
+            rai::ToString("Token::ProcessWrap_: unexpected token type, hash=",
+                          block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+    }
+
+    rai::TokenUnmapInfo unmap_info(key, info.type_, unmap->value_, unmap->to_,
+                                   block->Hash(), unmap->extra_data_);
+    error = ledger_.TokenUnmapInfoPut(transaction, block->Account(),
+                                      block->Height(), unmap_info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessUnmap_: put token unmap info failed, hash=",
+            block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+    observers.push_back(
+        std::bind(token_unmap_observer_, block->Account(), block->Height()));
+
+    error_code =
+        UpdateLedgerTokenTransfer_(transaction, key, block->Timestamp(),
+                                   block->Account(), block->Height());
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code =
+        UpdateLedgerBalance_(transaction, block->Account(), key,
+                             account_token_info.balance_, balance);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = UpdateLedgerSupplies_(transaction, key, info.total_supply_,
+                                       local_supply);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, unmap->value_,
+        rai::TokenBlock::ValueOp::DECREASE, observers, keys);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::TokenError rai::Token::ProcessWrap_(
@@ -3316,8 +3506,186 @@ rai::TokenError rai::Token::ProcessWrap_(
         return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
     }
 
-    // todo: cross chain
-    return rai::ErrorCode::APP_PROCESS_WAITING;
+    error_code = rai::CheckWrapToChain(wrap->to_chain_);
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        if (error_code == rai::ErrorCode::TOKEN_WRAP_TO_UNKNOWN_CHAIN)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessWrap_: wrap to unknow chain, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_WAITING;
+        }
+
+        return UpdateLedgerCommon_(transaction, block, error_code, observers);
+    }
+
+    rai::AccountTokenInfo account_token_info;
+    bool error = ledger_.AccountTokenInfoGet(
+        transaction, block->Account(), wrap->token_.chain_,
+        wrap->token_.address_, account_token_info);
+    if (error)
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_EMPTY,
+                                   observers);
+    }
+    if (account_token_info.balance_.IsZero())
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_BALANCE_IS_ZERO,
+                                   observers);
+    }
+
+    rai::TokenKey key(wrap->token_.chain_, wrap->token_.address_);
+    std::vector<rai::TokenKey> keys;
+    keys.push_back(key);
+    rai::TokenInfo info;
+    error = ledger_.TokenInfoGet(transaction, key, info);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("Token::ProcessWrap_: get token info failed, hash=",
+                          block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
+    }
+
+    if (wrap->token_.type_ != info.type_)
+    {
+        return UpdateLedgerCommon_(transaction, block,
+                                   rai::ErrorCode::TOKEN_TYPE_INVALID,
+                                   observers, keys);
+    }
+
+    rai::TokenValue balance(account_token_info.balance_);
+    rai::TokenValue local_supply(0);
+    if (info.type_ == rai::TokenType::_20)
+    {
+        if (wrap->value_ > account_token_info.balance_)
+        {
+            return UpdateLedgerCommon_(
+                transaction, block,
+                rai::ErrorCode::TOKEN_UNMAP_MORE_THAN_BALANCE, observers, keys);
+        }
+        balance = account_token_info.balance_ - wrap->value_;
+
+        if (wrap->value_ > info.local_supply_)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessWrap_: wrap more than local supply, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
+        }
+        local_supply = info.local_supply_ - wrap->value_;
+
+        observers.push_back(std::bind(account_token_balance_observer_,
+                                      block->Account(), key, info.type_,
+                                      boost::none));
+    }
+    else if (info.type_ == rai::TokenType::_721)
+    {
+        rai::TokenValue token_id = wrap->value_;
+        rai::AccountTokenId account_token_id(block->Account(), key, token_id);
+        if (!ledger_.AccountTokenIdExist(transaction, account_token_id))
+        {
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_ID_NOT_OWNED,
+                                       observers, keys);
+        }
+        balance = account_token_info.balance_ - 1;
+
+        if (info.local_supply_ < 1)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessWrap_: token local supply underflow, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
+        }
+        local_supply = info.local_supply_ - 1;
+
+        rai::TokenIdInfo token_id_info;
+        error =
+            ledger_.TokenIdInfoGet(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessWrap_: get token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_HALT; // Ledger inconsistency
+        }
+        token_id_info.wrapped_ = true;
+        error =
+            ledger_.TokenIdInfoPut(transaction, key, token_id, token_id_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessWrap_: put token id info failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+
+        error = ledger_.AccountTokenIdDel(transaction, account_token_id);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessWrap_: delete account token id failed, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_DEL;
+        }
+
+        error_code = UpdateLedgerTokenIdTransfer_(
+            transaction, key, wrap->value_, block->Account(), block->Height());
+        IF_NOT_SUCCESS_RETURN(error_code);
+
+        observers.push_back(std::bind(token_id_transfer_observer_, key,
+                                      wrap->value_, token_id_info,
+                                      block->Account(), false));
+        observers.push_back(std::bind(account_token_balance_observer_,
+                                      block->Account(), key, info.type_,
+                                      token_id));
+    }
+    else
+    {
+        rai::Log::Error(
+            rai::ToString("Token::ProcessWrap_: unexpected token type, hash=",
+                          block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+    }
+
+    rai::TokenWrapInfo wrap_info(key, info.type_, wrap->value_, wrap->to_chain_,
+                                 wrap->to_account_, block->Hash());
+    error = ledger_.TokenWrapInfoPut(transaction, block->Account(),
+                                     block->Height(), wrap_info);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessWrap_: put token wrap info failed, hash=",
+            block->Hash().StringHex()));
+        return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+    }
+    observers.push_back(
+        std::bind(token_wrap_observer_, block->Account(), block->Height()));
+
+    error_code =
+        UpdateLedgerTokenTransfer_(transaction, key, block->Timestamp(),
+                                   block->Account(), block->Height());
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code =
+        UpdateLedgerBalance_(transaction, block->Account(), key,
+                             account_token_info.balance_, balance);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = UpdateLedgerSupplies_(transaction, key, info.total_supply_,
+                                       local_supply);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    error_code = UpdateLedgerCommon_(
+        transaction, block, rai::ErrorCode::SUCCESS, wrap->value_,
+        rai::TokenBlock::ValueOp::DECREASE, observers, keys);
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    return rai::ErrorCode::SUCCESS;
 }
 
 rai::ErrorCode rai::Token::ProcessError_(rai::Transaction& transaction,

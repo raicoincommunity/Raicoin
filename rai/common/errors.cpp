@@ -2067,6 +2067,22 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "The ledger is outdated, please remove token_data.ldb and retry";
         }
+        case rai::ErrorCode::TOKEN_UNMAP_MORE_THAN_BALANCE:
+        {
+            return "Unmap more than balance";
+        }
+        case rai::ErrorCode::TOKEN_WRAP_TO_INVALID_CHAIN:
+        {
+            return "Wrap to invalid chain";
+        }
+        case rai::ErrorCode::TOKEN_WRAP_TO_UNSUPPORTED_CHAIN:
+        {
+            return "Wrap to unsupported account";
+        }
+        case rai::ErrorCode::TOKEN_WRAP_TO_UNKNOWN_CHAIN:
+        {
+            return "Wrap to unknown chain";
+        }
         default:
         {
             return "Invalid error code";
