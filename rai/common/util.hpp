@@ -388,6 +388,11 @@ public:
     virtual ~Serializer() = default;
 };
 
+bool JsonSecureCheck(const std::string&, uint64_t, uint64_t);
+bool StringToPtree(const std::string&, rai::Ptree&, uint64_t = 100000000,
+                   uint64_t = 20);
+std::string MilliToSecondString(uint64_t);
+
 }  // namespace rai
 
 #define IF_ERROR_RETURN(error, ret) \

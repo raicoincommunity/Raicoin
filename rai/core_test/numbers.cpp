@@ -440,6 +440,68 @@ TEST(uint256_union, hex)
         str);
 }
 
+TEST(uint256_union, evm_hex)
+{
+    bool ret;
+    rai::uint256_union value;
+
+    ret = value.DecodeEvmHex("");
+    ASSERT_EQ(true, ret);
+
+    ret = value.DecodeEvmHex("Ff");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ(0, value.Number());
+
+    ret = value.DecodeEvmHex(
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ(0, value.Number());
+
+    ret = value.DecodeEvmHex(
+        "0XFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ(0, value.Number());
+
+    ret = value.DecodeEvmHex(
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    ret = value.DecodeEvmHex(
+        "0x12345678901234567890123456789012345678901234567890123456789012345");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    ret = value.DecodeEvmHex("xFF");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    ret = value.DecodeEvmHex("FFx");
+    ASSERT_EQ(true, ret);
+    ASSERT_EQ((std::numeric_limits<rai::uint256_t>::max)(), value.Number());
+
+    string str;
+    value.EncodeEvmShortHex(str);
+    ASSERT_EQ(false,
+        str == "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+
+    value.EncodeEvmShortHex(str);
+    ASSERT_EQ(true,
+        str == "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+    ret = value.DecodeEvmHex("0x12f");
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ(0x12f, value.Number());
+    value.EncodeEvmShortHex(str);
+    ASSERT_EQ(true, str == "0x12f");
+
+    ret = value.DecodeEvmHex("0x0");
+    ASSERT_EQ(false, ret);
+    ASSERT_EQ(0, value.Number());
+    value.EncodeEvmShortHex(str);
+    ASSERT_EQ(true, str == "0x0");
+}
+
 TEST(uint256_union, account)
 {
     bool ret;

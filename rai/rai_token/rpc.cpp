@@ -47,6 +47,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         AccountTokensInfo();
     }
+    else if (action == "cross_chain_status")
+    {
+        CrossChainStatus();
+    }
     else if (action == "ledger_version")
     {
         LedgerVersion();
@@ -645,6 +649,11 @@ void rai::TokenRpcHandler::AccountTokensInfo()
     }
     response_.put_child("tokens", tokens);
     response_.put("token_count", std::to_string(count));
+}
+
+void rai::TokenRpcHandler::CrossChainStatus()
+{
+    token_.cross_chain_.Status(response_);
 }
 
 void rai::TokenRpcHandler::LedgerVersion()

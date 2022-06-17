@@ -81,6 +81,11 @@ rai::ErrorCode rai::TokenConfig::DeserializeJson(bool& upgraded,
         rai::Ptree& log_ptree = ptree.get_child("log");
         error_code = log_.DeserializeJson(upgraded, log_ptree);
         IF_NOT_SUCCESS_RETURN(error_code);
+
+        error_code = rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN;
+        rai::Ptree& cross_chain_ptree = ptree.get_child("cross_chain");
+        error_code = cross_chain_.DeserializeJson(upgraded, cross_chain_ptree);
+        IF_NOT_SUCCESS_RETURN(error_code);
     }
     catch (const std::exception&)
     {
@@ -91,7 +96,7 @@ rai::ErrorCode rai::TokenConfig::DeserializeJson(bool& upgraded,
 
 void rai::TokenConfig::SerializeJson(rai::Ptree& ptree) const
 {
-    ptree.put("version", "1");
+    ptree.put("version", "2");
 
     rai::Ptree rpc;
     rpc.put("enable", rpc_enable_);
@@ -115,14 +120,25 @@ void rai::TokenConfig::SerializeJson(rai::Ptree& ptree) const
     rai::Ptree log;
     log_.SerializeJson(log);
     ptree.add_child("log", log);
+
+    rai::Ptree cross_chain;
+    cross_chain_.SerializeJson(cross_chain);
+    ptree.add_child("cross_chain", cross_chain);
 }
 
 rai::ErrorCode rai::TokenConfig::UpgradeJson(bool& upgraded, uint32_t version,
                                               rai::Ptree& ptree) const
 {
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     switch (version)
     {
         case 1:
+        {
+            upgraded = true;
+            error_code = UpgradeV1V2(ptree);
+            IF_NOT_SUCCESS_RETURN(error_code);
+        }
+        case 2:
         {
             break;
         }
@@ -131,6 +147,17 @@ rai::ErrorCode rai::TokenConfig::UpgradeJson(bool& upgraded, uint32_t version,
             return rai::ErrorCode::CONFIG_VERSION;
         }
     }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+rai::ErrorCode rai::TokenConfig::UpgradeV1V2(rai::Ptree& ptree) const
+{
+    ptree.put("version", 2);
+
+    rai::Ptree cross_chain;
+    cross_chain_.SerializeJson(cross_chain);
+    ptree.add_child("cross_chain", cross_chain);
 
     return rai::ErrorCode::SUCCESS;
 }

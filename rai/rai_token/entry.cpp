@@ -83,9 +83,35 @@ rai::ErrorCode Process(const boost::program_options::variables_map& vm,
     }
     catch(const std::exception& e)
     {
-        std::cerr << "Error while running rai_alias (" << e.what() << ")\n";
+        std::cerr << "Error while running rai_token (" << e.what() << ")\n";
     }
 
+    return rai::ErrorCode::SUCCESS;
+}
+
+
+rai::ErrorCode ProcessConfigCreate(
+    const boost::program_options::variables_map& vm,
+    const boost::filesystem::path& data_path)
+{
+    boost::filesystem::path config_path = data_path / "token_config.json";
+    if (boost::filesystem::exists(config_path))
+    {
+        std::cout << "Error: the config file already exists:" << config_path
+                  << std::endl;
+        return rai::ErrorCode::SUCCESS;
+    }
+
+    rai::TokenConfig config;
+
+    std::fstream config_file;
+    rai::ErrorCode error_code =
+        rai::WriteObject(config, config_path, config_file);
+    config_file.close();
+    IF_NOT_SUCCESS_RETURN(error_code);
+
+    std::cout << "Success, the config file was saved to:" << config_path
+              << std::endl;
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -96,6 +122,7 @@ int main(int argc, char* const* argv)
     boost::program_options::options_description desc("Command line options");
     desc.add_options()
     ("data_path", boost::program_options::value<std::string>(), "Use the supplied path as the data directory")
+    ("config_create", "Generate the token_config.json file")
     ("version", "Prints out version")
     ("help", "Print usage help")
     ;
@@ -154,6 +181,10 @@ int main(int argc, char* const* argv)
         {
             error_code = ProcessVersion(vm, data_path);
         }
+        else if (vm.count("config_create"))
+        {
+            error_code = ProcessConfigCreate(vm, data_path);
+        }
         else
         {
             error_code = Process(vm, data_path);
@@ -161,7 +192,7 @@ int main(int argc, char* const* argv)
 
         if (rai::ErrorCode::SUCCESS != error_code)
         {
-            std::cerr << rai::ErrorString(error_code) << ": "
+            std::cerr << "[Error]" << rai::ErrorString(error_code) << ": "
                     << static_cast<int>(error_code) << std::endl;
             return 1;
         }

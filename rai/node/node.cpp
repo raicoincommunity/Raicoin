@@ -1076,7 +1076,7 @@ void rai::Node::SendCallback(const rai::Ptree& notify)
         || config_.callback_url_.protocol_ == "https")
     {
         rai::HttpCallback handler = [](rai::ErrorCode error_code,
-                                           const std::string&) {
+                                       const std::string&) {
             if (error_code != rai::ErrorCode::SUCCESS)
             {
                 rai::Stats::Add(error_code, "Node::SendCallback");

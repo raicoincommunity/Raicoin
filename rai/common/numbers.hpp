@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/multiprecision/cpp_int.hpp>
+#include <boost/algorithm/string.hpp>
 #include <cryptopp/osrng.h>
 
 namespace rai
@@ -84,9 +85,12 @@ union uint256_union
     bool DecodeHex(const std::string&);
     void EncodeDec(std::string&) const;
     bool DecodeDec(const std::string&);
+    void EncodeEvmShortHex(std::string&) const;
+    bool DecodeEvmHex(const std::string&);
     void EncodeAccount(std::string&) const;
     bool DecodeAccount(const std::string&);
     std::string StringHex() const;
+    std::string StringEvmShortHex() const;
     std::string StringDec() const;
     std::string StringAccount() const;
     std::string StringBalance(uint8_t, const std::string& = "") const;
