@@ -6,6 +6,7 @@
 #include <rai/common/log.hpp>
 #include <rai/secure/rpc.hpp>
 #include <rai/app/config.hpp>
+#include <rai/rai_token/crosschain/config.hpp>
 
 namespace rai
 {
@@ -16,6 +17,7 @@ public:
     rai::ErrorCode DeserializeJson(bool&, rai::Ptree&);
     void SerializeJson(rai::Ptree&) const;
     rai::ErrorCode UpgradeJson(bool&, uint32_t, rai::Ptree&) const;
+    rai::ErrorCode UpgradeV1V2(rai::Ptree&) const;
 
     static uint16_t constexpr DEFAULT_WS_PORT =
         rai::RAI_NETWORK == rai::RaiNetworks::LIVE ? 7185 : 54310;
@@ -26,6 +28,7 @@ public:
     rai::RpcConfig rpc_;
     rai::AppConfig app_;
     rai::LogConfig log_;
+    rai::CrossChainConfig cross_chain_;
 };
 
 }

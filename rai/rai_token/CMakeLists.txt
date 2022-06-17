@@ -12,8 +12,15 @@ add_executable (rai_token
 	topic.hpp
 	swaphelper.cpp
 	swaphelper.hpp
-	crosschain.cpp
-	crosschain.hpp
+	crosschain/config.cpp
+	crosschain/config.hpp
+	crosschain/crosschain.cpp
+	crosschain/crosschain.hpp
+	crosschain/event.cpp
+	crosschain/event.hpp
+	crosschain/parsers/base.hpp
+	crosschain/parsers/evm.hpp
+	crosschain/parsers/evm.cpp
 )
 
 target_link_libraries (rai_token

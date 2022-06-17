@@ -9,6 +9,7 @@
 #include <rai/rai_token/rpc.hpp>
 #include <rai/rai_token/topic.hpp>
 #include <rai/rai_token/swaphelper.hpp>
+#include <rai/rai_token/crosschain/crosschain.hpp>
 
 namespace rai
 {
@@ -133,6 +134,7 @@ public:
     rai::TokenSubscriptions subscribe_;
     rai::TokenTopics token_topics_;
     rai::SwapHelper swap_helper_;
+    rai::CrossChain cross_chain_;
 
 private:
     static uint32_t constexpr CURRENT_LEDGER_VERSION = 2;

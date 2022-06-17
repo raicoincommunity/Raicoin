@@ -505,7 +505,8 @@ bool rai::uint256_union::IsZero() const
 void rai::uint256_union::EncodeHex(std::string& text) const
 {
     std::stringstream stream;
-    stream << std::hex << std::noshowbase << std::setw(64) << std::setfill('0');
+    stream << std::hex << std::noshowbase << std::uppercase << std::setw(64)
+           << std::setfill('0');
     stream << Number();
     text = stream.str();
 }
@@ -566,6 +567,42 @@ bool rai::uint256_union::DecodeDec(const std::string& text)
             return true;
         }
         *this = rai::uint256_t(number);
+        return false;
+    }
+    catch (std::runtime_error&)
+    {
+        return true;
+    }
+}
+
+void rai::uint256_union::EncodeEvmShortHex(std::string& text) const
+{
+    std::stringstream stream;
+    stream << std::hex << std::showbase;
+    stream << Number();
+    text = stream.str();
+    boost::algorithm::to_lower(text);
+}
+
+bool rai::uint256_union::DecodeEvmHex(const std::string& text)
+{
+    if (text.size() < 3 || text.size() > 66 || text.substr(0, 2) != "0x")
+    {
+        return true;
+    }
+
+    try
+    {
+        rai::uint256_t number;
+        std::stringstream stream(text);
+
+        stream << std::hex << std::showbase;
+        stream >> number;
+        if (!stream.eof())
+        {
+            return true;
+        }
+        *this = number;
         return false;
     }
     catch (std::runtime_error&)
@@ -650,6 +687,13 @@ std::string rai::uint256_union::StringHex() const
 {
     string result;
     EncodeHex(result);
+    return result;
+}
+
+std::string rai::uint256_union::StringEvmShortHex() const
+{
+    string result;
+    EncodeEvmShortHex(result);
     return result;
 }
 

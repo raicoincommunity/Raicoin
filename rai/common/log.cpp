@@ -14,7 +14,7 @@ rai::LogConfig::LogConfig()
       network_receive_(false),
       message_(true),
       message_handshake_(false),
-      rpc_(true),
+      rpc_(false),
       log_to_cerr_(false),
       max_size_(16 * 1024 * 1024),
       rotation_size_(4 * 1024 * 1024),

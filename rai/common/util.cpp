@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <boost/property_tree/json_parser.hpp>
 
 bool rai::Read(rai::Stream& stream, bool& value)
 {
@@ -477,4 +478,89 @@ bool rai::CheckUtf8(const std::string& str, bool& ctrl)
 {
     std::vector<uint8_t> bytes(str.begin(), str.end());
     return rai::CheckUtf8(bytes, ctrl);
+}
+
+bool rai::JsonSecureCheck(const std::string& str, uint64_t max_size,
+                          uint64_t max_depth)
+{
+    if (str.size() > max_size)
+    {
+        return true;
+    }
+
+    int depth = 0;
+    for (auto ch : str)
+    {
+        if (ch == '[' || ch == '{')
+        {
+            ++depth;
+        }
+        else if (ch == ']' || ch == '}')
+        {
+            --depth;
+        }
+        else
+        {
+            continue;
+        }
+
+        if (depth < 0)
+        {
+            return true;
+        }
+
+        if (depth > max_depth)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool rai::StringToPtree(const std::string& str, rai::Ptree& ptree,
+                        uint64_t max_size, uint64_t max_depth)
+{
+    bool error = rai::JsonSecureCheck(str, max_size, max_depth);
+    IF_ERROR_RETURN(error, true);
+
+    try
+    {
+        std::stringstream stream(str);
+        boost::property_tree::read_json(stream, ptree);
+    }
+    catch (...)
+    {
+        return true;
+    }
+    return false;
+}
+
+std::string rai::MilliToSecondString(uint64_t milliseconds)
+{
+    uint64_t integer = milliseconds / 1000;
+    uint64_t decimal = milliseconds % 1000;
+
+    std::string decimal_str;
+    if (decimal >= 100)
+    {
+        decimal_str = std::to_string(decimal);
+    }
+    else if (decimal >= 10)
+    {
+        decimal_str = "0" + std::to_string(decimal);
+    }
+    else if (decimal > 0)
+    {
+        decimal_str = "00" + std::to_string(decimal);
+    }
+
+    if (decimal_str.empty())
+    {
+        return std::to_string(integer) + " seconds";
+    }
+    else
+    {
+        return std::to_string(integer) + "." + decimal_str + " seconds";
+    }
 }

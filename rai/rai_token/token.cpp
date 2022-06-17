@@ -27,7 +27,8 @@ rai::Token::Token(rai::ErrorCode& error_code, boost::asio::io_service& service,
       config_(config),
       subscribe_(*this),
       token_topics_(*this),
-      swap_helper_(*this)
+      swap_helper_(*this),
+      cross_chain_(*this)
 {
     IF_NOT_SUCCESS_RETURN_VOID(error_code);
     error_code = InitLedger_();
@@ -633,6 +634,7 @@ void rai::Token::Stop()
     }
 
     swap_helper_.Stop();
+    cross_chain_.Stop();
 
     App::Stop();
 }
@@ -1005,8 +1007,7 @@ bool rai::Token::MakeAccountTokenBalancePtree(
 
 std::vector<rai::BlockType> rai::Token::BlockTypes()
 {
-    std::vector<rai::BlockType> types{rai::BlockType::TX_BLOCK,
-                                      rai::BlockType::REP_BLOCK};
+    std::vector<rai::BlockType> types{rai::BlockType::TX_BLOCK};
     return types;
 }
 

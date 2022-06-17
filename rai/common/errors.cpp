@@ -1034,6 +1034,36 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Failed to parse validator_url from config file";
         }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN:
+        {
+            return "Failed to parse cross_chain object from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN_INVALID_ENDPOINT:
+        {
+            return "Invalid cross_chain endpoint in config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN_NO_ENOUGH_ENDPOINTS:
+        {
+            return "Please provide at least 2 cross_chain endpoints for each "
+                   "chain";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN_ETH_TEST_GOERLI:
+        {
+            return "Failed to parse cross_chain.eth_test_goerli from config "
+                   "file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN_BSC_TEST:
+        {
+            return "Failed to parse cross_chain.bsc_test from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN_ETH:
+        {
+            return "Failed to parse cross_chain.eth from config file";
+        }
+        case rai::ErrorCode::JSON_CONFIG_CROSS_CHAIN_BSC:
+        {
+            return "Failed to parse cross_chain.bsc from config file";
+        }
         case rai::ErrorCode::RPC_GENERIC:
         {
             return "[RPC] Internal server error";
@@ -2082,6 +2112,26 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::TOKEN_WRAP_TO_UNKNOWN_CHAIN:
         {
             return "Wrap to unknown chain";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_REQUEST_TIMEOUT:
+        {
+            return "Cross chain request timeout";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_RESPONSE_JSON:
+        {
+            return "Failed to parse cross chain response as json object";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_REQUEST_ID:
+        {
+            return "The cross chain request id is outdated";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_RESPONSE_ERROR:
+        {
+            return "Cross chain response with error";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED:
+        {
+            return "Unexpected cross chain response";
         }
         default:
         {
