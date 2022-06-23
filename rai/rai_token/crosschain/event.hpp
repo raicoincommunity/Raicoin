@@ -26,7 +26,7 @@ public:
     virtual ~CrossChainEvent()                                  = default;
     virtual rai::CrossChainEventType Type() const               = 0;
     virtual bool operator==(const rai::CrossChainEvent&) const  = 0;
-    virtual uint64_t BlockHeight() const              = 0;
+    virtual uint64_t BlockHeight() const                        = 0;
     virtual uint64_t Index() const                              = 0;
 };
 
@@ -83,9 +83,9 @@ private:
 class CrossChainMapEvent : public CrossChainEvent
 {
 public:
-    CrossChainMapEvent(uint64_t, uint64_t, rai::Chain,
-                        const rai::TokenAddress&, rai::TokenType, rai::Chain,
-                        const rai::TokenAddress&);
+    CrossChainMapEvent(uint64_t, uint64_t, rai::Chain, const rai::TokenAddress&,
+                       rai::TokenType, const rai::Account&, const rai::Account&,
+                       const rai::TokenValue&, const rai::BlockHash&);
     virtual ~CrossChainMapEvent() = default;
     rai::CrossChainEventType Type() const override;
     bool operator==(const rai::CrossChainEvent&) const override;
@@ -93,14 +93,9 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
 
-    rai::Chain OriginalChain() const;
-    rai::TokenAddress OriginalAddress() const;
-
-    rai::Chain TargetChain() const;
-    rai::TokenAddress TargetAddress() const;
-
 private:
     rai::CrossChainEventType type_;
+    uint64_t block_height_;
     uint64_t index_;
     rai::Chain chain_;
     rai::TokenAddress address_;
@@ -109,15 +104,16 @@ private:
     rai::Account to_;
     rai::TokenValue value_;
     rai::BlockHash tx_hash_;
-    // todo:
 };
 
 class CrossChainUnmapEvent : public CrossChainEvent
 {
 public:
     CrossChainUnmapEvent(uint64_t, uint64_t, rai::Chain,
-                          const rai::TokenAddress&, rai::TokenType, rai::Chain,
-                          const rai::TokenAddress&);
+                         const rai::TokenAddress&, rai::TokenType,
+                         const rai::Account&, uint64_t, const rai::BlockHash&,
+                         const rai::Account&, const rai::TokenValue&,
+                         const rai::BlockHash&);
     virtual ~CrossChainUnmapEvent() = default;
     rai::CrossChainEventType Type() const override;
     bool operator==(const rai::CrossChainEvent&) const override;
@@ -127,14 +123,94 @@ public:
 
 private:
     rai::CrossChainEventType type_;
+    uint64_t block_height_;
     uint64_t index_;
     rai::Chain chain_;
     rai::TokenAddress address_;
     rai::TokenType token_type_;
     rai::Account from_;
+    uint64_t from_height_;
+    rai::BlockHash from_tx_hash_;
     rai::Account to_;
     rai::TokenValue value_;
     rai::BlockHash tx_hash_;
+};
+
+class CrossChainWrapEvent : public CrossChainEvent
+{
+public:
+    CrossChainWrapEvent(uint64_t, uint64_t, rai::Chain,
+                        const rai::TokenAddress&, rai::TokenType, rai::Chain,
+                        const rai::TokenAddress&, const rai::Account&, uint64_t,
+                        const rai::BlockHash&, const rai::Account&,
+                        const rai::TokenValue&, const rai::BlockHash&);
+    virtual ~CrossChainWrapEvent() = default;
+    rai::CrossChainEventType Type() const override;
+    bool operator==(const rai::CrossChainEvent&) const override;
+    bool operator==(const rai::CrossChainWrapEvent&) const;
+    uint64_t BlockHeight() const override;
+    uint64_t Index() const override;
+
+private:
+    rai::CrossChainEventType type_;
+    uint64_t block_height_;
+    uint64_t index_;
+    rai::Chain chain_;
+    rai::TokenAddress address_;
+    rai::TokenType token_type_;
+    rai::Chain original_chain_;
+    rai::TokenAddress original_address_;
+    rai::Account from_;
+    uint64_t from_height_;
+    rai::BlockHash from_tx_hash_;
+    rai::Account to_;
+    rai::TokenValue value_;
+    rai::BlockHash tx_hash_;
+
+};
+
+class CrossChainUnwrapEvent : public CrossChainEvent
+{
+public:
+    CrossChainUnwrapEvent(uint64_t, uint64_t, rai::Chain,
+                          const rai::TokenAddress&, rai::TokenType, rai::Chain,
+                          const rai::TokenAddress&, const rai::Account&,
+                          const rai::Account&, const rai::TokenValue&,
+                          const rai::BlockHash&);
+    virtual ~CrossChainUnwrapEvent() = default;
+    rai::CrossChainEventType Type() const override;
+    bool operator==(const rai::CrossChainEvent&) const override;
+    bool operator==(const rai::CrossChainUnwrapEvent&) const;
+    uint64_t BlockHeight() const override;
+    uint64_t Index() const override;
+
+private:
+    rai::CrossChainEventType type_;
+    uint64_t block_height_;
+    uint64_t index_;
+    rai::Chain chain_;
+    rai::TokenAddress address_;
+    rai::TokenType token_type_;
+    rai::Chain original_chain_;
+    rai::TokenAddress original_address_;
+    rai::Account from_;
+    rai::Account to_;
+    rai::TokenValue value_;
+    rai::BlockHash tx_hash_;
+};
+
+class CrossChainBlockEvents
+{
+public:
+    CrossChainBlockEvents(
+        rai::Chain, uint64_t,
+        const std::vector<std::shared_ptr<rai::CrossChainEvent>>&);
+    CrossChainBlockEvents(rai::Chain, uint64_t,
+                          std::vector<std::shared_ptr<rai::CrossChainEvent>>&&);
+
+    rai::Chain chain_;
+    uint64_t block_height_;
+    std::vector<std::shared_ptr<rai::CrossChainEvent>> events_;
 };
 
 } // namespace rai

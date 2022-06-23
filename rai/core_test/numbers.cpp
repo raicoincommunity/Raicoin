@@ -350,6 +350,9 @@ TEST(uint256_union, arithmetic_operator)
     ASSERT_EQ(0, value6.Number());
     ASSERT_EQ(true, value6 < value4);
     ASSERT_EQ(true, value6 <= value5);
+    ASSERT_EQ(0xFFFFFFFFFFFFFFF0, value4.Uint64());
+    ASSERT_EQ(0xFFFFFFF0, value4.Uint32());
+    ASSERT_EQ(0xF0, value4.Uint8());
 }
 
 TEST(uint256_union, dec)

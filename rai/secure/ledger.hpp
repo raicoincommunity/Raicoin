@@ -840,6 +840,8 @@ public:
     rai::Iterator AccountTokenIdUpperBound(rai::Transaction&,
                                            const rai::Account&,
                                            const rai::TokenKey&) const;
+    bool ChainHeadPut(rai::Transaction&, rai::Chain, uint64_t);
+    bool ChainHeadGet(rai::Transaction&, rai::Chain, uint64_t&) const;
     bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,
                        const rai::TokenBlock&);
     bool TokenBlockPut(rai::Transaction&, const rai::Account&, uint64_t,

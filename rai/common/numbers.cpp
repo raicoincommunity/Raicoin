@@ -764,6 +764,21 @@ void rai::uint256_union::ClampKey()
     x.ClampKey(bytes.data());
 }
 
+uint64_t rai::uint256_union::Uint64() const
+{
+    return boost::endian::big_to_native(qwords[3]);
+}
+
+uint32_t rai::uint256_union::Uint32() const
+{
+    return boost::endian::big_to_native(dwords[7]);
+}
+
+uint8_t rai::uint256_union::Uint8() const
+{
+    return bytes[31];
+}
+
 rai::uint256_union rai::uint256_union::Max()
 {
     return rai::uint256_union(std::numeric_limits<rai::uint256_t>::max());
