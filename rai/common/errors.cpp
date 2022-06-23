@@ -2133,6 +2133,18 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Unexpected cross chain response";
         }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_QUORUM:
+        {
+            return "Valid cross chain endpoints less than quorum";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_BLOCK_HEIGHT:
+        {
+            return "Invalid cross chain block height";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_SESSION_ID:
+        {
+            return "The cross chain session id is outdated";
+        }
         default:
         {
             return "Invalid error code";

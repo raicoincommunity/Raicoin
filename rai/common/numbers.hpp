@@ -97,6 +97,9 @@ union uint256_union
     void Random();
     bool ValidPublicKey() const;
     void ClampKey();
+    uint64_t Uint64() const;
+    uint32_t Uint32() const;
+    uint8_t Uint8() const;
 
     static rai::uint256_union Max();
 

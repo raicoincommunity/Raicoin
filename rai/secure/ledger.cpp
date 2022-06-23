@@ -3084,6 +3084,51 @@ rai::Iterator rai::Ledger::AccountTokenIdUpperBound(
     return AccountTokenIdLowerBound(transaction, account_l, key_l);
 }
 
+bool rai::Ledger::ChainHeadPut(rai::Transaction& transaction, rai::Chain chain,
+                               uint64_t head)
+{
+    if (!transaction.write_)
+    {
+        return true;
+    }
+
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, chain);
+    }
+    std::vector<uint8_t> bytes_value;
+    {
+        rai::VectorStream stream(bytes_value);
+        rai::Write(stream, head);
+    }
+
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value(bytes_value.size(), bytes_value.data());
+    bool error = store_.Put(transaction.mdb_transaction_, store_.chain_head_,
+                            key, value);
+    IF_ERROR_RETURN(error, error);
+
+    return false;
+}
+
+bool rai::Ledger::ChainHeadGet(rai::Transaction& transaction, rai::Chain chain,
+                               uint64_t& head) const
+{
+    std::vector<uint8_t> bytes_key;
+    {
+        rai::VectorStream stream(bytes_key);
+        rai::Write(stream, chain);
+    }
+    rai::MdbVal key(bytes_key.size(), bytes_key.data());
+    rai::MdbVal value;
+    bool error = store_.Get(transaction.mdb_transaction_, store_.chain_head_,
+                            key, value);
+    IF_ERROR_RETURN(error, true);
+    rai::BufferStream stream(value.Data(), value.Size());
+    return rai::Read(stream, head);
+}
+
 bool rai::Ledger::TokenBlockPut(rai::Transaction& transaction,
                                 const rai::Account& account, uint64_t height,
                                 const rai::TokenBlock& block)
