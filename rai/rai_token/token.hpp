@@ -10,6 +10,8 @@
 #include <rai/rai_token/topic.hpp>
 #include <rai/rai_token/swaphelper.hpp>
 #include <rai/rai_token/crosschain/crosschain.hpp>
+#include <rai/rai_token/crosschain/event.hpp>
+#include <rai/rai_token/chainwaiting.hpp>
 
 namespace rai
 {
@@ -87,6 +89,10 @@ public:
     void ProcessTakeNackBlock(const rai::Account&, uint64_t,
                               const std::shared_ptr<rai::Block>&);
     void ProcessTakeNackBlockPurge(const rai::Account&, uint64_t);
+    void ProcessCrossChainBlocks(
+        const std::vector<rai::CrossChainBlockEvents>&,
+        const std::function<void(
+            rai::ErrorCode, const std::vector<rai::CrossChainBlockEvents>&)>&);
     std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
         const rai::UniqueId&, bool, const std::string&,
         const std::function<void(const rai::Ptree&)>&) override;
@@ -99,6 +105,10 @@ public:
     rai::ErrorCode UpgradeLedgerV1V2(rai::Transaction&);
     void SubmitTakeNackBlock(const rai::Account&, uint64_t,
                              const std::shared_ptr<rai::Block>&);
+    void SubmitCrossChainBlocks(
+        const std::vector<rai::CrossChainBlockEvents>&,
+        const std::function<void(
+            rai::ErrorCode, const std::vector<rai::CrossChainBlockEvents>&)>&);
     void PurgeTakeNackBlock(const rai::Account&, uint64_t);
     rai::Account GetTokenIdOwner(rai::Transaction&, const rai::TokenKey&,
                                  const rai::TokenValue&);
@@ -135,6 +145,7 @@ public:
     rai::TokenTopics token_topics_;
     rai::SwapHelper swap_helper_;
     rai::CrossChain cross_chain_;
+    rai::ChainWaiting chain_waiting_;
 
 private:
     static uint32_t constexpr CURRENT_LEDGER_VERSION = 2;
@@ -212,7 +223,29 @@ private:
                                  const std::shared_ptr<rai::Block>&,
                                  const rai::ExtensionToken&,
                                  std::vector<std::function<void()>>&);
+
     rai::ErrorCode ProcessError_(rai::Transaction&, const rai::TokenError&);
+    rai::ErrorCode ProcessCrossChainEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode ProcessCrossChainTokenEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode ProcessCrossChainCreateEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode ProcessCrossChainMapEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode ProcessCrossChainUnmapEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode ProcessCrossChainWrapEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
+    rai::ErrorCode ProcessCrossChainUnwrapEvent_(
+        rai::Transaction&, const std::shared_ptr<rai::CrossChainEvent>&,
+        std::vector<std::function<void()>>&);
     rai::ErrorCode PurgeInquiryWaiting_(rai::Transaction&, const rai::Account&,
                                         uint64_t,
                                         std::vector<std::function<void()>>&);
@@ -283,6 +316,9 @@ private:
     void MakeAccountSwapInfoPtree_(const rai::Account&,
                                    const rai::AccountSwapInfo&, uint16_t,
                                    rai::Ptree&) const;
+    bool WaitChain_(rai::Transaction&, rai::Chain, uint64_t,
+                    const std::shared_ptr<rai::Block>&);
+    void QueueCrossChainWaitingBlocks_(rai::Chain, uint64_t);
     std::function<void(const rai::TokenReceivableKey&,
                        const rai::TokenReceivable&, const rai::TokenInfo&,
                        const std::shared_ptr<rai::Block>&)>

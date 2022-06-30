@@ -20,28 +20,28 @@ rai::CrossChain::CrossChain(rai::Token& token)
     if (!config.eth_urls_.empty())
     {
         parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
-            token, config.eth_urls_, rai::Chain::ETHEREUM, 10, 30, 15000000, "")));
+            token, config.eth_urls_, rai::Chain::ETHEREUM, 10, 30, "")));
     }
 
     if (!config.bsc_urls_.empty())
     {
         parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
             token, config.bsc_urls_, rai::Chain::BINANCE_SMART_CHAIN, 5, 30,
-            19000000, "")));
+            "")));
     }
 
     if (!config.eth_test_goerli_urls_.empty())
     {
         parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
             token, config.eth_test_goerli_urls_,
-            rai::Chain::ETHEREUM_TEST_GOERLI, 10, 30, 7080000, "")));
+            rai::Chain::ETHEREUM_TEST_GOERLI, 10, 30, "")));
     }
 
     if (!config.bsc_test_urls_.empty())
     {
         parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
             token, config.bsc_test_urls_, rai::Chain::BINANCE_SMART_CHAIN_TEST,
-            5, 30, 20300000, "")));
+            5, 30, "")));
     }
 }
 

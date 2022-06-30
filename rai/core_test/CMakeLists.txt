@@ -13,6 +13,9 @@ add_executable (core_test
 	extensions.cpp
 	blockwaiting.cpp
 	ledger.cpp
+	../rai_token/chainwaiting.cpp
+	chainwaiting.cpp
+
 )
 
 #target_compile_definitions(core_test

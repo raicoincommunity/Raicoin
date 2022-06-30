@@ -28,6 +28,7 @@ public:
     virtual bool operator==(const rai::CrossChainEvent&) const  = 0;
     virtual uint64_t BlockHeight() const                        = 0;
     virtual uint64_t Index() const                              = 0;
+    virtual rai::Chain Chain() const                            = 0;
 };
 
 class CrossChainTokenEvent : public CrossChainEvent
@@ -42,8 +43,8 @@ public:
     bool operator==(const rai::CrossChainTokenEvent&) const;
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
+    rai::Chain Chain() const override;
 
-private:
     rai::CrossChainEventType type_;
     uint64_t block_height_;
     uint64_t index_;
@@ -67,8 +68,8 @@ public:
     bool operator==(const rai::CrossChainCreateEvent&) const;
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
+    rai::Chain Chain() const override;
 
-private:
     rai::CrossChainEventType type_;
     uint64_t block_height_;
     uint64_t index_;
@@ -92,8 +93,8 @@ public:
     bool operator==(const rai::CrossChainMapEvent&) const;
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
+    rai::Chain Chain() const override;
 
-private:
     rai::CrossChainEventType type_;
     uint64_t block_height_;
     uint64_t index_;
@@ -120,8 +121,8 @@ public:
     bool operator==(const rai::CrossChainUnmapEvent&) const;
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
+    rai::Chain Chain() const override;
 
-private:
     rai::CrossChainEventType type_;
     uint64_t block_height_;
     uint64_t index_;
@@ -150,8 +151,8 @@ public:
     bool operator==(const rai::CrossChainWrapEvent&) const;
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
+    rai::Chain Chain() const override;
 
-private:
     rai::CrossChainEventType type_;
     uint64_t block_height_;
     uint64_t index_;
@@ -183,8 +184,8 @@ public:
     bool operator==(const rai::CrossChainUnwrapEvent&) const;
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
+    rai::Chain Chain() const override;
 
-private:
     rai::CrossChainEventType type_;
     uint64_t block_height_;
     uint64_t index_;

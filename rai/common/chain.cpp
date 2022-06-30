@@ -157,3 +157,51 @@ rai::ErrorCode rai::CheckWrapToChain(Chain chain)
         }
     }
 }
+
+uint64_t rai::ChainSinceHeight(Chain chain)
+{
+    switch (chain)
+    {
+        case rai::Chain::INVALID:
+        {
+            return 0;
+        }
+        case rai::Chain::RAICOIN:
+        case rai::Chain::BITCOIN:
+        {
+            return 0;
+        }
+        case rai::Chain::ETHEREUM:
+        {
+            return 15000000;
+        }
+        case rai::Chain::BINANCE_SMART_CHAIN:
+        {
+            return 19000000;
+        }
+        case rai::Chain::RAICOIN_TEST:
+        case rai::Chain::BITCOIN_TEST:
+        {
+            return 0;
+        }
+        case rai::Chain::ETHEREUM_TEST_ROPSTEN:
+        case rai::Chain::ETHEREUM_TEST_KOVAN:
+        case rai::Chain::ETHEREUM_TEST_RINKEBY:
+        case rai::Chain::ETHEREUM_TEST_SEPOLIA:
+        {
+            return 0;
+        }
+        case rai::Chain::ETHEREUM_TEST_GOERLI:
+        {
+            return 7080000;
+        }
+        case rai::Chain::BINANCE_SMART_CHAIN_TEST:
+        {
+            return 20300000;
+        }
+        default:
+        {
+            return 0;
+        }
+    }
+}
