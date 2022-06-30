@@ -87,6 +87,8 @@ class EvmSessionEntry
 public:
     EvmSessionEntry(uint64_t);
     bool AppendBlock(rai::EvmBlockEvents&&);
+    bool operator==(const rai::EvmSessionEntry&) const;
+    bool operator!=(const rai::EvmSessionEntry&) const;
 
     uint64_t endpoint_index_;
     rai::EvmSessionState state_;
@@ -101,6 +103,7 @@ public:
     bool Failed() const;
     bool Succeeded() const;
     bool Finished() const;
+    bool AllEntriesEqual() const;
 
     uint64_t id_;
     uint64_t tail_height_;
@@ -129,7 +132,7 @@ class EvmParser : public BaseParser
 {
 public:
     EvmParser(rai::Token&, const std::vector<rai::Url>&, rai::Chain, uint64_t,
-              uint64_t, uint64_t, const std::string&);
+              uint64_t, const std::string&);
     virtual ~EvmParser() = default;
     virtual void Run() override;
     virtual uint64_t Delay() const override;
@@ -137,6 +140,9 @@ public:
 
     void Receive(uint64_t, uint64_t, rai::ErrorCode, const std::string&,
                  const EvmRequestCallback&);
+    void OnBlocksSubmitted(rai::ErrorCode,
+                           const std::vector<rai::CrossChainBlockEvents>&);
+
     rai::Token& token_;
 
     static constexpr size_t MIN_QUORUM = 2;
@@ -159,6 +165,7 @@ private:
     std::vector<uint64_t> RandomEndpoints_(size_t) const;
     std::vector<uint64_t> ValidEndpoints_() const;
     boost::optional<rai::EvmSession> MakeSession_();
+    void TrySubmitSession_();
     void RunSession_(rai::EvmSession&);
     bool ParseLogs_(const rai::Ptree&, rai::EvmSessionEntry&);
     bool ParseLog_(const rai::Ptree&, std::shared_ptr<rai::CrossChainEvent>&);
@@ -171,27 +178,55 @@ private:
     bool MakeTokenInitEvent_(uint64_t, uint64_t, const rai::BlockHash&,
                              const std::vector<rai::Topic>&,
                              const std::vector<rai::uint256_union>&,
-                             std::shared_ptr<rai::CrossChainEvent>&);
+                             std::shared_ptr<rai::CrossChainEvent>&) const;
     bool MakeWrappedErc20TokenCreateEvent_(
         uint64_t, uint64_t, const rai::BlockHash&,
         const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
-        std::shared_ptr<rai::CrossChainEvent>&);
+        std::shared_ptr<rai::CrossChainEvent>&) const;
     bool MakeWrappedErc721TokenCreateEvent_(
         uint64_t, uint64_t, const rai::BlockHash&,
         const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
-        std::shared_ptr<rai::CrossChainEvent>&);
-    bool MakeErc20TokenMappedEvent_(uint64_t, uint64_t, const rai::BlockHash&,
-                                    const std::vector<rai::Topic>&,
-                                    const std::vector<rai::uint256_union>&,
-                                    std::shared_ptr<rai::CrossChainEvent>&);
-    bool MakeErc721TokenMappedEvent_(uint64_t, uint64_t, const rai::BlockHash&,
-                                     const std::vector<rai::Topic>&,
-                                     const std::vector<rai::uint256_union>&,
-                                     std::shared_ptr<rai::CrossChainEvent>&);
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc20TokenMappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc721TokenMappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
     bool MakeEthMappedEvent_(uint64_t, uint64_t, const rai::BlockHash&,
                              const std::vector<rai::Topic>&,
                              const std::vector<rai::uint256_union>&,
-                             std::shared_ptr<rai::CrossChainEvent>&);
+                             std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc20TokenUnmappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc721TokenUnmappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeEthUnmappedEvent_(uint64_t, uint64_t, const rai::BlockHash&,
+                               const std::vector<rai::Topic>&,
+                               const std::vector<rai::uint256_union>&,
+                               std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc20TokenWrappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc721TokenWrappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc20TokenUnwrappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
+    bool MakeErc721TokenUnwrappedEvent_(
+        uint64_t, uint64_t, const rai::BlockHash&,
+        const std::vector<rai::Topic>&, const std::vector<rai::uint256_union>&,
+        std::shared_ptr<rai::CrossChainEvent>&) const;
     bool MakeTokenType_(const rai::uint256_union&, rai::TokenType&) const;
     bool MakeChain_(const rai::uint256_union&, rai::Chain&) const;
     bool MakeUint160_(const rai::uint256_union&, rai::TokenAddress&) const;
@@ -199,6 +234,7 @@ private:
     bool MakeUint32_(const rai::uint256_union&, uint32_t&) const;
     bool MakeUint8_(const rai::uint256_union&, uint8_t&) const;
     bool MakeBool_(const rai::uint256_union&, bool&) const;
+    void HalveBatch_();
     void SubmitBlocks_();
 
     mutable std::mutex mutex_;

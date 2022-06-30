@@ -287,6 +287,39 @@ rai::EvmSessionEntry::EvmSessionEntry(uint64_t index)
 {
 }
 
+bool rai::EvmSessionEntry::operator==(const rai::EvmSessionEntry& other) const
+{
+    if (state_ != other.state_)
+    {
+        return false;
+    }
+
+    if (head_height_ != other.head_height_)
+    {
+        return false;
+    }
+
+    if (blocks_.size() != other.blocks_.size())
+    {
+        return false;
+    }
+
+    for (size_t i = 0; i < blocks_.size(); ++i)
+    {
+        if (blocks_[i] != other.blocks_[i])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool rai::EvmSessionEntry::operator!=(const rai::EvmSessionEntry& other) const
+{
+    return !(*this == other);
+}
+
 bool rai::EvmSessionEntry::AppendBlock(rai::EvmBlockEvents&& block)
 {
     if (blocks_.empty() || blocks_.back().height_ < block.height_)
@@ -343,9 +376,22 @@ bool rai::EvmSession::Finished() const
     return Succeeded() || Failed();
 }
 
+bool rai::EvmSession::AllEntriesEqual() const
+{
+    for (size_t i = 1; i < entries_.size(); ++i)
+    {
+        if (entries_[i] != entries_[0])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 rai::EvmParser::EvmParser(rai::Token& token, const std::vector<rai::Url>& urls,
                           rai::Chain chain, uint64_t sync_interval,
-                          uint64_t confirmations, uint64_t since,
+                          uint64_t confirmations,
                           const std::string& core_contract)
     : token_(token),
       session_id_(0),
@@ -354,7 +400,7 @@ rai::EvmParser::EvmParser(rai::Token& token, const std::vector<rai::Url>& urls,
       chain_(chain),
       sync_interval_(sync_interval),
       confirmations_(confirmations),
-      since_height_(since),
+      since_height_(rai::ChainSinceHeight(chain)),
       core_contract_(core_contract),
       batch_(rai::EvmEndpoint::BATCH_MAX),
       waiting_(false)
@@ -370,6 +416,11 @@ rai::EvmParser::EvmParser(rai::Token& token, const std::vector<rai::Url>& urls,
     if (error)
     {
         throw std::runtime_error("GetEvmChainId failed");
+    }
+
+    if (since_height_ == 0)
+    {
+        throw std::runtime_error("since_height_ is 0");
     }
 
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
@@ -529,6 +580,46 @@ void rai::EvmParser::Receive(uint64_t index, uint64_t request_id,
     }
 
     callback(index, request_id, error_code, ptree);
+}
+
+void rai::EvmParser::OnBlocksSubmitted(
+    rai::ErrorCode error_code,
+    const std::vector<rai::CrossChainBlockEvents>& blocks)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    waiting_ = false;
+
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        return;
+    }
+
+    for (const auto& i : blocks)
+    {
+        auto it = blocks_.begin();
+        if (it == blocks_.end())
+        {
+            rai::Log::Error(
+                rai::ToString("EvmParser::OnBlocksSubmitted: try to erase "
+                              "unexisted block, chain=",
+                              i.chain_, ", block_height=", i.block_height_));
+            return;
+        }
+
+        if (i.block_height_ != it->first
+            || i.block_height_ != it->second.height_)
+        {
+            rai::Log::Error(rai::ToString(
+                "EvmParser::OnBlocksSubmitted: block mismatch, chain=",
+                i.chain_, ", expected block_height=", it->second.height_,
+                ", actual block_height=", i.block_height_));
+            return;
+        }
+
+        blocks_.erase(it);
+    }
+
+    SubmitBlocks_();
 }
 
 void rai::EvmParser::Send_(rai::EvmEndpoint& endpoint,
@@ -858,6 +949,7 @@ void rai::EvmParser::QueryLogsCallback_(uint64_t session_id,
             "EvmParser::Receive: endpoint=", endpoint.url_.String());
         return;
     }
+    bool already_failed = session_->Failed();
 
     for (auto& entry : session_->entries_)
     {
@@ -878,35 +970,46 @@ void rai::EvmParser::QueryLogsCallback_(uint64_t session_id,
             return;
         }
 
-        if (error_code != rai::ErrorCode::SUCCESS)
+        bool error = true;
+        do
+        {
+            if (error_code != rai::ErrorCode::SUCCESS)
+            {
+                break;
+            }
+
+            auto result = ptree.get_child_optional("result");
+            if (!result)
+            {
+                rai::Stats::Add(
+                    rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED,
+                    "EvmParser::QueryLogsCallback_: no result, endpoint=",
+                    endpoint.url_.String());
+                break;
+            }
+
+            error = ParseLogs_(*result, entry);
+            IF_ERROR_BREAK(error);
+
+            error = false;
+        } while (0);
+
+        if (error)
         {
             entry.state_ = rai::EvmSessionState::FAILED;
             endpoint.DecreaseBatch();
+            if (!already_failed)
+            {
+                HalveBatch_();
+            }
             return;
         }
-
-        auto result = ptree.get_child_optional("result");
-        if (!result)
-        {
-            rai::Stats::Add(
-                rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED,
-                "EvmParser::QueryLogsCallback_: no result, endpoint=",
-                endpoint.url_.String());
-            entry.state_ = rai::EvmSessionState::FAILED;
-            endpoint.DecreaseBatch();
-            return;
-        }
-
-        // todo:
 
         entry.state_ = rai::EvmSessionState::SUCCESS;
         endpoint.DetectBatch(batch_);
-        // TryQueryLogs_();
-        // todo:
+        TrySubmitSession_();
         return;
     }
-
-    // todo:
 }
 
 std::vector<uint64_t> rai::EvmParser::RandomEndpoints_(size_t size) const
@@ -956,6 +1059,69 @@ boost::optional<rai::EvmSession> rai::EvmParser::MakeSession_()
     return rai::EvmSession(++session_id_, confirmed_height_ + 1, indices);
 }
 
+void rai::EvmParser::TrySubmitSession_()
+{
+    if (!session_)
+    {
+        return;
+    }
+
+    if (!session_->Succeeded())
+    {
+        return;
+    }
+
+    if (session_->entries_.size() < rai::EvmParser::MIN_QUORUM)
+    {
+        return;
+    }
+
+    if (!session_->AllEntriesEqual())
+    {
+        return;
+    }
+
+    rai::EvmSessionEntry& entry = session_->entries_[0];
+    if (session_->tail_height_ != confirmed_height_ + 1
+        || session_->tail_height_ < entry.head_height_)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::TrySubmitSession_: unexpected height, tail_height=",
+            session_->tail_height_, ", head_height=", entry.head_height_,
+            ", confirmed_height_=", confirmed_height_));
+        return;
+    }
+
+    if (entry.head_height_ > confirmed_height_ + confirmations_)
+    {
+        confirmed_height_ = entry.head_height_ - confirmations_;
+    }
+
+    size_t i = 0;
+    for (uint64_t height = session_->tail_height_; height <= entry.head_height_;
+         ++height)
+    {
+        rai::EvmBlockEvents block(height, rai::BlockHash(0));
+        if (i < entry.blocks_.size() && entry.blocks_[i].height_ == height)
+        {
+            block = entry.blocks_[i];
+            ++i;
+        }
+
+        auto it = blocks_.find(height);
+        if (it == blocks_.end())
+        {
+            blocks_.insert(std::make_pair(height, std::move(block)));
+        }
+        else
+        {
+            it->second = std::move(block);
+        }
+    }
+
+    SubmitBlocks_();
+}
+
 void rai::EvmParser::RunSession_(rai::EvmSession& session)
 {
     if (session_id_ != session.id_) return;
@@ -963,11 +1129,13 @@ void rai::EvmParser::RunSession_(rai::EvmSession& session)
 
     for (auto& entry : session.entries_)
     {
+        rai::EvmEndpoint& endpoint = endpoints_[entry.endpoint_index_];
         switch (entry.state_)
         {
             case rai::EvmSessionState::INIT:
             {
-                // todo:
+                QueryBlockHeight_(endpoint, session_id_);
+                entry.state_ = rai::EvmSessionState::BLOCK_HEIGHT_QUERY;
                 break;
             }
             case rai::EvmSessionState::FAILED:
@@ -979,7 +1147,11 @@ void rai::EvmParser::RunSession_(rai::EvmSession& session)
             case rai::EvmSessionState::BLOCK_HEIGHT_QUERY:
             case rai::EvmSessionState::LOGS_QUERY:
             {
-                // todo:
+                if (endpoint.sending_ && endpoint.Timeout())
+                {
+                    endpoint.ProcessTimeout();
+                    entry.state_ = rai::EvmSessionState::FAILED;
+                }
                 break;
             }
             default:
@@ -1077,21 +1249,79 @@ bool rai::EvmParser::ParseLog_(const rai::Ptree& log,
     if (topic == rai::EvmTopic::TOKEN_INFO_INITIALIZED)
     {
         error =
-            MakeTokenInitEvent_(block_height, index, hash, data, topics, event);
+            MakeTokenInitEvent_(block_height, index, hash, topics, data, event);
     }
     else if (topic == rai::EvmTopic::WRAPPED_ERC20_TOKEN_CREATED)
     {
         error = MakeWrappedErc20TokenCreateEvent_(block_height, index, hash,
-                                                  data, topics, event);
+                                                  topics, data, event);
     }
     else if (topic == rai::EvmTopic::WRAPPED_ERC721_TOKEN_CREATED)
     {
         error = MakeWrappedErc721TokenCreateEvent_(block_height, index, hash,
-                                                   data, topics, event);
+                                                   topics, data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC20_TOKEN_MAPPED)
+    {
+        error = MakeErc20TokenMappedEvent_(block_height, index, hash, topics,
+                                           data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC721_TOKEN_MAPPED)
+    {
+        error = MakeErc721TokenMappedEvent_(block_height, index, hash, topics,
+                                            data, event);
+    }
+    else if (topic == rai::EvmTopic::ETH_MAPPED)
+    {
+        error =
+            MakeEthMappedEvent_(block_height, index, hash, topics, data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC20_TOKEN_UNMAPPED)
+    {
+        error = MakeErc20TokenUnmappedEvent_(block_height, index, hash, topics,
+                                             data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC721_TOKEN_UNMAPPED)
+    {
+        error = MakeErc721TokenUnmappedEvent_(block_height, index, hash, topics,
+                                              data, event);
+    }
+    else if (topic == rai::EvmTopic::ETH_UNMAPPED)
+    {
+        error = MakeEthUnmappedEvent_(block_height, index, hash, topics, data,
+                                      event);
+    }
+    else if (topic == rai::EvmTopic::ERC20_TOKEN_WRAPPED)
+    {
+        error = MakeErc20TokenWrappedEvent_(block_height, index, hash, topics,
+                                            data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC721_TOKEN_WRAPPED)
+    {
+        error = MakeErc721TokenWrappedEvent_(block_height, index, hash, topics,
+                                             data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC20_TOKEN_UNWRAPPED)
+    {
+        error = MakeErc20TokenUnwrappedEvent_(block_height, index, hash, topics,
+                                              data, event);
+    }
+    else if (topic == rai::EvmTopic::ERC721_TOKEN_UNWRAPPED)
+    {
+        error = MakeErc721TokenUnwrappedEvent_(block_height, index, hash,
+                                               topics, data, event);
     }
     else
     {
         // pass
+    }
+
+    if (event != nullptr && event->Chain() != chain_)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::ParseLog_: invalid chain, expected=", chain_,
+            "actual=", event->Chain()));
+        return true;
     }
 
     return error;
@@ -1289,7 +1519,7 @@ bool rai::EvmParser::MakeTokenInitEvent_(
     uint64_t height, uint64_t index, const rai::BlockHash& hash,
     const std::vector<rai::Topic>& topics,
     const std::vector<rai::uint256_union>& data,
-    std::shared_ptr<rai::CrossChainEvent>& event)
+    std::shared_ptr<rai::CrossChainEvent>& event) const
 {
     if (topics.size() != 2)
     {
@@ -1341,7 +1571,7 @@ bool rai::EvmParser::MakeWrappedErc20TokenCreateEvent_(
     uint64_t height, uint64_t index, const rai::BlockHash& hash,
     const std::vector<rai::Topic>& topics,
     const std::vector<rai::uint256_union>& data,
-    std::shared_ptr<rai::CrossChainEvent>& event)
+    std::shared_ptr<rai::CrossChainEvent>& event) const
 {
     if (topics.size() != 4)
     {
@@ -1386,7 +1616,7 @@ bool rai::EvmParser::MakeWrappedErc721TokenCreateEvent_(
     uint64_t height, uint64_t index, const rai::BlockHash& hash,
     const std::vector<rai::Topic>& topics,
     const std::vector<rai::uint256_union>& data,
-    std::shared_ptr<rai::CrossChainEvent>& event)
+    std::shared_ptr<rai::CrossChainEvent>& event) const
 {
     if (topics.size() != 4)
     {
@@ -1431,7 +1661,7 @@ bool rai::EvmParser::MakeErc20TokenMappedEvent_(
     uint64_t height, uint64_t index, const rai::BlockHash& hash,
     const std::vector<rai::Topic>& topics,
     const std::vector<rai::uint256_union>& data,
-    std::shared_ptr<rai::CrossChainEvent>& event)
+    std::shared_ptr<rai::CrossChainEvent>& event) const
 {
     if (topics.size() != 4)
     {
@@ -1476,7 +1706,7 @@ bool rai::EvmParser::MakeErc721TokenMappedEvent_(
     uint64_t height, uint64_t index, const rai::BlockHash& hash,
     const std::vector<rai::Topic>& topics,
     const std::vector<rai::uint256_union>& data,
-    std::shared_ptr<rai::CrossChainEvent>& event)
+    std::shared_ptr<rai::CrossChainEvent>& event) const
 {
     if (topics.size() != 4)
     {
@@ -1521,7 +1751,7 @@ bool rai::EvmParser::MakeEthMappedEvent_(
     uint64_t height, uint64_t index, const rai::BlockHash& hash,
     const std::vector<rai::Topic>& topics,
     const std::vector<rai::uint256_union>& data,
-    std::shared_ptr<rai::CrossChainEvent>& event)
+    std::shared_ptr<rai::CrossChainEvent>& event) const
 {
     if (topics.size() != 3)
     {
@@ -1558,6 +1788,377 @@ bool rai::EvmParser::MakeEthMappedEvent_(
     return false;
 }
 
+bool rai::EvmParser::MakeErc20TokenUnmappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc20TokenUnmappedEvent_: topics size error, "
+            "topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 5)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc20TokenUnmappedEvent_: data size error, "
+            "data size=",
+            data.size()));
+        return true;
+    }
+
+    rai::TokenAddress address;
+    bool error = MakeUint160_(topics[1], address);
+    IF_ERROR_RETURN(error, true);
+
+    rai::Account from = topics[2];
+
+    rai::Account to;
+    error = MakeUint160_(topics[3], to);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BlockHash from_tx_hash = data[0];
+
+    uint64_t from_height;
+    error = MakeUint64_(data[1], from_height);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[3];
+
+    rai::Chain chain;
+    error = MakeChain_(data[4], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainUnmapEvent>(
+        height, index, chain, address, rai::TokenType::_20, from, from_height,
+        from_tx_hash, to, value, hash);
+    return false;
+}
+
+bool rai::EvmParser::MakeErc721TokenUnmappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc721TokenUnmappedEvent_: topics size error, "
+            "topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc721TokenUnmappedEvent_: data size error, "
+            "data size=",
+            data.size()));
+        return true;
+    }
+
+    rai::TokenAddress address;
+    bool error = MakeUint160_(topics[1], address);
+    IF_ERROR_RETURN(error, true);
+
+    rai::Account from = topics[2];
+
+    rai::Account to;
+    error = MakeUint160_(topics[3], to);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BlockHash from_tx_hash = data[0];
+
+    uint64_t from_height;
+    error = MakeUint64_(data[1], from_height);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[2];
+
+    rai::Chain chain;
+    error = MakeChain_(data[3], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainUnmapEvent>(
+        height, index, chain, address, rai::TokenType::_721, from, from_height,
+        from_tx_hash, to, value, hash);
+    return false;
+}
+
+bool rai::EvmParser::MakeEthUnmappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 3)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeEthUnmappedEvent_: topics size error, topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 4)
+    {
+        rai::Log::Error(
+            rai::ToString("EvmParser::MakeEthUnmappedEvent_: data size error, "
+                          "data size=",
+                          data.size()));
+        return true;
+    }
+
+    rai::Account from = topics[1];
+
+    rai::Account to;
+    bool error = MakeUint160_(topics[2], to);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BlockHash from_tx_hash = data[0];
+
+    uint64_t from_height;
+    error = MakeUint64_(data[1], from_height);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[2];
+
+    rai::Chain chain;
+    error = MakeChain_(data[3], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainUnmapEvent>(
+        height, index, chain, rai::NativeAddress(), rai::TokenType::_20, from,
+        from_height, from_tx_hash, to, value, hash);
+    return false;
+}
+
+bool rai::EvmParser::MakeErc20TokenWrappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc20TokenWrappedEvent_: topics size error, "
+            "topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 6)
+    {
+        rai::Log::Error(
+            rai::ToString("EvmParser::MakeErc20TokenWrappedEvent_: data size "
+                          "error, data size=",
+                          data.size()));
+        return true;
+    }
+
+    rai::Chain original_chain;
+    bool error = MakeChain_(topics[1], original_chain);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenAddress original_address = topics[2];
+    rai::Account from = topics[3];
+
+    rai::Account to;
+    error = MakeUint160_(data[0], to);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BlockHash from_tx_hash = data[1];
+
+    uint64_t from_height;
+    error = MakeUint64_(data[2], from_height);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenAddress address;
+    error = MakeUint160_(data[3], address);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[4];
+
+    rai::Chain chain;
+    error = MakeChain_(data[5], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainWrapEvent>(
+        height, index, chain, address, rai::TokenType::_20, original_chain,
+        original_address, from, from_height, from_tx_hash, to, value, hash);
+    return false;
+}
+
+bool rai::EvmParser::MakeErc721TokenWrappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc721TokenWrappedEvent_: topics size error, "
+            "topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 6)
+    {
+        rai::Log::Error(
+            rai::ToString("EvmParser::MakeErc721TokenWrappedEvent_: data size "
+                          "error, data size=",
+                          data.size()));
+        return true;
+    }
+
+    rai::Chain original_chain;
+    bool error = MakeChain_(topics[1], original_chain);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenAddress original_address = topics[2];
+    rai::Account from = topics[3];
+
+    rai::Account to;
+    error = MakeUint160_(data[0], to);
+    IF_ERROR_RETURN(error, true);
+
+    rai::BlockHash from_tx_hash = data[1];
+
+    uint64_t from_height;
+    error = MakeUint64_(data[2], from_height);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenAddress address;
+    error = MakeUint160_(data[3], address);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[4];
+
+    rai::Chain chain;
+    error = MakeChain_(data[5], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainWrapEvent>(
+        height, index, chain, address, rai::TokenType::_721, original_chain,
+        original_address, from, from_height, from_tx_hash, to, value, hash);
+    return false;
+}
+
+bool rai::EvmParser::MakeErc20TokenUnwrappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc20TokenUnwrappedEvent_: topics size error, "
+            "topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 4)
+    {
+        rai::Log::Error(
+            rai::ToString("EvmParser::MakeErc20TokenUnwrappedEvent_: data size "
+                          "error, data size=",
+                          data.size()));
+        return true;
+    }
+
+    rai::Chain original_chain;
+    bool error = MakeChain_(topics[1], original_chain);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenAddress original_address = topics[2];
+
+    rai::Account from;
+    error = MakeUint160_(topics[3], from);
+    IF_ERROR_RETURN(error, true);
+
+    rai::Account to = data[0];
+
+    rai::TokenAddress address;
+    error = MakeUint160_(data[1], address);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[2];
+
+    rai::Chain chain;
+    error = MakeChain_(data[3], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainUnwrapEvent>(
+        height, index, chain, address, rai::TokenType::_20, original_chain,
+        original_address, from, to, value, hash);
+
+    return false;
+}
+
+bool rai::EvmParser::MakeErc721TokenUnwrappedEvent_(
+    uint64_t height, uint64_t index, const rai::BlockHash& hash,
+    const std::vector<rai::Topic>& topics,
+    const std::vector<rai::uint256_union>& data,
+    std::shared_ptr<rai::CrossChainEvent>& event) const
+{
+    if (topics.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc721TokenUnwrappedEvent_: topics size error, "
+            "topics size=",
+            topics.size()));
+        return true;
+    }
+
+    if (data.size() != 4)
+    {
+        rai::Log::Error(rai::ToString(
+            "EvmParser::MakeErc721TokenUnwrappedEvent_: data size "
+            "error, data size=",
+            data.size()));
+        return true;
+    }
+
+    rai::Chain original_chain;
+    bool error = MakeChain_(topics[1], original_chain);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenAddress original_address = topics[2];
+
+    rai::Account from;
+    error = MakeUint160_(topics[3], from);
+    IF_ERROR_RETURN(error, true);
+
+    rai::Account to = data[0];
+
+    rai::TokenAddress address;
+    error = MakeUint160_(data[1], address);
+    IF_ERROR_RETURN(error, true);
+
+    rai::TokenValue value = data[2];
+
+    rai::Chain chain;
+    error = MakeChain_(data[3], chain);
+    IF_ERROR_RETURN(error, true);
+
+    event = std::make_shared<rai::CrossChainUnwrapEvent>(
+        height, index, chain, address, rai::TokenType::_721, original_chain,
+        original_address, from, to, value, hash);
+
+    return false;
+}
+
 bool rai::EvmParser::MakeTokenType_(const rai::uint256_union& data,
                                     rai::TokenType& type) const
 {
@@ -1580,7 +2181,7 @@ bool rai::EvmParser::MakeTokenType_(const rai::uint256_union& data,
 }
 
 bool rai::EvmParser::MakeChain_(const rai::uint256_union& data,
-                                  rai::Chain& chain) const
+                                rai::Chain& chain) const
 {
     uint32_t u32;
     bool error = MakeUint32_(data, u32);
@@ -1672,7 +2273,53 @@ bool rai::EvmParser::MakeBool_(const rai::uint256_union& data, bool& b) const
     return false;
 }
 
+void rai::EvmParser::HalveBatch_()
+{
+    batch_ /= 2;
+    if (batch_ == 0)
+    {
+        batch_ = 1;
+    }
+}
+
 void rai::EvmParser::SubmitBlocks_()
 {
-    // todo:
+    if (waiting_)
+    {
+        return;
+    }
+
+    if (submitted_height_ >= confirmed_height_)
+    {
+        return;
+    }
+
+    std::vector<rai::CrossChainBlockEvents> blocks;
+    for (auto i = blocks_.begin(), n = blocks_.end(); i != n; ++i)
+    {
+        if (i->first > confirmed_height_)
+        {
+            break;
+        }
+
+        if (blocks.empty() || i->second.events_.empty())
+        {
+            blocks.emplace_back(chain_, i->first, i->second.events_);
+        }
+
+        if (!i->second.events_.empty())
+        {
+            break;
+        }
+    }
+
+    if (blocks.empty())
+    {
+        return;
+    }
+
+    waiting_ = true;
+    token_.SubmitCrossChainBlocks(
+        blocks, std::bind(&EvmParser::OnBlocksSubmitted, this,
+                          std::placeholders::_1, std::placeholders::_2));
 }

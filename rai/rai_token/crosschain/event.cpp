@@ -64,6 +64,11 @@ uint64_t rai::CrossChainTokenEvent::Index() const
     return index_;
 }
 
+rai::Chain rai::CrossChainTokenEvent::Chain() const
+{
+    return chain_;
+}
+
 rai::CrossChainCreateEvent::CrossChainCreateEvent(
     uint64_t height, uint64_t index, rai::Chain chain,
     const rai::TokenAddress& address, rai::TokenType token_type,
@@ -113,6 +118,11 @@ uint64_t rai::CrossChainCreateEvent::Index() const
     return index_;
 }
 
+rai::Chain rai::CrossChainCreateEvent::Chain() const
+{
+    return chain_;
+}
+
 rai::CrossChainMapEvent::CrossChainMapEvent(
     uint64_t height, uint64_t index, rai::Chain chain,
     const rai::TokenAddress& address, rai::TokenType token_type,
@@ -160,6 +170,11 @@ uint64_t rai::CrossChainMapEvent::BlockHeight() const
 uint64_t rai::CrossChainMapEvent::Index() const
 {
     return index_;
+}
+
+rai::Chain rai::CrossChainMapEvent::Chain() const
+{
+    return chain_;
 }
 
 rai::CrossChainUnmapEvent::CrossChainUnmapEvent(
@@ -213,6 +228,11 @@ uint64_t rai::CrossChainUnmapEvent::BlockHeight() const
 uint64_t rai::CrossChainUnmapEvent::Index() const
 {
     return index_;
+}
+
+rai::Chain rai::CrossChainUnmapEvent::Chain() const
+{
+    return chain_;
 }
 
 rai::CrossChainWrapEvent::CrossChainWrapEvent(
@@ -273,6 +293,11 @@ uint64_t rai::CrossChainWrapEvent::Index() const
     return index_;
 }
 
+rai::Chain rai::CrossChainWrapEvent::Chain() const
+{
+    return chain_;
+}
+
 rai::CrossChainUnwrapEvent::CrossChainUnwrapEvent(
     uint64_t height, uint64_t index, rai::Chain chain,
     const rai::TokenAddress& address, rai::TokenType token_type,
@@ -288,6 +313,7 @@ rai::CrossChainUnwrapEvent::CrossChainUnwrapEvent(
       original_chain_(original_chain),
       original_address_(original_address),
       from_(from),
+      to_(to),
       value_(value),
       tx_hash_(hash)
 {
@@ -324,6 +350,11 @@ uint64_t rai::CrossChainUnwrapEvent::BlockHeight() const
 uint64_t rai::CrossChainUnwrapEvent::Index() const
 {
     return index_;
+}
+
+rai::Chain rai::CrossChainUnwrapEvent::Chain() const
+{
+    return chain_;
 }
 
 rai::CrossChainBlockEvents::CrossChainBlockEvents(

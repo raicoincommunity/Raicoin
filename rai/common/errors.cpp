@@ -2145,6 +2145,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "The cross chain session id is outdated";
         }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_INVALID_CHAIN:
+        {
+            return "Invalid cross chain id";
+        }
+        case rai::ErrorCode::TOKEN_CROSS_CHAIN_INVALID_HEIGHT:
+        {
+            return "Invalid cross chain block height";
+        }
         default:
         {
             return "Invalid error code";

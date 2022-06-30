@@ -1016,14 +1016,20 @@ rai::ErrorCode rai::App::WaitBlock(rai::Transaction& transaction,
     bool error = ledger_.AccountInfoGet(transaction, account, info);
     if (error || !info.Valid())
     {
-        block_waiting_.Insert(account, height, waiting, confirmed);
+        if (waiting != nullptr)
+        {
+            block_waiting_.Insert(account, height, waiting, confirmed);
+        }
         SyncAccountAsync(account, 0);
         return rai::ErrorCode::APP_PROCESS_WAITING;
     }
 
     if (height > info.head_height_)
     {
-        block_waiting_.Insert(account, height, waiting, confirmed);
+        if (waiting != nullptr)
+        {
+            block_waiting_.Insert(account, height, waiting, confirmed);
+        }
         SyncAccountAsync(account, info.head_height_ + 1);
         return rai::ErrorCode::APP_PROCESS_WAITING;
     }
@@ -1041,7 +1047,10 @@ rai::ErrorCode rai::App::WaitBlock(rai::Transaction& transaction,
 
     if (!info.Confirmed(height))
     {
-        block_waiting_.Insert(account, height, waiting, confirmed);
+        if (waiting != nullptr)
+        {
+            block_waiting_.Insert(account, height, waiting, confirmed);
+        }
         block_confirm_.Add(block);
         return rai::ErrorCode::APP_PROCESS_WAITING;
     }

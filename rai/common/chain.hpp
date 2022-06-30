@@ -28,11 +28,11 @@ enum class Chain : uint32_t
 };
 std::string ChainToString(Chain);
 rai::Chain StringToChain(const std::string&);
+rai::ErrorCode CheckWrapToChain(Chain chain);
+uint64_t ChainSinceHeight(Chain chain);
+
 inline bool IsRaicoin(Chain chain)
 {
     return chain == Chain::RAICOIN || chain == Chain::RAICOIN_TEST;
 }
-
-rai::ErrorCode CheckWrapToChain(Chain chain);
-
 }  // namespace rai

@@ -12,6 +12,8 @@ add_executable (rai_token
 	topic.hpp
 	swaphelper.cpp
 	swaphelper.hpp
+	chainwaiting.cpp
+	chainwaiting.hpp
 	crosschain/config.cpp
 	crosschain/config.hpp
 	crosschain/crosschain.cpp
