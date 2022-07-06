@@ -107,6 +107,10 @@ if not TOKEN_URL.startswith('wss://'):
     print("Error found in .env: invalid TOKEN_URL")
     sys.exit(0)
 
+VALIDATOR_URL = os.getenv('TOKEN_URL', 'wss://validator.raicoin.org/')
+if not TOKEN_URL.startswith('wss://'):
+    print("Error found in .env: invalid VALIDATOR_URL")
+    sys.exit(0)
 
 SRV_PROVIDERS = 'service_providers'
 SRV_SUBS = 'service_subscriptions'
@@ -137,6 +141,10 @@ TASKS = [
     {
         'desc': 'RAI token',
         'url': TOKEN_URL,
+    },
+    {
+        'desc': 'RAI validator',
+        'url': VALIDATOR_URL,
     },
 ]
 GS['tasks'] = TASKS
