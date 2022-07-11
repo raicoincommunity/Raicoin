@@ -1,5 +1,21 @@
 [
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "genesisValidator",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "genesisSigner",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
     "inputs": [],
     "name": "CoreContractAreadySet",
     "type": "error"
@@ -109,19 +125,6 @@
       }
     ],
     "name": "FeeRateUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "version",
-        "type": "uint8"
-      }
-    ],
-    "name": "Initialized",
     "type": "event"
   },
   {
@@ -291,6 +294,45 @@
   },
   {
     "inputs": [],
+    "name": "getGenesisSigner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getGenesisValidator",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getNonce",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "getTotalWeight",
     "outputs": [
       {
@@ -372,9 +414,41 @@
     "name": "getValidators",
     "outputs": [
       {
-        "internalType": "bytes32[]",
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "validator",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gasPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "signer",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lastSubmit",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "epoch",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "weight",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct ValidatorManager.ValidatorFullInfo[]",
         "name": "",
-        "type": "bytes32[]"
+        "type": "tuple[]"
       }
     ],
     "stateMutability": "view",

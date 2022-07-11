@@ -267,7 +267,7 @@ class EvmChainValidator:
         error, block_number = await self.get_block_number()
         if error or block_number <= self.synced_height:
             return
-        print(f"block_number={block_number}")
+        #print(f"block_number={block_number}")
 
         error, fee = await self.get_fee(block_number)
         if error:
@@ -275,7 +275,7 @@ class EvmChainValidator:
         if fee != self.fee:
             self.fee = fee
             notify = True
-        print(f"fee={self.fee}")
+        #print(f"fee={self.fee}")
 
         self.synced_height = block_number
         if notify:
@@ -364,9 +364,9 @@ async def chain_info(req, res):
     try:
         chain_id = int(req['chain_id'])
         if chain_id not in VALIDATORS:
-            res['errror'] = 'chain not supported'
+            res['error'] = 'chain not supported'
             return
-        validator = VALIDATORS[chain_id]
+        validator = VALIDATORS[chain_id]['validator']
         res.update(validator.to_chain_info())
     except Exception as e:
         res['error'] = 'exception'
@@ -518,7 +518,7 @@ async def init_app():
     # Setup logger
     if DEBUG_MODE:
         print("debug mode")
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.INFO)
     else:
         root = logging.getLogger('aiohttp.server')
         logging.basicConfig(level=logging.WARN)
@@ -554,8 +554,8 @@ async def periodic(period, fn, *args):
         if elapsed < period:
             await asyncio.sleep(period - elapsed)
 
-BSC_TEST_CORE_CONTRACT = '0xa8250D8f8cb583eD5c3dB52c496f79d788DAA64e'
-BSC_TEST_VALIDATOR_CONTRACT = '0x8dc4A3dfE110a96ccB1b93b085885BB5dC9c74f5'
+BSC_TEST_CORE_CONTRACT = '0xC777f5b390E79c9634c9d07AF45Dc44b11893055'
+BSC_TEST_VALIDATOR_CONTRACT = '0x98431eB42A087333F7E167d3586D3b47Bc4f28D3'
 
 if TEST_MODE:
     VALIDATORS = {
