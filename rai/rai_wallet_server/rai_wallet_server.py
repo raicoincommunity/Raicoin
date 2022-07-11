@@ -107,8 +107,8 @@ if not TOKEN_URL.startswith('wss://'):
     print("Error found in .env: invalid TOKEN_URL")
     sys.exit(0)
 
-VALIDATOR_URL = os.getenv('TOKEN_URL', 'wss://validator.raicoin.org/')
-if not TOKEN_URL.startswith('wss://'):
+VALIDATOR_URL = os.getenv('VALIDATOR_URL', 'wss://validator.raicoin.org/')
+if not VALIDATOR_URL.startswith('wss://'):
     print("Error found in .env: invalid VALIDATOR_URL")
     sys.exit(0)
 
