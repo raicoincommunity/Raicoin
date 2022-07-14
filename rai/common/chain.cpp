@@ -58,7 +58,7 @@ std::string rai::ChainToString(rai::Chain chain)
         }
         default:
         {
-            return "unknown";
+            return std::to_string(static_cast<uint32_t>(chain));
         }
     }
 }

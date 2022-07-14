@@ -25,6 +25,7 @@ public:
     void QueryWeight(const rai::Account&, uint32_t&, rai::Amount&) const;
     void ReceiveWsMessage(const std::shared_ptr<rai::Ptree>&);
     void ProcessWeightQueryAck(const rai::WeightMessage&);
+    void ProcessCrosschainMessage(const rai::CrosschainMessage&);
 
     rai::Node& node_;
     boost::asio::io_service& service_;
@@ -34,6 +35,15 @@ public:
     std::shared_ptr<rai::WebsocketClient> websocket_;
 
 private:
+    void ReceiveWsWeightQueryMessage_(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveWsCrossChainMessage_(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveWsBindMessage_(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveWsBindQueryMessage_(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveWsNodeAccountMessage_(const std::shared_ptr<rai::Ptree>&);
+
+    bool DecodeAccount_(const std::string&, rai::Account&) const;
+    bool GetChain_(const std::shared_ptr<rai::Ptree>&, rai::Chain&) const;
+
     mutable std::mutex mutex_;
     uint32_t epoch_;
     std::unordered_map<rai::Account, rai::Amount> weights_;

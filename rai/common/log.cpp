@@ -66,7 +66,7 @@ rai::ErrorCode rai::LogConfig::DeserializeJson(bool& upgraded, rai::Ptree& ptree
         error_code = rai::ErrorCode::JSON_CONFIG_LOG_FLUSH;
         flush_ = ptree.get<bool>("flush");
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return error_code;
     }

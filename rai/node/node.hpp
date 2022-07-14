@@ -199,6 +199,7 @@ public:
               std::function<void(rai::Node&, const rai::Endpoint&,
                                  const std::string&)>);
     void SendToPeer(const rai::Peer&, rai::Message&);
+    void SendToRep(const rai::Account&, rai::Message&);
     void SendByRoute(const rai::Route&, rai::Message&);
     void SendCallback(const rai::Ptree&);
     void Broadcast(rai::Message&);

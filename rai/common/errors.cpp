@@ -558,6 +558,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Binding ignored";
         }
+        case rai::ErrorCode::CROSS_CHAIN_MESSAGE_DESTINATION:
+        {
+            return "Invalid cross chain message destination";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";

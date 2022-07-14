@@ -11,6 +11,7 @@
 #include <sstream>
 #include <type_traits>
 #include <vector>
+#include <stdexcept>
 #include <boost/asio/ip/address_v4.hpp>
 #include <boost/endian/conversion.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -192,7 +193,7 @@ bool StringToUint(const std::string& str, T& value)
 
         value = static_cast<T>(ull);
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return true;
     }
@@ -411,6 +412,12 @@ std::string MilliToSecondString(uint64_t);
     if (error)                \
     {                         \
         break;                \
+    }
+
+#define IF_ERROR_THROW(error, reason)     \
+    if (error)                            \
+    {                                     \
+        throw std::runtime_error(reason); \
     }
 
 #define RAI_TODO 1

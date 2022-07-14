@@ -36,6 +36,7 @@ ALLOWED_RPC_ACTIONS = [
 ]
 
 CLIENTS = {}
+TXNS = {}
 
 SERVICE = 'validator'
 FILTER_CHAIN_ID = 'chain_id'
@@ -473,6 +474,83 @@ def destory_client(r : web.Request, client_id):
         return
     del CLIENTS[client_id]
 
+def callback_check_ip(r : web.Request):
+    ip = UTIL.get_request_ip(r)
+    if ip != NODE_IP:
+        return True
+    return False
+
+async def sync_with_node():
+    if NODE == None:
+        return
+    if 'account' not in NODE:
+        await NODE['ws'].send_str('{"action":"node_account"}')
+
+async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
+    """Process data sent by node"""
+    ip = UTIL.get_request_ip(r)
+    log.server_logger.info('node message; %s, %s', message, ip)
+
+    try:
+        r = json.loads(message)
+        if 'action' not in r:
+            log.server_logger.error('invalid node message;%s;%s', message, ip)
+            return
+
+        action = r['action']
+        if action == 'bind_query_ack':
+            pass
+        elif action == 'cross_chain':
+            pass
+        elif action == 'node_account_ack':
+            pass
+        elif action == 'weight_query_ack':
+            pass
+        else:
+            log.server_logger.error('unexpected node message;%s;%s', message, ip)
+    except Exception as e:
+        log.server_logger.exception('uncaught error;%s;%s', str(e), ip)
+
+NODE = None
+async def node_handler(r : web.Request):
+    global NODE
+    if callback_check_ip(r):
+        log.server_logger.error('callback from unauthorized ip: %s', UTIL.get_request_ip(r))
+        return web.HTTPUnauthorized()
+    
+    ws = web.WebSocketResponse(heartbeat=30)
+    try:
+        await ws.prepare(r)
+        # Connection Opened
+    except:
+        log.server_logger.error('Failed to prepare websocket: %s', UTIL.get_request_ip(r))
+        return ws
+     
+    ip = UTIL.get_request_ip(r)
+    NODE = {'ws':ws, 'ip':ip}
+    log.server_logger.info('new node connection;%s;User-Agent:%s', ip, str(r.headers.get('User-Agent')))
+
+    try:
+        async for msg in ws:
+            if msg.type == WSMsgType.TEXT:
+                if msg.data == 'close':
+                    await ws.close()
+                else:
+                    await handle_node_messages(r, msg.data, ws=ws)
+            elif msg.type == WSMsgType.CLOSE:
+                log.server_logger.info('Node connection closed normally')
+                break
+            elif msg.type == WSMsgType.ERROR:
+                log.server_logger.info('Node connection closed with error %s', ws.exception())
+                break
+
+        log.server_logger.info('Node connection closed normally')
+    except Exception as e:
+        log.server_logger.exception('Node closed with exception=%s', e)
+    finally:
+        NODE = None
+    return ws
+
 def debug_check_ip(r : web.Request):
     ip = UTIL.get_request_ip(r)
     if not ip or ip != '127.0.0.1':
@@ -514,7 +592,6 @@ async def debug_handler(r : web.Request):
 
 
 async def init_app():
-    global BOOT_TIME
     # Setup logger
     if DEBUG_MODE:
         print("debug mode")
@@ -533,6 +610,7 @@ async def init_app():
     # Setup routes
     # todo:
     app.add_routes([web.get('/', client_handler)]) # All client WS requests
+    app.add_routes([web.get(f'/callback/{NODE_CALLBACK_KEY}', node_handler)]) # ws/wss callback from nodes
     app.add_routes([web.post('/debug', debug_handler)]) # local debug interface
 
     return app
