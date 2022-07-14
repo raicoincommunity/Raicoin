@@ -206,7 +206,7 @@ bool rai::uint128_union::DecodeHex(const std::string& text)
         *this = number;
         return false;
     }
-    catch (std::runtime_error&)
+    catch (...)
     {
         return true;
     }
@@ -243,7 +243,7 @@ bool rai::uint128_union::DecodeDec(const std::string& text)
         *this = rai::uint128_t(number);
         return false;
     }
-    catch (std::runtime_error&)
+    catch (...)
     {
         return true;
     }
@@ -532,7 +532,7 @@ bool rai::uint256_union::DecodeHex(const std::string& text)
         *this = number;
         return false;
     }
-    catch (std::runtime_error&)
+    catch (...)
     {
         return true;
     }
@@ -569,7 +569,7 @@ bool rai::uint256_union::DecodeDec(const std::string& text)
         *this = rai::uint256_t(number);
         return false;
     }
-    catch (std::runtime_error&)
+    catch (...)
     {
         return true;
     }
@@ -605,7 +605,7 @@ bool rai::uint256_union::DecodeEvmHex(const std::string& text)
         *this = number;
         return false;
     }
-    catch (std::runtime_error&)
+    catch (...)
     {
         return true;
     }
@@ -1040,7 +1040,7 @@ bool rai::uint512_union::DecodeHex(const std::string& text)
         *this = number;
         return false;
     }
-    catch (std::runtime_error&)
+    catch (...)
     {
         return true;
     }

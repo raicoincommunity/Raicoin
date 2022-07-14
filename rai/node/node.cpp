@@ -996,6 +996,11 @@ public:
         }
     }
 
+    void Crosschain(const rai::CrosschainMessage& message) override
+    {
+        node_.validator_.ProcessCrosschainMessage(message);
+    }
+
 private:
     rai::Node& node_;
     rai::Endpoint sender_;
@@ -1047,6 +1052,16 @@ void rai::Node::Send(const rai::Message& message, const rai::Endpoint& remote,
 void rai::Node::SendToPeer(const rai::Peer& peer, rai::Message& message)
 {
     SendByRoute(peer.Route(), message);
+}
+
+void rai::Node::SendToRep(const rai::Account& rep, rai::Message& message)
+{
+    auto route = peers_.Route(rep);
+    if (!route)
+    {
+        return;
+    }
+    SendByRoute(*route, message);
 }
 
 void rai::Node::SendByRoute(const rai::Route& route, rai::Message& message)

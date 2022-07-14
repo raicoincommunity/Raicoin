@@ -1042,7 +1042,7 @@ rai::ErrorCode rai::RepBlock::DeserializeJson(const rai::Ptree& ptree)
         error =  CheckSignature_();
         IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return error_code;
     }
@@ -1414,7 +1414,7 @@ rai::ErrorCode rai::AdBlock::DeserializeJson(const rai::Ptree& ptree)
         error =  CheckSignature_();
         IF_ERROR_RETURN(error, rai::ErrorCode::SIGNATURE);
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return error_code;
     }
@@ -2043,7 +2043,7 @@ std::unique_ptr<rai::Block> rai::DeserializeBlockJson(
             return result;
         }
     }
-    catch (const std::runtime_error&)
+    catch (...)
     {
     }
 

@@ -1227,9 +1227,9 @@ std::chrono::steady_clock::time_point rai::Elections::NextWakeup_(
     }
 
     uint32_t shift = election.rounds_ / 5;
-    if (shift > 8)
+    if (shift > 4)
     {
-        shift = 8;
+        shift = 4;
     }
     auto base = rai::Elections::NON_FORK_ELECTION_INTERVAL.count();
     auto delay = base << shift;

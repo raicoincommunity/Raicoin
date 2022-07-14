@@ -36,7 +36,6 @@ public:
     bool enable_rich_list_;
     bool enable_delegator_list_;
     rai::Url validator_url_;
-    std::vector<std::pair<rai::Chain, rai::SignerAddress>> signers_;
 };
 
 }

@@ -138,7 +138,7 @@ rai::ErrorCode rai::NodeConfig::DeserializeJson(bool& upgraded,
             }
         }
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return error_code;
     }

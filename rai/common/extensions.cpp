@@ -1001,10 +1001,6 @@ rai::ErrorCode rai::ExtensionToken::CheckChain(rai::Chain chain)
     {
         return rai::ErrorCode::TOKEN_CHAIN_INVALID;
     }
-    else if (str == "unknown")
-    {
-        return rai::ErrorCode::TOKEN_CHAIN_UNKNOWN;
-    }
 
     return rai::ErrorCode::SUCCESS;
 }

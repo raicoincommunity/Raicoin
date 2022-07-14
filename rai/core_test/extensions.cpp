@@ -684,7 +684,7 @@ TEST(ExtensionToken, Send20)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "00040066";  // type + length
     hex += "040000000100";  // op_send + chain + token type
@@ -932,7 +932,7 @@ TEST(ExtensionToken, Receive)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "0004008F";  // type + length
     hex += "050000000101";  // op_receive + chain + token type
@@ -1349,7 +1349,7 @@ TEST(ExtensionToken, SwapMake)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "000400D4";  // type + length
     hex += "0602";  // op_swap + subop
@@ -2364,7 +2364,7 @@ TEST(ExtensionToken, Unmap)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "0004006E";  // type + length
     hex += "07";  // op_unmap
@@ -2567,7 +2567,7 @@ TEST(ExtensionToken, Wrap)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "0004006A";  // type + length
     hex += "08";  // op_wrap
@@ -2635,7 +2635,7 @@ TEST(ExtensionToken, Wrap)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "0004006A";  // type + length
     hex += "08";  // op_wrap

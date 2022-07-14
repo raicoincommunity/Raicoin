@@ -41,7 +41,7 @@ rai::CrossChain::CrossChain(rai::Token& token)
     {
         parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
             token, config.bsc_test_urls_, rai::Chain::BINANCE_SMART_CHAIN_TEST,
-            5, 30, "")));
+            5, 30, "0xC777f5b390E79c9634c9d07AF45Dc44b11893055")));
     }
 }
 

@@ -111,7 +111,7 @@ public:
     using rai::Block::Hash;
     void Hash(blake2b_state&) const override;
     rai::BlockHash Previous() const override;
-    // rai::BlockHash Root() const override;
+
     void Serialize(rai::Stream&) const override;
     rai::ErrorCode Deserialize(rai::Stream&) override;
     void SerializeJson(rai::Ptree&) const override;

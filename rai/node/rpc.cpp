@@ -66,7 +66,7 @@ rai::ErrorCode rai::NodeRpcConfig::DeserializeJson(bool& upgraded,
             whitelist_.push_back(ip);
         }
     }
-    catch (const std::exception&)
+    catch (...)
     {
         return error_code;
     }

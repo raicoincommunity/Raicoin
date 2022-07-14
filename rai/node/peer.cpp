@@ -739,6 +739,24 @@ boost::optional<rai::Peer> rai::Peers::RandomFullNodePeer(bool exclude_self) con
     }
 }
 
+boost::optional<rai::Route> rai::Peers::Route(const rai::Account& rep) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = peers_.find(rep);
+    if (it != peers_.end())
+    {
+        return it->Route();
+    }
+
+    it = peers_low_weight_.find(rep);
+    if (it != peers_low_weight_.end())
+    {
+        return it->Route();
+    }
+
+    return boost::none;
+}
+
 void rai::Peers::Routes(const std::unordered_set<rai::Account>& filter,
                         bool include_low_weight,
                         std::vector<rai::Route>& result)

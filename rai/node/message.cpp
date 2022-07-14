@@ -1151,6 +1151,15 @@ rai::WeightMessage::WeightMessage(rai::ErrorCode& error_code, rai::Stream& strea
     error_code = Deserialize(stream);
 }
 
+rai::WeightMessage::WeightMessage(const rai::uint256_union& request_id,
+                                  const rai::Account& rep)
+    : Message(rai::MessageType::WEIGHT, 0),
+      request_id_(request_id),
+      rep_(rep),
+      epoch_(0)
+{
+}
+
 void rai::WeightMessage::Serialize(rai::Stream& stream) const
 {
     header_.Serialize(stream);
@@ -1191,6 +1200,63 @@ rai::ErrorCode rai::WeightMessage::Deserialize(rai::Stream& stream)
 void rai::WeightMessage::Visit(rai::MessageVisitor& visitor)
 {
     visitor.Weight(*this);
+}
+
+rai::CrosschainMessage::CrosschainMessage(rai::ErrorCode& error_code,
+                                          rai::Stream& stream,
+                                          const rai::MessageHeader& header)
+    : Message(header)
+{
+    error_code = Deserialize(stream);
+}
+
+rai::CrosschainMessage::CrosschainMessage(const rai::Account& source,
+                                          const rai::Account& destination,
+                                          std::vector<uint8_t>&& payload)
+    : Message(rai::MessageType::CROSSCHAIN),
+      source_(source),
+      destination_(destination),
+      payload_(std::move(payload))
+{
+}
+
+void rai::CrosschainMessage::Serialize(rai::Stream& stream) const
+{
+    header_.Serialize(stream);
+    rai::Write(stream, source_.bytes);
+    rai::Write(stream, destination_.bytes);
+    uint16_t length = payload_.size();
+    rai::Write(stream, length);
+    if (length > 0)
+    {
+        rai::Write(stream, length, payload_);
+    }
+}
+
+rai::ErrorCode rai::CrosschainMessage::Deserialize(rai::Stream& stream)
+{
+    bool error = rai::Read(stream, source_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, destination_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    uint16_t length;
+    error = rai::Read(stream, length);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    if (length > 0)
+    {
+        error = rai::Read(stream, length, payload_);
+        IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+    }
+
+    return rai::ErrorCode::SUCCESS;
+}
+
+void rai::CrosschainMessage::Visit(rai::MessageVisitor& visitor)
+{
+    visitor.Crosschain(*this);
 }
 
 rai::MessageParser::MessageParser(rai::MessageVisitor& visitor)

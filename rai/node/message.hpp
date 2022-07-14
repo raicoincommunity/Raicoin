@@ -27,7 +27,7 @@ enum class MessageType : uint8_t
     CONFLICT    = 7,
     BOOTSTRAP   = 8,
     WEIGHT      = 9,
-    SIGN        = 10,
+    CROSSCHAIN  = 10,
 
     MAX
 };
@@ -321,8 +321,7 @@ class WeightMessage : public Message
 {
 public:
     WeightMessage(rai::ErrorCode&, rai::Stream&, const rai::MessageHeader&);
-    WeightMessage(uint64_t, rai::QueryBy, const rai::Account&, uint64_t,
-                 const rai::BlockHash&);
+    WeightMessage(const rai::uint256_union&, const rai::Account&);
     virtual ~WeightMessage() = default;
     void Serialize(rai::Stream&) const override;
     rai::ErrorCode Deserialize(rai::Stream&) override;
@@ -336,18 +335,37 @@ public:
     rai::Account replier_;
 };
 
+// Cross-chain messages between validators
+
+class CrosschainMessage : public Message
+{
+public:
+    CrosschainMessage(rai::ErrorCode&, rai::Stream&, const rai::MessageHeader&);
+    CrosschainMessage(const rai::Account&, const rai::Account&,
+                      std::vector<uint8_t>&&);
+    virtual ~CrosschainMessage() = default;
+    void Serialize(rai::Stream&) const override;
+    rai::ErrorCode Deserialize(rai::Stream&) override;
+    void Visit(rai::MessageVisitor&) override;
+
+    rai::Account source_;
+    rai::Account destination_;
+    std::vector<uint8_t> payload_;
+};
+
 class MessageVisitor
 {
 public:
-    virtual void Handshake(const rai::HandshakeMessage&) = 0;
-    virtual void Keeplive(const rai::KeepliveMessage&)   = 0;
-    virtual void Publish(const rai::PublishMessage&)     = 0;
-    virtual void Relay(rai::RelayMessage&)               = 0;
-    virtual void Confirm(const rai::ConfirmMessage&)     = 0;
-    virtual void Query(const rai::QueryMessage&)         = 0;
-    virtual void Fork(const rai::ForkMessage&)           = 0;
-    virtual void Conflict(const rai::ConflictMessage&)   = 0;
-    virtual void Weight(const rai::WeightMessage&)       = 0;
+    virtual void Handshake(const rai::HandshakeMessage&)    = 0;
+    virtual void Keeplive(const rai::KeepliveMessage&)      = 0;
+    virtual void Publish(const rai::PublishMessage&)        = 0;
+    virtual void Relay(rai::RelayMessage&)                  = 0;
+    virtual void Confirm(const rai::ConfirmMessage&)        = 0;
+    virtual void Query(const rai::QueryMessage&)            = 0;
+    virtual void Fork(const rai::ForkMessage&)              = 0;
+    virtual void Conflict(const rai::ConflictMessage&)      = 0;
+    virtual void Weight(const rai::WeightMessage&)          = 0;
+    virtual void Crosschain(const rai::CrosschainMessage&)  = 0;
 };
 
 class MessageParser

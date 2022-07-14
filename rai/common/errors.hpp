@@ -145,6 +145,7 @@ enum class ErrorCode : int
     LEDGER_TAKE_NACK_BLOCK_GET           = 135,
     BLOCK_CHAIN                          = 136,
     BINDING_IGNORED                      = 137,
+    CROSS_CHAIN_MESSAGE_DESTINATION      = 138,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                                    = 200,

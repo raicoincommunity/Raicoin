@@ -97,6 +97,10 @@ void rai::OngoingServiceRunner::Run()
         {
             std::cout << "service exception: " << e.what() << std::endl;
         }
+        catch (...)
+        {
+            std::cout << "service exception" << std::endl;
+        }
 
         lock.lock();
     }
