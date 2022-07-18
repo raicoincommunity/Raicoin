@@ -40,6 +40,7 @@ private:
     void ReceiveWsBindMessage_(const std::shared_ptr<rai::Ptree>&);
     void ReceiveWsBindQueryMessage_(const std::shared_ptr<rai::Ptree>&);
     void ReceiveWsNodeAccountMessage_(const std::shared_ptr<rai::Ptree>&);
+    void ReceiveWsWeightSnapshotMessage_(const std::shared_ptr<rai::Ptree>&);
 
     bool DecodeAccount_(const std::string&, rai::Account&) const;
     bool GetChain_(const std::shared_ptr<rai::Ptree>&, rai::Chain&) const;

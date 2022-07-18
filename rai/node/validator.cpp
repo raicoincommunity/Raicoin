@@ -121,6 +121,10 @@ void rai::Validator::ReceiveWsMessage(
     {
         ReceiveWsNodeAccountMessage_(message);
     }
+    else if (action == "weight_snapshot")
+    {
+        ReceiveWsWeightSnapshotMessage_(message);
+    }
 }
 
 void rai::Validator::ProcessWeightQueryAck(const rai::WeightMessage& message)
@@ -357,6 +361,38 @@ void rai::Validator::ReceiveWsNodeAccountMessage_(
     ptree.put("action", "node_account_ack");
     ptree.put("account", node_.account_.StringAccount());
     ptree.put("account_hex", node_.account_.StringHex());
+    websocket_->Send(ptree);
+}
+
+void rai::Validator::ReceiveWsWeightSnapshotMessage_(
+    const std::shared_ptr<rai::Ptree>& message)
+{
+    if (!websocket_)
+    {
+        return;
+    }
+
+    rai::Ptree ptree;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (epoch_ == 0)
+        {
+            return;
+        }
+        ptree.put("action", "weight_snapshot_ack");
+        ptree.put("epoch", std::to_string(epoch_));
+        rai::Ptree weights;
+        for (auto& i : weights_)
+        {
+            rai::Ptree entry;
+            entry.put("representative", i.first.StringAccount());
+            entry.put("representative_hex", i.first.StringHex());
+            entry.put("weight", i.second.StringDec());
+            weights.push_back(std::make_pair("", entry));
+        }
+        ptree.put_child("weights", weights);
+    }
+    
     websocket_->Send(ptree);
 }
 

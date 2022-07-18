@@ -1169,7 +1169,7 @@ TEST(ExtensionToken, Receive)
     count = extensions2.Count(rai::ExtensionType::TOKEN);
     EXPECT_EQ(1, count);
     error_code = token2.FromExtension(extensions2.Get(rai::ExtensionType::TOKEN));
-    EXPECT_EQ(rai::ErrorCode::TOKEN_CHAIN_UNKNOWN, error_code);
+    EXPECT_EQ(rai::ErrorCode::SUCCESS, error_code);
 
     hex = "00040093";  // type + length
     hex += "050000000102";  // op_receive + chain + token type

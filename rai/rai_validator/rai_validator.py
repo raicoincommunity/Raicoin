@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 #V1.0
 
-from asyncio import tasks
-from itertools import chain
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -24,12 +22,14 @@ import traceback
 
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
-from web3 import Web3
+from web3 import Web3, Account as EvmAccount
 from web3.middleware import geth_poa_middleware
 from eth_account.messages import encode_intended_validator
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from enum import IntEnum
+from enum import IntEnum, Enum
+from getpass import getpass
+from hashlib import blake2b
 
 ALLOWED_RPC_ACTIONS = [
     'service_subscribe', 'chain_info'
@@ -42,6 +42,8 @@ SERVICE = 'validator'
 FILTER_CHAIN_ID = 'chain_id'
 FILTERS = [FILTER_CHAIN_ID]
 SUBS = 'subscriptions'
+EPOCH_TIME = 72 * 3600
+REWARD_TIME = 71 * 3600
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 LOOP = asyncio.get_event_loop()
@@ -128,6 +130,28 @@ else:
     ]
 
 
+def valid_evm_private_key(key):
+    try:
+        if (len(key) != 64):
+            return False
+        bytes.fromhex(key)
+        return True
+    except:
+        return False
+
+BSC_TEST_SIGNER_PRIVATE_KEY = os.getenv('BSC_TEST_SIGNER_PRIVATE_KEY', '')
+if BSC_TEST_SIGNER_PRIVATE_KEY.lower() == 'input':
+    BSC_TEST_SIGNER_PRIVATE_KEY = getpass(
+        prompt='Input the private key of your signer account for BSC testnet: ')
+    if valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
+        if len(BSC_TEST_SIGNER_PRIVATE_KEY) > 0:
+            print('Error: invalid private key format')
+        sys.exit(0)
+elif BSC_TEST_SIGNER_PRIVATE_KEY != '':
+    if not valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
+        print("Error found in .env: invalid BSC_TEST_SIGNER_PRIVATE_KEY")
+        sys.exit(0)
+
 class Util:
     def __init__(self, use_cf: bool, use_nginx : bool):
         self.use_cf = use_cf
@@ -154,6 +178,80 @@ class Util:
             return host
         return None
 
+ACCOUNT_LOOKUP = "13456789abcdefghijkmnopqrstuwxyz"
+ACCOUNT_REVERSE = "~0~1234567~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~89:;<=>?@AB~CDEFGHIJK~LMNO~~~~~"
+class Account:
+    def char_encode(self, c):
+        if c >= len(ACCOUNT_LOOKUP) or c < 0:
+            return '~'
+        return ACCOUNT_LOOKUP[c]
+
+    def char_decode(self, d):
+        if d not in ACCOUNT_LOOKUP:
+            return 0xff
+        return ord(ACCOUNT_REVERSE[ord(d) - 0x30]) - 0x30
+
+    def decode(self, a):
+        prefix = "rai_"
+        if len(a) < 64 or not a.startswith(prefix):
+            return True, None, None
+        if ' ' in a or '\r' in a or '\n' in a or '\t' in a:
+            return True, None, None
+        if len(a) == 65 or (len(a) > 65 and a[64] != '_'):
+            return True, None, None
+            
+        if (a[len(prefix)] != '1' and a[len(prefix)] != '3'):
+            return True, None, None
+        number = 0
+        for i in range(len(prefix), 64):
+            b = self.char_decode(a[i])
+            if (0xff == b):
+                return True, None, None
+            number <<= 5
+            number += b
+        check = number & 0xffffffffff
+        hex_str = "{0:064X}".format(number >> 40)
+        ctx = blake2b(digest_size=5)
+        ctx.update(bytes.fromhex(hex_str))
+        validation = int.from_bytes(ctx.digest(), byteorder='little')
+        if check != validation:
+            print("decode: invalid check field")
+            return True, None, None
+        if len(a) == 64:
+            return False, hex_str, None
+        return False, hex_str, a[65:]
+
+    def encode(self, b):
+        if isinstance(b, str):
+            if b.startswith("0x"):
+                b = b[2:]
+            try:
+                b = bytes.fromhex(b)
+            except:
+                return True, None
+        if not isinstance(b, bytes) or len(b) != 32:
+            return True, None
+        ctx = blake2b(digest_size=5)
+        ctx.update(b)
+        check = int.from_bytes(ctx.digest(), byteorder='little')
+        raw = int.from_bytes(b, byteorder='big')
+        number = raw * 2 ** 40 + check
+        a = ''
+        for i in range(60):
+            c = number % 32
+            number = number // 32
+            e = self.char_encode(c)
+            if e == '~':
+                return True, None
+            a += e
+        a += '_iar'
+        return False, a[::-1]
+        
+    def check(self, a):
+        error, _, _ = self.decode(a)
+        return error
+
+ACCOUNT = Account()
 
 class ChainId(IntEnum):
     INVALID = 0
@@ -167,13 +265,30 @@ class ChainId(IntEnum):
     ETHEREUM_TEST_GOERLI = 10033
     BINANCE_SMART_CHAIN_TEST = 10040
 
+class ChainStr(str, Enum):
+    INVALID = 'invalid'
+    RAICOIN = 'raicoin'
+    BITCOIN = 'bitcoin'
+    ETHEREUM = 'ethereum'
+    BINANCE_SMART_CHAIN = 'binance smart chain'
+
+    RAICOIN_TEST = 'raicoin testnet'
+    BITCOIN_TEST = 'bitcoin testnet'
+    ETHEREUM_TEST_GOERLI = 'ethereum goerli testnet'
+    BINANCE_SMART_CHAIN_TEST = 'binance smart chain testnet'
+
+def to_chain_str(chain_id: ChainId):
+    return ChainStr[chain_id.name]
+
+def to_chain_id(chain_str: ChainStr):
+    return ChainId[chain_str.name]
+
 class EvmChainId(IntEnum):
     ETHEREUM = 1
     BINANCE_SMART_CHAIN = 56
 
     ETHEREUM_TEST_GOERLI = 5
     BINANCE_SMART_CHAIN_TEST = 97
-
 
 
 def awaitable(func):
@@ -184,34 +299,141 @@ def awaitable(func):
         return await loop.run_in_executor(thread_pool, functools.partial(func, *args, **kw))
     return wrapper
 
+
 class EvmChainValidator:
-    def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_address: str, validator_address: str, core_abi: dict, validator_abi: dict, endpoints: list):
+    def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_contract: str,
+                 validator_contract: str, core_abi: dict, validator_abi: dict, endpoints: list,
+                 signer_private_key: str, confirmations: int):
         self.chain_id = chain_id
         self.evm_chain_id = evm_chain_id
-        self.core_address = core_address
-        self.validator_address = validator_address
+        self.core_contract = core_contract
+        self.validator_contract = validator_contract
         self.core_abi = core_abi
         self.validator_abi = validator_abi
+        self.genesis_validator = None
+        self.genesis_signer = None
         self.endpoints = endpoints
+        self.confirmations = confirmations
+        self.signer = None
+        if signer_private_key != '':
+            self._account = EvmAccount.from_key(signer_private_key)
+            self.signer = self._account.address
+
+        # dynamic variables
         self.endpoint_index = 0
         self.fee = None
         self.evm_chain_id_checked = False
-        self.synced_height = 0
+        self.synced_height = None
+        self.validators = None  # list of ValidatorFullInfo, ordered by weight
+        self.total_weight = self._total_weight = None
+        self.validator_activities = {} # validator -> ValidatorActivity
 
-        if (len(self.endpoints) == 0):
+        self.last_submit = None
+        self.submission_interval = 300
+        self.submission_state = self.SubmissionState.IDLE
+        self.weights = {}
+        self.signatures = {}
+
+        if len(self.endpoints) == 0:
             print("[ERROR] No endpoints found while constructing EvmChainValidator")
             sys.exit(0)
 
+    class ValidatorFullInfo:
+        def __init__(self, validator: str, signer: str, weight: int, gas_price: int,
+                     last_submit: int, epoch: int):
+            self.validator = validator
+            self.signer = signer
+            self.weight = weight
+            self.gas_price = gas_price
+            self.last_submit = last_submit
+            self.epoch = epoch
+
+        def __lt__(self, other):
+            return self.weight < other.weight
+
+        def update(self, signer: str, weight: int, gas_price: int,
+                    last_submit: int, epoch: int):
+            updated = False
+            if signer != self.signer:
+                self.signer = signer
+                updated = True
+            if weight != self.weight:
+                self.weight = weight
+                updated = True
+            if gas_price != self.gas_price:
+                self.gas_price = gas_price
+                updated = True
+            if last_submit != self.last_submit:
+                self.last_submit = last_submit
+                updated = True
+            if epoch != self.epoch:
+                self.epoch = epoch
+                updated = True
+            return updated
+
+    class Topics(str, Enum):
+        ValidatorSubmitted = '0x8af4f119fc84662aea5dd2e38c11f64f244dd0dd79699db6778a9ce3bcb4e006'
+        ValidatorPurged = '0xef1971845d41d94b4fa01bda8806e405a5433145ff767b4ce3d79f738c3624c7'
+
+    class ValidatorActivity:
+        def __init__(self, log_height: int, sync_height: int = 0):
+            self.log_height = log_height
+            self.sync_height = sync_height
+
+    class SubmissionState(IntEnum):
+        IDLE = 0
+        WEIGHT_QUERY = 1
+        COLLECT_SIGNATURES = 2
+
+    def update_activity(self, log):
+        validator = log.topics[1].hex()
+        if validator not in self.validator_activities:
+            self.validator_activities[validator] = self.ValidatorActivity(int(log.blockNumber))
+        else:
+            self.validator_activities[validator].log_height = int(log.blockNumber)
+
+    def update_validator(self, validator: str, signer: str, weight: int, gas_price: int,
+                         last_submit: int, epoch: int):
+        updated = False
+        existing = next((x for x in self.validators if x.validator == validator), None)
+        if existing != None:
+            updated = existing.update(signer, weight, gas_price, last_submit, epoch)
+        else:
+            updated = True
+            self.validators.append(self.ValidatorFullInfo(validator, signer, weight, gas_price,
+                                                          last_submit, epoch))
+        if updated:
+            self.validators.sort(reverse=True)
+        return updated
+
     def to_chain_info(self):
         info = {
+            'chain': str(to_chain_str(self.chain_id)),
             'chain_id': str(int(self.chain_id)),
             'fee': str(self.fee) if self.fee else '0',
+            'total_weight': str(self.total_weight) if self.total_weight != None else '',
+            'genesis_validator': self.genesis_validator,
+            'genesis_signer': self.genesis_signer,
+            'genesis_weight': str(self.total_weight) if self.total_weight != None else '', # todo:
         }
+        if self.validators != None:
+            info['validators'] = [{
+                'validator': str(x.validator),
+                'signer': str(x.signer),
+                'weight': str(x.weight),
+                'gas_price': str(x.gas_price),
+                'last_submit': str(x.last_submit),
+                'epoch': str(x.epoch),
+            } for x in self.validators]
+        else:
+            info['validators'] = ''
         return info
 
     async def check_evm_chain_id(self):
         for _ in range(len(self.endpoints)):
-            chain_id = await self.get_chain_id()
+            error, chain_id = await self.get_chain_id()
+            if error:
+                return
             if chain_id != self.evm_chain_id:
                 print(
                     f"[ERROR] Chain id mismatch, expected {self.evm_chain_id}, got {chain_id}, endpoint={self.get_endpoint()}")
@@ -220,7 +442,7 @@ class EvmChainValidator:
         self.evm_chain_id_checked  = True
 
     @awaitable
-    def get_block_number(self) -> int:
+    def get_block_number(self):
         w3 = self.make_web3()
         try:
             return False, w3.eth.block_number
@@ -230,9 +452,29 @@ class EvmChainValidator:
             return True, 0
 
     @awaitable
+    def get_genesis_validator(self):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getGenesisValidator().call()
+        except Exception as e:
+            log.server_logger.error('get_genesis_validator exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, ''
+
+    @awaitable
+    def get_genesis_signer(self):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getGenesisSigner().call()
+        except Exception as e:
+            log.server_logger.error('get_genesis_signer exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, ''
+
+    @awaitable
     def get_fee(self, block_number = 'latest'):
         w3 = self.make_web3()
-        contract = w3.eth.contract(address=self.core_address, abi=self.core_abi)
+        contract = self.make_core_contract()
         try:
             fee = contract.functions.getFee().call(block_identifier=block_number)
             return False, fee
@@ -245,10 +487,76 @@ class EvmChainValidator:
     def get_chain_id(self):
         w3 = self.make_web3()
         try:
-            return w3.eth.chain_id
+            return False, w3.eth.chain_id
         except Exception as e:
             log.server_logger.error('get_chain_id exception:%s', str(e))
-            return 0
+            return True, 0
+
+    @awaitable
+    def get_total_weight(self, block_number='latest'):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getTotalWeight().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_total_weight exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, 0
+
+    @awaitable
+    def get_validator_count(self, block_number='latest'):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getValidatorCount().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_validator_count exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, 0
+
+    @awaitable
+    def get_validators(self, begin: int, end: int, block_number='latest'):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getValidators(begin, end).call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_validators exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, []
+
+    @awaitable
+    def get_validator_logs(self, from_block: int, to_block: int):
+        w3 = self.make_web3()
+        filter_params = {
+            'fromBlock': from_block,
+            'toBlock': to_block,
+            'address': self.validator_contract,
+            'topics': [[self.Topics.ValidatorPurged, self.Topics.ValidatorSubmitted]]
+        }
+        try:
+            return False, w3.eth.get_logs(filter_params)
+        except Exception as e:
+            log.server_logger.error('get_validator_logs exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, None
+    
+    @awaitable
+    def get_validator_info(self, validator: str, block_number='latest'):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getValidatorInfo(validator).call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_validator_info exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, None
+
+    @awaitable
+    def get_weight(self, signer: str, block_number='latest'):
+        contract = self.make_validator_contract()
+        try:
+            return False, contract.functions.getWeight(signer).call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_weight exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, None
 
     def use_next_endpoint(self):
         self.endpoint_index = (self.endpoint_index + 1) % len(self.endpoints)
@@ -261,22 +569,169 @@ class EvmChainValidator:
         w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         return w3
 
+    def make_core_contract(self):
+        return self.make_web3().eth.contract(address=self.core_contract, abi=self.core_abi)
+    
+    def make_validator_contract(self):
+        return self.make_web3().eth.contract(address=self.validator_contract, abi=self.validator_abi)
+
+    async def sync_fee(self, block_number: int):
+        error, fee = await self.get_fee(block_number)
+        if error:
+            return error, False
+        updated = False
+        if fee != self.fee:
+            self.fee = fee
+            updated = True
+        return False, updated
+
+    async def initialize_validators(self, block_number: int):
+        updated = False
+        error, count = await self.get_validator_count(block_number)
+        if error:
+            return error, updated
+        validators = []
+        begin = end = 0
+        while True:
+            begin = end
+            if begin >= count:
+                break
+            end = begin + 1000
+            if end > count:
+                end = count
+            error, array = await self.get_validators(begin, end, block_number)
+            if error:
+                return error, updated
+            for i in array:
+                validators.append(self.ValidatorFullInfo('0x' + i.validator.hex(), i.signer,
+                    int(i.weight), int(i.gasPrice), int(i.lastSubmit), int(i.epoch)))
+            await asyncio.sleep(0.1)
+        validators.sort(reverse=True)
+        self.validators = validators
+        updated = True
+        return False,  updated
+
+    async def sync_activities(self, block_number: int):
+        updated = False
+        purgeable = []
+        for validator, activity in self.validator_activities.items():
+            if activity.sync_height >= activity.log_height \
+                and block_number < activity.log_height + self.confirmations:
+                continue
+            error, info = await self.get_validator_info(validator, block_number)
+            if error:
+                return error, updated
+            weight = 0
+            if info.signer != '0x0000000000000000000000000000000000000000':
+                error, weight = await self.get_weight(info.signer, block_number)
+                if error:
+                    return error, updated
+            updated = self.update_validator(validator, info.signer, int(weight), int(info.gasPrice),
+                int(info.lastSubmit), int(info.epoch)) or updated
+            activity.sync_height = block_number
+            if activity.sync_height >= activity.log_height + self.confirmations:
+                purgeable.append(validator)
+            await asyncio.sleep(0.1)
+        for validator in purgeable:
+            del self.validator_activities[validator]
+        return False, updated
+
+    async def sync_validators(self, block_number: int):
+        updated = False
+        error, total = await self.get_total_weight(block_number)
+        if error:
+            return error, updated
+        if total != self._total_weight:
+            updated = True
+            self._total_weight = total
+            min_weight = int(2e16)
+            self.total_weight = min_weight if self._total_weight < min_weight else self._total_weight
+
+        if self.validators == None:
+            error, updated = await self.initialize_validators(block_number)
+            if error:
+                return error, updated
+        previous_height = self.synced_height if self.synced_height else block_number
+        error, logs = await self.get_validator_logs(previous_height - self.confirmations, block_number)
+        if error:
+            return error, updated
+        for log in logs:
+            self.update_activity(log)
+  
+        error, updated = await self.sync_activities(block_number)
+        if error:
+            return error, updated
+        return False, updated
+
+    def rewardable(self):
+        if self.synced_height == None:
+            return False
+
+        if self.submission_state != self.SubmissionState.IDLE:
+            return False
+
+        if self.last_submit != None and self.last_submit + self.submission_interval > time.time():
+            return False
+
+        if self.signer == None or self.signer == self.genesis_signer:
+            return False
+
+        if NODE == None:
+            return False
+        validator = NODE['account_hex']
+        if validator == self.genesis_validator:
+            return False
+
+        if validator not in self.validators:
+            return True
+        info = self.validators[validator]
+        if info.epoch >= current_epoch():
+            return False
+        # todo:
+
+    async def submit(self, block_number: int):
+        if self.signer == None or self.signer == self.genesis_signer:
+            return
+        if NODE != None and NODE['account_hex'] == self.genesis_validator:
+            return
+        
+        # todo:
+
     async def __call__(self):
         notify = False
         if not self.evm_chain_id_checked:
             await self.check_evm_chain_id()
+        if not self.evm_chain_id_checked:
+            return
+
+        if self.genesis_validator == None:
+            error, validator = await self.get_genesis_validator()
+            if error:
+                return
+            self.genesis_validator = '0x' + validator.hex().lower()
+
+        if self.genesis_signer == None:
+            error, signer = await self.get_genesis_signer()
+            if error:
+                return
+            self.genesis_signer =  Web3.toChecksumAddress(signer)
+
         error, block_number = await self.get_block_number()
         if error or block_number <= self.synced_height:
             return
-        #print(f"block_number={block_number}")
 
-        error, fee = await self.get_fee(block_number)
+        error, updated = await self.sync_fee(block_number)
         if error:
             return
-        if fee != self.fee:
-            self.fee = fee
-            notify = True
-        #print(f"fee={self.fee}")
+        notify = updated
+
+        error, updated = await self.sync_validators(block_number)
+        if error:
+            return
+        notify = notify or updated
+        # todo:
+
+
 
         self.synced_height = block_number
         if notify:
@@ -285,14 +740,33 @@ class EvmChainValidator:
 
     def debug_json_encode(self) -> dict:
         result = {}
+        validators = None
+        if self.validators != None:
+            validators = []
+            for validator in self.validators:
+                validators.append({
+                    'validator': validator.validator,
+                    'signer': validator.signer,
+                    'weight': validator.weight,
+                    'gas_price': validator.gas_price,
+                    'last_submit': validator.last_submit,
+                    'epoch': validator.epoch,
+                })
+        result['validators'] = validators
+        result['total_weight'] = self.total_weight
         result['chain_id'] = self.chain_id
         result['evm_chain_id'] = self.evm_chain_id
-        result['core_address'] = self.core_address
-        result['validator_address'] = self.validator_address
+        result['core_contract'] = self.core_contract
+        result['validator_contract'] = self.validator_contract
+        result['genesis_validator'] = self.genesis_validator
+        result['genesis_signer'] = self.genesis_signer
         result['endpoints'] = self.endpoints
         result['endpoint_index'] = self.endpoint_index
         result['fee'] = self.fee
         result['evm_chain_id_checked'] = self.evm_chain_id_checked
+        result['signer'] = self.signer
+        result['synced_height'] = self.synced_height
+        result['confirmations'] = self.confirmations
         return result
 
 
@@ -480,17 +954,42 @@ def callback_check_ip(r : web.Request):
         return True
     return False
 
+def current_epoch():
+    return int(time.time()) // EPOCH_TIME
+
+def in_reward_time_range(last_submit, now):
+    hour = 3600
+    last_delay = int(last_submit) % EPOCH_TIME
+    if last_delay > REWARD_TIME:
+        last_delay = REWARD_TIME
+    delay = (last_delay + REWARD_TIME - hour) % REWARD_TIME
+    if delay > REWARD_TIME - hour:
+        delay = REWARD_TIME - hour
+    return (int(now) % EPOCH_TIME) >= delay
+
 async def sync_with_node():
     if NODE == None:
         return
     if 'account' not in NODE:
         await NODE['ws'].send_str('{"action":"node_account"}')
+    if 'snapshot' not in NODE or NODE['snapshot']['epoch'] != current_epoch():
+        await NODE['ws'].send_str('{"action":"weight_snapshot"}')
+
+async def handle_node_weight_snapshot_ack(r : dict):
+    global NODE
+    snapshot = {}
+    snapshot['epoch'] = int(r['epoch'])
+    snapshot['weights'] = {}
+    for i in r['weights']:
+        snapshot['weights'][i['representative']] = int(i['weight'])
+    NODE['snapshot'] = snapshot
 
 async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by node"""
     ip = UTIL.get_request_ip(r)
     log.server_logger.info('node message; %s, %s', message, ip)
 
+    global NODE
     try:
         r = json.loads(message)
         if 'action' not in r:
@@ -503,9 +1002,12 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
         elif action == 'cross_chain':
             pass
         elif action == 'node_account_ack':
-            pass
+            NODE['account'] = r['account']
+            NODE['account_hex'] = '0x' + r['account_hex'].lower()
         elif action == 'weight_query_ack':
             pass
+        elif action == 'weight_snapshot_ack':
+            await handle_node_weight_snapshot_ack(r)
         else:
             log.server_logger.error('unexpected node message;%s;%s', message, ip)
     except Exception as e:
@@ -571,7 +1073,6 @@ class JsonEncoder(json.JSONEncoder):
 
 DEBUG_DUMPS = partial(json.dumps, cls=JsonEncoder, indent=4)
 
-
 async def debug_handler(r : web.Request):
     if debug_check_ip(r):
         log.server_logger.error('debug request from unauthorized ip: %s', UTIL.get_request_ip(r))
@@ -583,6 +1084,8 @@ async def debug_handler(r : web.Request):
         # todo:
         if query == 'validators':
             return web.json_response(VALIDATORS, dumps=DEBUG_DUMPS)
+        elif query == 'node':
+            return web.json_response(NODE, dumps=DEBUG_DUMPS)
         else:
             pass
         return web.HTTPOk()
@@ -625,6 +1128,8 @@ async def periodic(period, fn, *args):
         begin = time.time()
         try:
             await fn(*args)
+        except KeyboardInterrupt as e:
+            raise e
         except Exception as e:
             log.server_logger.error(f'periodic exception={str(e)}')
             traceback.print_tb(e.__traceback__)
@@ -634,13 +1139,19 @@ async def periodic(period, fn, *args):
 
 BSC_TEST_CORE_CONTRACT = '0xC777f5b390E79c9634c9d07AF45Dc44b11893055'
 BSC_TEST_VALIDATOR_CONTRACT = '0x98431eB42A087333F7E167d3586D3b47Bc4f28D3'
+BSC_TEST_GENESIS_VALIDATOR = 'rai_1nxp5qgqhwxof81oardbyraygcp3s15rbo38adecwzbq8p3kpy76sq3999ia'
+BSC_TEST_GENESIS_SIGNER = '0xd24EBE3D7879330509Bf1f9d8dffAF8CA8F32fdc'
 
 if TEST_MODE:
     VALIDATORS = {
         ChainId.BINANCE_SMART_CHAIN_TEST: {
             'period': 5,
-            'validator': EvmChainValidator(ChainId.BINANCE_SMART_CHAIN_TEST, EvmChainId.BINANCE_SMART_CHAIN_TEST, BSC_TEST_CORE_CONTRACT, BSC_TEST_VALIDATOR_CONTRACT, EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI, BSC_TEST_ENDPOINTS)
-        }
+            'validator': EvmChainValidator(ChainId.BINANCE_SMART_CHAIN_TEST,
+                                           EvmChainId.BINANCE_SMART_CHAIN_TEST,
+                                           BSC_TEST_CORE_CONTRACT, BSC_TEST_VALIDATOR_CONTRACT,
+                                           EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI,
+                                           BSC_TEST_ENDPOINTS, BSC_TEST_SIGNER_PRIVATE_KEY, 30)
+        },
     }
 else:
     VALIDATORS = {}
@@ -658,6 +1169,10 @@ def main():
     async def end():
         for task in tasks:
             task.cancel()
+            try:
+                await task
+            except:
+                pass
         await APP.shutdown()
 
     LOOP.run_until_complete(start())
@@ -666,6 +1181,9 @@ def main():
     try:
         for i in VALIDATORS.values():
             tasks.append(LOOP.create_task(periodic(i['period'], i['validator'])))
+            v = i['validator']
+            print(f'Start validator for {to_chain_str(v.chain_id)}, signer={v.signer}')
+        tasks.append(LOOP.create_task(periodic(5, sync_with_node)))
         LOOP.run_forever()
     except KeyboardInterrupt:
         pass
