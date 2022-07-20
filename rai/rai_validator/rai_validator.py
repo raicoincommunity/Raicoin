@@ -299,6 +299,35 @@ def awaitable(func):
         return await loop.run_in_executor(thread_pool, functools.partial(func, *args, **kw))
     return wrapper
 
+class CrossChainMessage:
+    def __init__(self, source: str, destination: str):
+        self.source = source
+        self.destination = destination
+    
+    def serialize(self) -> str:
+        raise NotImplementedError
+    def deserialize(self, payload: str):
+        raise NotImplementedError
+
+class WeightSignRequest(CrossChainMessage):
+    def __init__(self, source: str, destination: str, chain_id: int = ChainId.INVALID,
+        validator: str = '', signer: str = '', weight: int = 0, epoch: int = 0):
+        super().__init__(source, destination)
+        self.chain_id = chain_id
+        self.validator = validator
+        self.signer = signer
+        self.weight = weight
+        self.epoch = epoch
+
+
+    def serialize(self) -> str:
+        return str(self.weight)
+    def deserialize(self, payload: str):
+        self.weight = int(payload)
+
+class CrossChainMessageType(IntEnum):
+    WeightSignRequest = 1
+    WeightSignResponse = 2
 
 class EvmChainValidator:
     def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_contract: str,
@@ -325,14 +354,17 @@ class EvmChainValidator:
         self.evm_chain_id_checked = False
         self.synced_height = None
         self.validators = None  # list of ValidatorFullInfo, ordered by weight
-        self.total_weight = self._total_weight = None
+        self.total_weight = self.__total_weight = None
         self.validator_activities = {} # validator -> ValidatorActivity
 
         self.last_submit = None
         self.submission_interval = 300
         self.submission_state = self.SubmissionState.IDLE
-        self.weights = {}
+        self.weights = {} # WeightInfo
+        self.submission_weight = None
+        self.weight_query_count = 0
         self.signatures = {}
+        self.signature_collect_count = 0
 
         if len(self.endpoints) == 0:
             print("[ERROR] No endpoints found while constructing EvmChainValidator")
@@ -385,6 +417,12 @@ class EvmChainValidator:
         WEIGHT_QUERY = 1
         COLLECT_SIGNATURES = 2
 
+    class WeightInfo:
+        def __init__(self, replier: str, epoch: int, weight: int):
+            self.replier = replier
+            self.epoch = epoch
+            self.weight = weight
+
     def update_activity(self, log):
         validator = log.topics[1].hex()
         if validator not in self.validator_activities:
@@ -404,7 +442,14 @@ class EvmChainValidator:
                                                           last_submit, epoch))
         if updated:
             self.validators.sort(reverse=True)
+            self.update_validator_indices()
         return updated
+
+    def update_validator_indices(self):
+        indices = {}
+        for index, info in enumerate(self.validators):
+            indices[info.validator] = index
+        self.validator_indices = indices
 
     def to_chain_info(self):
         info = {
@@ -414,7 +459,7 @@ class EvmChainValidator:
             'total_weight': str(self.total_weight) if self.total_weight != None else '',
             'genesis_validator': self.genesis_validator,
             'genesis_signer': self.genesis_signer,
-            'genesis_weight': str(self.total_weight) if self.total_weight != None else '', # todo:
+            'genesis_weight': str(self.genesis_weight()),
         }
         if self.validators != None:
             info['validators'] = [{
@@ -608,6 +653,7 @@ class EvmChainValidator:
             await asyncio.sleep(0.1)
         validators.sort(reverse=True)
         self.validators = validators
+        self.update_validator_indices()
         updated = True
         return False,  updated
 
@@ -641,11 +687,11 @@ class EvmChainValidator:
         error, total = await self.get_total_weight(block_number)
         if error:
             return error, updated
-        if total != self._total_weight:
+        if total != self.__total_weight:
             updated = True
-            self._total_weight = total
+            self.__total_weight = total
             min_weight = int(2e16)
-            self.total_weight = min_weight if self._total_weight < min_weight else self._total_weight
+            self.total_weight = min_weight if self.__total_weight < min_weight else self.__total_weight
 
         if self.validators == None:
             error, updated = await self.initialize_validators(block_number)
@@ -666,13 +712,10 @@ class EvmChainValidator:
     def rewardable(self):
         if self.synced_height == None:
             return False
-
         if self.submission_state != self.SubmissionState.IDLE:
             return False
-
         if self.last_submit != None and self.last_submit + self.submission_interval > time.time():
             return False
-
         if self.signer == None or self.signer == self.genesis_signer:
             return False
 
@@ -681,19 +724,158 @@ class EvmChainValidator:
         validator = NODE['account_hex']
         if validator == self.genesis_validator:
             return False
+        current_weight = 0
+        node_account = NODE['account']
+        if node_account in NODE['snapshot']['weights']:
+            current_weight = NODE['snapshot']['weights'][node_account]
 
         if validator not in self.validators:
-            return True
+            return current_weight != 0
         info = self.validators[validator]
+        if info.weight == 0 and current_weight == 0:
+            return False
         if info.epoch >= current_epoch():
             return False
+        return in_reward_time_range(info.last_submit, int(time.time() - 10))
+
+    def genesis_weight(self):
+        if self.total_weight == None or self.__total_weight == None:
+            return 0
+        if self.total_weight <= self.__total_weight:
+            return 0
+        return self.total_weight - self.__total_weight
+
+    def top_validators(self, percent: int):
+        if self.validators == None:
+            return []
+
+        if len(self.validators) == 0:
+            return [self.genesis_validator]
+
+        genesis_weight = self.genesis_weight()
+        validators = []
+        weight = 0
+        genesis_included = False
+        for i in self.validators:
+            if i.weight < genesis_weight and not genesis_included:
+                genesis_included = True
+                weight += genesis_weight
+                validators.append(self.genesis_validator)
+                if weight / self.total_weight >= percent:
+                    break
+            if i.weight == 0:
+                break
+            weight += i.weight
+            validators.append(i.validator)
+            if weight / self.total_weight >= percent:
+                break
+        return validators
+
+    def weight_threshold(self, percent: float):
+        genesis_weight = self.genesis_weight()
+        if not self.validators:
+            return genesis_weight
+        weight = 0
+        genesis_included = False
+        for i in self.validators:
+            if i.weight < genesis_weight and not genesis_included:
+                genesis_included = True
+                weight += genesis_weight
+                if weight / self.total_weight >= percent:
+                    return genesis_weight
+            if i.weight == 0:
+                break
+            weight += i.weight
+            if weight / self.total_weight >= percent:
+                return i.weight
+        return 0
+
+    def weight_of_validator(self, validator: str):
+        if validator == self.genesis_validator:
+            return self.genesis_weight()
+        if validator not in self.validator_indices:
+            return 0
+        index = self.validator_indices[validator]
+        return self.validators[index].weight
+
+    def calc_submission_weight(self):
+        if not self.weights:
+            return None
+        threshold = self.weight_threshold(0.99)
+        l = list(self.weights.values())
+        l.sort(key = lambda x: x.weight, reverse = True)
+
+        sum = 0
+        for i in l:
+            weight = self.weight_of_validator(i.replier)
+            if weight < threshold:
+                continue
+            sum += weight
+            if sum >= self.total_weight * 2 / 3:
+                return i.weight
+        return None
+
+    async def node_weight_query(self):
+        if NODE == None:
+            return
+        self.weight_query_count += 1
+        count = self.weight_query_count 
+        if count <= 3:
+            percent = 0.8
+        elif count <= 6:
+            percent = 0.9
+        else:
+            percent = 0.99
+
+        validators = self.top_validators(percent)
+        for validator in validators:
+            if validator in self.weights:
+                continue
+            message = {
+                'action': 'weight_query',
+                'request_id': f'{self.chain_id:064X}',
+                'representative': NODE['account'],
+                'replier': validator,
+            }
+            await send_to_node(message)
+
+    async def collect_weight_signatures(self):
         # todo:
+        pass
+
+    def purge_outdated_weights(self):
+        epoch = current_epoch()
+        purgeable = []
+        for validator, info in self.weights.items():
+            if info.epoch != epoch:
+                purgeable.append(validator)
+        for validator in purgeable:
+            del self.weights[validator]
 
     async def submit(self, block_number: int):
-        if self.signer == None or self.signer == self.genesis_signer:
-            return
-        if NODE != None and NODE['account_hex'] == self.genesis_validator:
-            return
+        state = self.submission_state
+        if state == self.SubmissionState.IDLE:
+            if not self.rewardable():
+                return
+            self.weight_query_count = 0
+            self.weights = {}
+            self.submission_state = self.SubmissionState.WEIGHT_QUERY
+            await self.node_weight_query()
+        elif state == self.SubmissionState.WEIGHT_QUERY:
+            self.purge_outdated_weights()
+            self.submission_weight = self.calc_submission_weight()
+            if self.submission_weight == None:
+                await self.node_weight_query()
+                return
+            self.signature_collect_count = 0
+            self.signatures = {}
+            self.submission_state = self.SubmissionState.COLLECT_SIGNATURES
+            await self.collect_weight_signatures()
+        elif state == self.SubmissionState.COLLECT_SIGNATURES:
+            # todo:
+            return True
+        else:
+            log.server_logger.error('unexpected submission state:%s', state.name)
         
         # todo:
 
@@ -974,6 +1156,11 @@ async def sync_with_node():
         await NODE['ws'].send_str('{"action":"node_account"}')
     if 'snapshot' not in NODE or NODE['snapshot']['epoch'] != current_epoch():
         await NODE['ws'].send_str('{"action":"weight_snapshot"}')
+
+async def send_to_node(message):
+    if NODE == None:
+        return
+    await NODE['ws'].send_str(json.dumps(message))
 
 async def handle_node_weight_snapshot_ack(r : dict):
     global NODE
