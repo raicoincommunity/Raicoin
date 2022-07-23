@@ -341,7 +341,7 @@ class CrosschainMessage : public Message
 {
 public:
     CrosschainMessage(rai::ErrorCode&, rai::Stream&, const rai::MessageHeader&);
-    CrosschainMessage(const rai::Account&, const rai::Account&,
+    CrosschainMessage(const rai::Account&, const rai::Account&, rai::Chain,
                       std::vector<uint8_t>&&);
     virtual ~CrosschainMessage() = default;
     void Serialize(rai::Stream&) const override;
@@ -350,6 +350,7 @@ public:
 
     rai::Account source_;
     rai::Account destination_;
+    rai::Chain chain_;
     std::vector<uint8_t> payload_;
 };
 

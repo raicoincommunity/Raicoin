@@ -1212,10 +1212,12 @@ rai::CrosschainMessage::CrosschainMessage(rai::ErrorCode& error_code,
 
 rai::CrosschainMessage::CrosschainMessage(const rai::Account& source,
                                           const rai::Account& destination,
+                                          rai::Chain chain,
                                           std::vector<uint8_t>&& payload)
     : Message(rai::MessageType::CROSSCHAIN),
       source_(source),
       destination_(destination),
+      chain_(chain),
       payload_(std::move(payload))
 {
 }
@@ -1225,6 +1227,7 @@ void rai::CrosschainMessage::Serialize(rai::Stream& stream) const
     header_.Serialize(stream);
     rai::Write(stream, source_.bytes);
     rai::Write(stream, destination_.bytes);
+    rai::Write(stream, chain_);
     uint16_t length = payload_.size();
     rai::Write(stream, length);
     if (length > 0)
@@ -1239,6 +1242,9 @@ rai::ErrorCode rai::CrosschainMessage::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     error = rai::Read(stream, destination_.bytes);
+    IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
+
+    error = rai::Read(stream, chain_);
     IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
 
     uint16_t length;
