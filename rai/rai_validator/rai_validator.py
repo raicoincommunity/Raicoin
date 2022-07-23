@@ -19,17 +19,20 @@ import datetime
 import functools
 import uuid
 import traceback
+import struct
 
+from typing import Tuple, Union
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
 from web3 import Web3, Account as EvmAccount
-from web3.middleware import geth_poa_middleware
+from web3.middleware import geth_poa_middleware, construct_sign_and_send_raw_middleware
 from eth_account.messages import encode_intended_validator
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from enum import IntEnum, Enum
 from getpass import getpass
 from hashlib import blake2b
+from io import BytesIO
 
 ALLOWED_RPC_ACTIONS = [
     'service_subscribe', 'chain_info'
@@ -253,6 +256,154 @@ class Account:
 
 ACCOUNT = Account()
 
+class Serializer:
+    @staticmethod
+    def read_bool(stream: BytesIO) -> Union[None, bool]:
+        u8 = Serializer.read_uint8(stream)
+        if u8 == None or u8 > 1:
+            return None
+        return u8 == 1
+
+    @staticmethod
+    def read_uint8(stream: BytesIO) -> Union[None, int]:
+        b = stream.read(1)
+        if len(b) < 1:
+            return None
+        return struct.unpack(">B", b)[0]
+
+    @staticmethod
+    def read_uint16(stream: BytesIO) -> Union[None, int]:
+        b = stream.read(2)
+        if len(b) < 2:
+            return None
+        return struct.unpack('>H', b)[0]
+    
+    @staticmethod
+    def read_uint32(stream: BytesIO) -> Union[None, int]:
+        b = stream.read(4)
+        if len(b) < 4:
+            return None
+        return struct.unpack('>I', b)[0]
+    
+    @staticmethod
+    def read_uint64(stream: BytesIO) -> Union[None, int]:
+        b = stream.read(8)
+        if len(b) < 8:
+            return None
+        return struct.unpack('>Q', b)[0]
+
+    @staticmethod
+    def read_uint128(stream: BytesIO) -> Union[None, int]:
+        b = stream.read(16)
+        if len(b) < 16:
+            return None
+        u = struct.unpack('>QQ', b)
+        return u[0] * (2 ** 64) + u[1]
+
+    @staticmethod
+    def read_uint256(stream: BytesIO) -> Union[None, int]:
+        b = stream.read(32)
+        if len(b) < 32:
+            return None
+        u = struct.unpack('>QQQQ', b)
+        return u[0] * (2 ** 192) + u[1] * (2 ** 128) + u[2] * (2 ** 64) + u[3]
+
+    @staticmethod
+    def read_string(stream: BytesIO) -> Union[None, str]:
+        length = Serializer.read_uint16(stream)
+        if length == None:
+            return None
+        if length == 0:
+            return ''
+        b = stream.read(length)
+        if len(b) < length:
+            return None
+        try:
+            return b.decode('utf-8')
+        except:
+            return None
+
+    @staticmethod
+    def read_bytes(stream: BytesIO) -> Union[None, bytes]:
+        length = Serializer.read_uint16(stream)
+        if length == None:
+            return None
+        if length == 0:
+            return b''
+        b = stream.read(length)
+        if len(b) < length:
+            return None
+        return b
+
+    @staticmethod
+    def write_bool(stream: BytesIO, b: bool):
+        if b:
+            Serializer.write_uint8(stream, 1)
+        else:
+            Serializer.write_uint8(stream, 0)
+
+    @staticmethod
+    def write_uint8(stream: BytesIO, value: int) -> None:
+        if value >= 2 ** 8:
+            raise ValueError("value out of range")
+        stream.write(struct.pack(">B", value))
+
+    @staticmethod
+    def write_uint16(stream: BytesIO, value: int):
+        if value >= 2 ** 16:
+            raise ValueError("value too large")
+        stream.write(struct.pack('>H', value))
+
+    @staticmethod
+    def write_uint32(stream: BytesIO, value: int):
+        if value >= 2 ** 32:
+            raise ValueError("value too large")
+        stream.write(struct.pack('>I', value))
+    
+    @staticmethod
+    def write_uint64(stream: BytesIO, value: int):
+        if value >= 2 ** 64:
+            raise ValueError("value too large")
+        stream.write(struct.pack('>Q', value))
+
+    @staticmethod
+    def write_uint128(stream: BytesIO, value: int):
+        if value >= 2 ** 128:
+            raise ValueError("value too large")
+        stream.write(struct.pack('>QQ', value >> 64, value & 0xffffffffffffffff))
+
+    @staticmethod
+    def write_uint256(stream: BytesIO, value: Union[int, str]):
+        if isinstance(value, str):
+            value = int(value, 16)
+        if value >= 2 ** 256:
+            raise ValueError("value too large")
+        stream.write(struct.pack('>QQQQ', value >> 192, value >> 128 & 0xffffffffffffffff,
+            value >> 64 & 0xffffffffffffffff, value & 0xffffffffffffffff))
+
+    @staticmethod
+    def write_string(stream: BytesIO, value: str):
+        if value == '':
+            Serializer.write_uint16(stream, 0)
+            return
+        try:
+            b = value.encode('utf-8')
+        except:
+            raise ValueError("invalid string")
+        Serializer.write_uint16(stream, len(b))
+        stream.write(b)
+
+    @staticmethod
+    def write_bytes(stream: BytesIO, value: Union[bytes, str]):
+        if isinstance(value, str):
+            value = value[2:] if value.startswith("0x") else value
+            value = bytes.fromhex(value)
+        if value == b'':
+            Serializer.write_uint16(stream, 0)
+            return
+        Serializer.write_uint16(stream, len(value))
+        stream.write(value)
+
 class ChainId(IntEnum):
     INVALID = 0
     RAICOIN = 1
@@ -309,25 +460,74 @@ class CrossChainMessage:
     def deserialize(self, payload: str):
         raise NotImplementedError
 
-class WeightSignRequest(CrossChainMessage):
-    def __init__(self, source: str, destination: str, chain_id: int = ChainId.INVALID,
-        validator: str = '', signer: str = '', weight: int = 0, epoch: int = 0):
+class WeightSignMessage(CrossChainMessage):
+    def __init__(self, source: str, destination: str, is_request: bool = True,
+        chain_id: int = ChainId.INVALID, validator: str = '', signer: str = '', weight: int = 0,
+        epoch: int = 0, signature: bytes = b''):
         super().__init__(source, destination)
+        self.is_request = is_request
         self.chain_id = chain_id
         self.validator = validator
         self.signer = signer
         self.weight = weight
         self.epoch = epoch
+        self.signature = signature
 
+    def serialize(self, stream: BytesIO) -> str:
+        Serializer.write_uint8(stream, CrossChainMessageType.WeightSign)
+        Serializer.write_bool(stream, self.is_request)
+        Serializer.write_uint32(stream, self.chain_id)
+        Serializer.write_uint256(stream, self.validator)
+        Serializer.write_uint256(stream, self.signer)
+        Serializer.write_uint128(stream, self.weight)
+        Serializer.write_uint32(stream, self.epoch)
+        if not self.is_request:
+            Serializer.write_bytes(stream, self.signature)
 
-    def serialize(self) -> str:
-        return str(self.weight)
-    def deserialize(self, payload: str):
-        self.weight = int(payload)
+    def deserialize(self, stream: BytesIO) -> bool:
+        msg_type = Serializer.read_uint8(stream)
+        if msg_type != CrossChainMessageType.WeightSign:
+            return True
+        self.is_request = Serializer.read_bool(stream)
+        if self.is_request == None:
+            return True
+        self.chain_id = Serializer.read_uint32(stream)
+        if self.chain_id == None:
+            return True
+        self.validator = Serializer.read_uint256(stream)
+        if self.validator == None:
+            return True
+        self.signer = Serializer.read_uint256(stream)
+        if self.signer == None:
+            return True
+        self.weight = Serializer.read_uint128(stream)
+        if self.weight == None:
+            return True
+        self.epoch = Serializer.read_uint32(stream)
+        if self.epoch == None:
+            return True
+        if not self.is_request:
+            self.signature = Serializer.read_bytes(stream)
+            if self.signature == None:
+                return True
+        return False
 
 class CrossChainMessageType(IntEnum):
-    WeightSignRequest = 1
-    WeightSignResponse = 2
+    WeightSign = 1
+
+async def send_cross_chain_message(data: CrossChainMessage):
+    stream = BytesIO()
+    data.serialize(stream)
+    stream.seek(0)
+    payload = stream.read()
+
+    message = {
+        'action': 'cross_chain',
+        'source': data.source,
+        'destination': data.destination,
+        'payload': payload.hex(),
+    }
+    await send_to_node(message)
 
 class EvmChainValidator:
     def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_contract: str,
@@ -360,6 +560,7 @@ class EvmChainValidator:
         self.last_submit = None
         self.submission_interval = 300
         self.submission_state = self.SubmissionState.IDLE
+        self.submission_epoch = 0
         self.weights = {} # WeightInfo
         self.submission_weight = None
         self.weight_query_count = 0
@@ -422,6 +623,15 @@ class EvmChainValidator:
             self.replier = replier
             self.epoch = epoch
             self.weight = weight
+
+    class SignatureInfo:
+        def __init__(self, validator: str, signer: str, epoch: int, r: int, s: int, v: int):
+            self.validator = validator
+            self.signer = signer
+            self.epoch = epoch
+            self.r = r
+            self.s = s
+            self.v = v
 
     def update_activity(self, log):
         validator = log.topics[1].hex()
@@ -518,7 +728,6 @@ class EvmChainValidator:
 
     @awaitable
     def get_fee(self, block_number = 'latest'):
-        w3 = self.make_web3()
         contract = self.make_core_contract()
         try:
             fee = contract.functions.getFee().call(block_identifier=block_number)
@@ -603,6 +812,18 @@ class EvmChainValidator:
             self.use_next_endpoint()
             return True, None
 
+    @awaitable
+    def sumbit_validator(self, validator: str, signer: str, weight: int, epoch: int, reward_to: str,
+        signatures: bytes):
+        contract = self.make_validator_contract()
+        try:
+            contract.functions.submitValidator(validator, signer, weight, epoch, reward_to, signatures).transact({
+                'from': signer
+            })
+        except Exception as e:
+            log.server_logger.error('sumbit_validator exception:%s', str(e))
+            self.use_next_endpoint()
+
     def use_next_endpoint(self):
         self.endpoint_index = (self.endpoint_index + 1) % len(self.endpoints)
 
@@ -612,6 +833,9 @@ class EvmChainValidator:
     def make_web3(self):
         w3 = Web3(Web3.HTTPProvider(self.get_endpoint()))
         w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        if self.signer != None:
+            w3.middleware_onion.add(construct_sign_and_send_raw_middleware(self._account))
+            w3.eth.default_account = self.signer
         return w3
 
     def make_core_contract(self):
@@ -840,8 +1064,21 @@ class EvmChainValidator:
             await send_to_node(message)
 
     async def collect_weight_signatures(self):
-        # todo:
-        pass
+        if NODE == None:
+            return
+        source = NODE['account_hex']
+
+        self.signature_collect_count += 1
+        threshold = self.weight_threshold(0.99)
+        for i in self.weights:
+            if i.replier in self.signatures:
+                continue
+            weight = self.weight_of_validator(i.replier)
+            if weight < threshold:
+                continue
+            message = WeightSignMessage(source, i.replier, True, self.chain_id, source, self.signer,
+                self.submission_weight, self.submission_epoch)
+            await send_cross_chain_message(message)
 
     def purge_outdated_weights(self):
         epoch = current_epoch()
@@ -852,16 +1089,36 @@ class EvmChainValidator:
         for validator in purgeable:
             del self.weights[validator]
 
+    def enough_signatures(self):
+        l = list(self.signatures.values())
+        l.sort(key = lambda x: self.weight_of_validator(x.replier), reverse = True)
+        signatures = []
+        weight = 0
+        for i in l:
+            weight += self.weight_of_validator(i.replier)
+            signatures.append(i)
+            if weight > self.total_weight * 0.51:
+                return signatures
+        return None
+
     async def submit(self, block_number: int):
+        if NODE == None:
+            return
+        validator = NODE['account_hex']
+
         state = self.submission_state
         if state == self.SubmissionState.IDLE:
             if not self.rewardable():
                 return
+            self.submission_epoch = current_epoch()
             self.weight_query_count = 0
             self.weights = {}
             self.submission_state = self.SubmissionState.WEIGHT_QUERY
             await self.node_weight_query()
         elif state == self.SubmissionState.WEIGHT_QUERY:
+            if self.submission_epoch != current_epoch():
+                self.submission_state = self.SubmissionState.IDLE
+                return
             self.purge_outdated_weights()
             self.submission_weight = self.calc_submission_weight()
             if self.submission_weight == None:
@@ -872,12 +1129,26 @@ class EvmChainValidator:
             self.submission_state = self.SubmissionState.COLLECT_SIGNATURES
             await self.collect_weight_signatures()
         elif state == self.SubmissionState.COLLECT_SIGNATURES:
-            # todo:
-            return True
+            if self.submission_epoch != current_epoch():
+                self.submission_state = self.SubmissionState.IDLE
+                return
+            signatures = self.enough_signatures()
+            if signatures == None or len(signatures) > 100:
+                if self.signature_collect_count >= 10:
+                    self.submission_state = self.SubmissionState.IDLE
+                else:
+                    await self.collect_weight_signatures()
+                return
+            signatures.sort(key = lambda x: x.signer.lower())
+            pack = b''
+            for i in signatures:
+                pack += i.r + i.s + i.v
+            await self.sumbit_validator(validator, self.signer, self.submission_weight,
+                self.submission_epoch, self.signer, pack)
+            self.last_submit = time.time()
+            self.submission_state = self.SubmissionState.IDLE
         else:
             log.server_logger.error('unexpected submission state:%s', state.name)
-        
-        # todo:
 
     async def __call__(self):
         notify = False
@@ -911,13 +1182,12 @@ class EvmChainValidator:
         if error:
             return
         notify = notify or updated
-        # todo:
-
-
 
         self.synced_height = block_number
         if notify:
             await notify_chain_info(self.chain_id, self.to_chain_info())
+
+        await self.submit()
         # todo:
 
     def debug_json_encode(self) -> dict:
@@ -949,6 +1219,14 @@ class EvmChainValidator:
         result['signer'] = self.signer
         result['synced_height'] = self.synced_height
         result['confirmations'] = self.confirmations
+        result['weights'] = self.weights
+        result['signatures'] = self.signatures
+        result['submission_state'] = self.submission_state.name
+        result['submission_weight'] = self.submission_weight
+        result['submission_epoch'] = self.submission_epoch
+        result['weight_query_count'] = self.weight_query_count
+        result['signature_collect_count'] = self.signature_collect_count
+        result['last_submit'] = self.last_submit
         return result
 
 
@@ -1171,6 +1449,9 @@ async def handle_node_weight_snapshot_ack(r : dict):
         snapshot['weights'][i['representative']] = int(i['weight'])
     NODE['snapshot'] = snapshot
 
+async def handle_node_cross_chain_message(r : dict):
+    pass
+
 async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by node"""
     ip = UTIL.get_request_ip(r)
@@ -1187,7 +1468,7 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
         if action == 'bind_query_ack':
             pass
         elif action == 'cross_chain':
-            pass
+            await handle_node_cross_chain_message(r)
         elif action == 'node_account_ack':
             NODE['account'] = r['account']
             NODE['account_hex'] = '0x' + r['account_hex'].lower()
@@ -1298,7 +1579,6 @@ async def init_app():
     app = web.Application()
 
     # Setup routes
-    # todo:
     app.add_routes([web.get('/', client_handler)]) # All client WS requests
     app.add_routes([web.get(f'/callback/{NODE_CALLBACK_KEY}', node_handler)]) # ws/wss callback from nodes
     app.add_routes([web.post('/debug', debug_handler)]) # local debug interface

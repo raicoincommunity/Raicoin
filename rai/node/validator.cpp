@@ -168,8 +168,15 @@ void rai::Validator::ProcessCrosschainMessage(
     ptree.put("source_hex", message.source_.StringHex());
     ptree.put("destination", message.destination_.StringAccount());
     ptree.put("destination_hex", message.destination_.StringHex());
+    ptree.put("chain", rai::ChainToString(message.chain_));
+    ptree.put("chain_id",
+              std::to_string(static_cast<uint32_t>(message.chain_)));
     ptree.put("payload", rai::BytesToHex(message.payload_.data(),
                                          message.payload_.size()));
+
+    boost::optional<rai::SignerAddress> signer_o =
+        node_.BindingQuery(message.source_, message.chain_);
+    ptree.put("source_signer", signer_o ? signer_o->StringHex() : "");
 
     websocket_->Send(ptree);
 }
@@ -235,12 +242,16 @@ void rai::Validator::ReceiveWsCrossChainMessage_(
         error = DecodeAccount_(destination_str, destination);
         IF_ERROR_THROW(error, "invalid destination");
 
+        rai::Chain chain;
+        bool error = GetChain_(message, chain);
+        IF_ERROR_THROW(error, "invalid chain");
+
         std::string payload_str = message->get<std::string>("payload");
         std::vector<uint8_t> payload;
         error = rai::HexToBytes(payload_str, payload);
         IF_ERROR_THROW(error, "invalid payload");
 
-        rai::CrosschainMessage crosschain_message(source, destination,
+        rai::CrosschainMessage crosschain_message(source, destination, chain,
                                                   std::move(payload));
         node_.SendToRep(destination, crosschain_message);
     }
