@@ -269,7 +269,7 @@ public:
 
     /***************************************************************************
      Key: rai::Account, rai::Chain, uint64_t, uint64_t
-     Value: rai::TokenMapInfo
+     Value: rai::TokenUnwrapInfo
      **************************************************************************/
     MDB_dbi token_unwrap_;
 
