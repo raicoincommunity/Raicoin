@@ -214,6 +214,14 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_id_owner";
         }
+        case rai::Provider::Action::TOKEN_UNMAP_INFO:
+        {
+            return "token_unmap_info";
+        }
+        case rai::Provider::Action::TOKEN_WRAP_INFO:
+        {
+            return "token_wrap_info";
+        }
         default:
         {
             return "";

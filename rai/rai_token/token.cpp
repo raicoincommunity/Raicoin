@@ -836,6 +836,7 @@ void rai::Token::TokenKeyToPtree(const rai::TokenKey& key,
                                  rai::Ptree& ptree) const
 {
     ptree.put("chain", rai::ChainToString(key.chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(key.chain_)));
     ptree.put("address", rai::TokenAddressToString(key.chain_, key.address_));
     ptree.put("address_raw", key.address_.StringHex());
 }
@@ -1118,6 +1119,86 @@ bool rai::Token::MakeAccountTokenBalancePtree(
     return false;
 }
 
+bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
+                                         const rai::Account& account,
+                                         uint64_t height,
+                                         const rai::TokenUnmapInfo& unmap,
+                                         std::string& error_info,
+                                         rai::Ptree& ptree) const
+{
+    ptree.put("account", account.StringAccount());
+    ptree.put("height", std::to_string(height));
+    rai::Ptree token;
+    TokenKeyToPtree(unmap.token_, token);
+    rai::TokenInfo token_info;
+    bool error = ledger_.TokenInfoGet(transaction, unmap.token_, token_info);
+    if (error)
+    {
+        error_info = "token not created";
+        return true;
+    }
+    TokenInfoToPtree(token_info, token);
+    ptree.put_child("token", token);
+    ptree.put("value", unmap.value_.StringDec());
+    ptree.put("to", unmap.to_.StringHex());
+    ptree.put("source_transaction", unmap.source_tx_.StringHex());
+    std::shared_ptr<rai::Block> block;
+    error = ledger_.BlockGet(transaction, unmap.source_tx_, block);
+    if (error || block == nullptr)
+    {
+        error_info = "Failed to get source block";
+        return true;
+    }
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    ptree.put_child("source_block", block_ptree);
+    ptree.put("extra_data", std::to_string(unmap.extra_data_));
+    ptree.put("target_transaction", unmap.target_tx_.StringHex());
+    ptree.put("target_height", std::to_string(unmap.target_height_));
+    return false;
+}
+
+bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
+                                        const rai::Account& account,
+                                        uint64_t height,
+                                        const rai::TokenWrapInfo& wrap,
+                                        std::string& error_info,
+                                        rai::Ptree& ptree) const
+{
+    ptree.put("account", account.StringAccount());
+    ptree.put("height", std::to_string(height));
+    rai::Ptree token;
+    TokenKeyToPtree(wrap.token_, token);
+    rai::TokenInfo token_info;
+    bool error = ledger_.TokenInfoGet(transaction, wrap.token_, token_info);
+    if (error)
+    {
+        error_info = "token not created";
+        return true;
+    }
+    TokenInfoToPtree(token_info, token);
+    ptree.put_child("token", token);
+    ptree.put("value", wrap.value_.StringDec());
+    ptree.put("to_chain", rai::ChainToString(wrap.to_chain_));
+    ptree.put("to_chain_id",
+              std::to_string(static_cast<uint32_t>(wrap.to_chain_)));
+    ptree.put("to_account", wrap.to_account_.StringHex());
+    ptree.put("source_transaction", wrap.source_tx_.StringHex());
+    std::shared_ptr<rai::Block> block;
+    error = ledger_.BlockGet(transaction, wrap.source_tx_, block);
+    if (error || block == nullptr)
+    {
+        error_info = "Failed to get source block";
+        return true;
+    }
+    rai::Ptree block_ptree;
+    block->SerializeJson(block_ptree);
+    ptree.put_child("source_block", block_ptree);
+    ptree.put("target_transaction", wrap.target_tx_.StringHex());
+    ptree.put("target_height", std::to_string(wrap.target_height_));
+    return false;
+}
+
 std::vector<rai::BlockType> rai::Token::BlockTypes()
 {
     std::vector<rai::BlockType> types{rai::BlockType::TX_BLOCK};
@@ -1162,6 +1243,8 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_SEARCH_ORDERS);
     info.actions_.push_back(P::Action::TOKEN_SUBMIT_TAKE_NACK_BLOCK);
     info.actions_.push_back(P::Action::TOKEN_ID_OWNER);
+    info.actions_.push_back(P::Action::TOKEN_UNMAP_INFO);
+    info.actions_.push_back(P::Action::TOKEN_WRAP_INFO);
     // todo:
 
     return info;

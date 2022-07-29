@@ -70,6 +70,8 @@ public:
         TOKEN_SEARCH_ORDERS                 = 227,
         TOKEN_SUBMIT_TAKE_NACK_BLOCK        = 228,
         TOKEN_ID_OWNER                      = 229,
+        TOKEN_UNMAP_INFO                    = 230,
+        TOKEN_WRAP_INFO                     = 231,
 
     };
     static std::string ToString(Action);

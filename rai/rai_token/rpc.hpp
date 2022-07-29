@@ -53,6 +53,8 @@ public:
     void TokenReceivables();
     void TokenReceivablesAll();
     void TokenReceivablesSummary();
+    void TokenUnmapInfo();
+    void TokenWrapInfo();
 
 private:
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);

@@ -143,6 +143,14 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         TokenReceivablesSummary();
     }
+    else if (action == "token_unmap_info")
+    {
+        TokenUnmapInfo();
+    }
+    else if (action == "token_wrap_info")
+    {
+        TokenWrapInfo();
+    }
     else if (action == "stop")
     {
         if (!CheckLocal_())
@@ -1913,6 +1921,71 @@ void rai::TokenRpcHandler::TokenReceivablesSummary()
     }
 
     response_.put_child("tokens", tokens);
+}
+
+void rai::TokenRpcHandler::TokenUnmapInfo()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::TokenUnmapInfo info;
+    error =
+        token_.ledger_.TokenUnmapInfoGet(transaction, account, height, info);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+    std::string error_info;
+    error = token_.MakeTokenUnmapInfoPtree(transaction, account, height, info,
+                                           error_info, response_);
+    if (error)
+    {
+        response_.put("error", error_info);
+        return;
+    }
+}
+
+void rai::TokenRpcHandler::TokenWrapInfo()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::TokenWrapInfo info;
+    error = token_.ledger_.TokenWrapInfoGet(transaction, account, height, info);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+    std::string error_info;
+    error = token_.MakeTokenWrapInfoPtree(transaction, account, height, info,
+                                           error_info, response_);
+    if (error)
+    {
+        response_.put("error", error_info);
+        return;
+    }
 }
 
 bool rai::TokenRpcHandler::GetTokenAddress_(rai::Chain chain,
