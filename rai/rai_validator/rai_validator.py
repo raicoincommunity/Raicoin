@@ -21,7 +21,7 @@ import uuid
 import traceback
 import struct
 
-from typing import Union, Callable
+from typing import Tuple, Union, Callable
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
 from web3 import Web3, Account as EvmAccount
@@ -97,12 +97,28 @@ if not RAI_TOKEN_URL.startswith('wss://'):
     print("Error found in .env: invalid RAI_TOKEN_URL")
     sys.exit(0)
 
+ERC20_ABI_FILE = os.getenv('EVM_CHAIN_CORE_ABI_FILE', 'erc20_abi.json')
+ERC20_ABI = None
+with open(ERC20_ABI_FILE, 'r') as f:
+    ERC20_ABI = json.load(f)
+if not ERC20_ABI:
+    print(f'Failed to read abi file:{ERC20_ABI_FILE}')
+    sys.exit(0)
+
+ERC721_ABI_FILE = os.getenv('EVM_CHAIN_CORE_ABI_FILE', 'erc721_abi.json')
+ERC721_ABI = None
+with open(ERC721_ABI_FILE, 'r') as f:
+    ERC721_ABI = json.load(f)
+if not ERC721_ABI:
+    print(f'Failed to read abi file:{ERC721_ABI_FILE}')
+    sys.exit(0)
+
 EVM_CHAIN_CORE_ABI_FILE = os.getenv('EVM_CHAIN_CORE_ABI_FILE', 'evm_chain_core_abi.json')
 EVM_CHAIN_CORE_ABI = None
 with open(EVM_CHAIN_CORE_ABI_FILE) as f:
     EVM_CHAIN_CORE_ABI = json.load(f)
 if not EVM_CHAIN_CORE_ABI:
-    print(f'Failed to parse abi file:{EVM_CHAIN_CORE_ABI_FILE}')
+    print(f'Failed to read abi file:{EVM_CHAIN_CORE_ABI_FILE}')
     sys.exit(0)
 
 EVM_CHAIN_VALIDATOR_ABI_FILE = os.getenv('EVM_CHAIN_VALIDATOR_ABI_FILE', 'evm_chain_validator_abi.json')
@@ -110,7 +126,7 @@ EVM_CHAIN_VALIDATOR_ABI = None
 with open(EVM_CHAIN_VALIDATOR_ABI_FILE) as f:
     EVM_CHAIN_VALIDATOR_ABI = json.load(f)
 if not EVM_CHAIN_VALIDATOR_ABI:
-    print(f'Failed to parse abi file:{EVM_CHAIN_VALIDATOR_ABI_FILE}')
+    print(f'Failed to read abi file:{EVM_CHAIN_VALIDATOR_ABI_FILE}')
     sys.exit(0)
 
 BSC_TEST_ENDPOINTS = os.getenv('BSC_TEST_ENDPOINTS', '')
@@ -757,15 +773,80 @@ class EvmChainValidator:
             self.signatures[message.validator] = self.SignatureInfo(message.validator, message.signer,
                 message.epoch, message.signature)
 
+    def is_native_token(self, address: Union[str, int]) -> bool:
+        if isinstance(address, str):
+            address = int(address, 16)
+        return address == 1
+
+    async def process_token_service_query_ack(self, sign: TransferSignMessage, ack: dict):
+        if 'error' in ack:
+            return
+        token = ack['token']
+        error, account, _ = ACCOUNT.decode(ack['account'])
+        height = int(ack['height'])
+        if error:
+            log.server_logger.error('failed to decode account;%s', ack['account'])
+            return
+        signature = None
+        if sign.opcode == CrossChainOpcode.UNMAP and ack['ack'] == 'token_unmap_info':
+            if self.chain_id != int(token['chain_id']):
+                return
+            to = self.to_checksum_address(ack['to'])
+            value = int(ack['value'])
+            txn_hash = ack['source_transaction']
+            if self.is_native_token(token['address_raw']):
+                signature = self.signUnmapETH(account, to, txn_hash, height, value)
+            elif token['type'] == '20':
+                signature = self.signUnmapERC20(account, to, txn_hash, height, value)
+            elif token['type'] == '721':
+                signature = self.signUnmapERC721(account, to, txn_hash, height, value)
+            else:
+                return
+        elif sign.opcode == CrossChainOpcode.WRAP and ack['ack'] == 'token_wrap_info':
+            if self.chain_id != int(ack['to_chain_id']):
+                return
+            token_chain_id = int(token['chain_id'])
+            token_address = token['address_raw']
+            to = self.to_checksum_address(ack['to_account'])
+            value = int(ack['value'])
+            txn_hash = ack['source_transaction']
+            if token['type'] == '20':
+                signature = self.signWrapERC20Token(token_chain_id, token_address, account, to,
+                    txn_hash, height, value)
+            elif token['type'] == '721':
+                signature = self.signWrapERC721Token(token_chain_id, token_address, account, to,
+                    txn_hash, height, value)
+            else:
+                return
+        else:
+            return
+        if signature == None:
+            return
+        response = TransferSignMessage(NODE['account_hex'], sign.source, self.chain_id, '', False,
+            sign.account, sign.height, sign.opcode, sign.request_id, signature)
+        await send_cross_chain_message(response)
+
     async def process_transfer_sign_message(self, message: TransferSignMessage):
         global NODE
         if NODE == None:
             return
         if message.is_request:
-            pass
+            async def callback(ack: dict):
+                await self.process_token_service_query_ack(message, ack)
+            query = {
+                'account': message.account,
+                'height': str(message.height),
+            }
+            if message.opcode == CrossChainOpcode.UNMAP:
+                query['action'] = 'token_unmap_info'
+            elif message.opcode == CrossChainOpcode.WRAP:
+                query['action'] = 'token_wrap_info'
+            else:
+                log.server_logger.error('invalid transfer sign message;%s', message)
+                return
+            await send_to_token_service(query, callback)
         else:
-            pass
-        # todo:
+            await CALLBACK_HELPER.callback(message.request_id, message)
 
     async def process_cross_chain_message(self, message: Union[WeightSignMessage, None]):
         if isinstance(message, WeightSignMessage):
@@ -831,6 +912,206 @@ class EvmChainValidator:
             return True
         signable = self.eip721_submit_validator(validator, signer, weight, epoch)
         return self._account.recover_message(signable, signature) != self.to_checksum_address(signer)
+
+    def eip721_unmap_erc20(self, token: str, sender: str, recipient: str, txn_hash: str,
+        txn_height: int, share: int) -> SignableMessage:
+        data = self.eip721_base(self.core_contract)
+        data['types']['UnmapERC20'] = [
+            {"name": "token", "type": "address"},
+            {"name": "sender", "type": "bytes32"},
+            {"name": "recipient", "type": "address"},
+            {"name": "txnHash", "type": "bytes32"},
+            {"name": "txnHeight", "type": "uint64"},
+            {"name": "share", "type": "uint256"},
+        ]
+        data['primaryType'] = 'UnmapERC20'
+        data['message'] = {
+            'token': token,
+            'sender': UTIL.hex_to_bytes(sender),
+            'recipient': recipient,
+            'txnHash': UTIL.hex_to_bytes(txn_hash),
+            'txnHeight': txn_height,
+            'share': share,
+        }
+        return self.encode_structured_data(data)
+
+    def signUnmapERC20(self, token: str, sender: str, recipient: str, txn_hash: str,
+        txn_height: int, share: int):
+        signable = self.eip721_unmap_erc20(token, sender, recipient, txn_hash, txn_height, share)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+
+    def eip721_unmap_erc721(self, token: str, sender: str, recipient: str, txn_hash: str,
+        txn_height: int, token_id: int) -> SignableMessage:
+        data = self.eip721_base(self.core_contract)
+        data['types']['UnmapERC721'] = [
+            {"name": "token", "type": "address"},
+            {"name": "sender", "type": "bytes32"},
+            {"name": "recipient", "type": "address"},
+            {"name": "txnHash", "type": "bytes32"},
+            {"name": "txnHeight", "type": "uint64"},
+            {"name": "tokenId", "type": "uint256"},
+        ]
+        data['primaryType'] = 'UnmapERC721'
+        data['message'] = {
+            'token': token,
+            'sender': UTIL.hex_to_bytes(sender),
+            'recipient': recipient,
+            'txnHash': UTIL.hex_to_bytes(txn_hash),
+            'txnHeight': txn_height,
+            'tokenId': token_id,
+        }
+        return self.encode_structured_data(data)
+
+    def signUnmapERC721(self, token: str, sender: str, recipient: str, txn_hash: str,
+        txn_height: int, token_id: int):
+        signable = self.eip721_unmap_erc721(token, sender, recipient, txn_hash, txn_height, token_id)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+
+    def eip721_unmap_eth(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
+        amount: int) -> SignableMessage:
+        data = self.eip721_base(self.core_contract)
+        data['types']['UnmapETH'] = [
+            {"name": "sender", "type": "bytes32"},
+            {"name": "recipient", "type": "address"},
+            {"name": "txnHash", "type": "bytes32"},
+            {"name": "txnHeight", "type": "uint64"},
+            {"name": "amount", "type": "uint256"},
+        ]
+        data['primaryType'] = 'UnmapETH'
+        data['message'] = {
+            'sender': UTIL.hex_to_bytes(sender),
+            'recipient': recipient,
+            'txnHash': UTIL.hex_to_bytes(txn_hash),
+            'txnHeight': txn_height,
+            'amount': amount,
+        }
+        return self.encode_structured_data(data)
+
+    def signUnmapETH(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
+        amount: int):
+        signable = self.eip721_unmap_eth(sender, recipient, txn_hash, txn_height, amount)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+
+    def eip721_create_wrapped_erc20(self, name: str, symbol: str, original_chain: str,
+        original_chain_id: int, original_contract: str, decimals: int):
+        data = self.eip721_base(self.core_contract)
+        data['types']['CreateWrappedERC20Token'] = [
+            {"name": "name", "type": "string"},
+            {"name": "symbol", "type": "string"},
+            {"name": "originalChain", "type": "string"},
+            {"name": "originalChainId", "type": "uint32"},
+            {"name": "originalContract", "type": "bytes32"},
+            {"name": "decimals", "type": "uint8"},
+        ]
+        data['primaryType'] = 'CreateWrappedERC20Token'
+        data['message'] = {
+            'name': name,
+            'symbol': symbol,
+            'originalChain': original_chain,
+            'originalChainId': original_chain_id,
+            'originalContract': UTIL.hex_to_bytes(original_contract),
+            'decimals': decimals,
+        }
+        return self.encode_structured_data(data)
+
+    def signCreateWrappedERC20Token(self, name: str, symbol: str, original_chain: str,
+        original_chain_id: int, original_contract: str, decimals: int):
+        signable = self.eip721_create_wrapped_erc20(name, symbol, original_chain, original_chain_id,
+            original_contract, decimals)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+
+    def eip721_create_wrapped_erc721(self, name: str, symbol: str, original_chain: str,
+        original_chain_id: int, original_contract: str):
+        data = self.eip721_base(self.core_contract)
+        data['types']['CreateWrappedERC721Token'] = [
+            {"name": "name", "type": "string"},
+            {"name": "symbol", "type": "string"},
+            {"name": "originalChain", "type": "string"},
+            {"name": "originalChainId", "type": "uint32"},
+            {"name": "originalContract", "type": "bytes32"},
+        ]
+        data['primaryType'] = 'CreateWrappedERC721Token'
+        data['message'] = {
+            'name': name,
+            'symbol': symbol,
+            'originalChain': original_chain,
+            'originalChainId': original_chain_id,
+            'originalContract': UTIL.hex_to_bytes(original_contract),
+        }
+        return self.encode_structured_data(data)
+
+    def signCreateWrappedERC721Token(self, name: str, symbol: str, original_chain: str,
+        original_chain_id: int, original_contract: str):
+        signable = self.eip721_create_wrapped_erc721(name, symbol, original_chain, original_chain_id,
+            original_contract)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+
+    def eip721_wrap_erc20(self, original_chain_id: int, original_contract: str, sender: str,
+        recipient: str, txn_hash: str, txn_height: int, amount: int):
+        data = self.eip721_base(self.core_contract)
+        data['types']['WrapERC20Token'] = [
+            {"name": "originalChainId", "type": "uint32"},
+            {"name": "originalContract", "type": "bytes32"},
+            {"name": "sender", "type": "bytes32"},
+            {"name": "recipient", "type": "address"},
+            {"name": "txnHash", "type": "bytes32"},
+            {"name": "txnHeight", "type": "uint64"},
+            {"name": "amount", "type": "uint256"},
+        ]
+        data['primaryType'] = 'WrapERC20Token'
+        data['message'] = {
+            'originalChainId': original_chain_id,
+            'originalContract': UTIL.hex_to_bytes(original_contract),
+            'sender': UTIL.hex_to_bytes(sender),
+            'recipient': recipient,
+            'txnHash': UTIL.hex_to_bytes(txn_hash),
+            'txnHeight': txn_height,
+            'amount': amount,
+        }
+        return self.encode_structured_data(data)
+
+    def signWrapERC20Token(self, original_chain_id: int, original_contract: str, sender: str,
+        recipient: str, txn_hash: str, txn_height: int, amount: int):
+        signable = self.eip721_wrap_erc20(original_chain_id, original_contract, sender, recipient,
+            txn_hash, txn_height, amount)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+
+    def eip721_wrap_erc721(self, original_chain_id: int, original_contract: str, sender: str,
+        recipient: str, txn_hash: str, txn_height: int, token_id: int):
+        data = self.eip721_base(self.core_contract)
+        data['types']['WrapERC721Token'] = [
+            {"name": "originalChainId", "type": "uint32"},
+            {"name": "originalContract", "type": "bytes32"},
+            {"name": "sender", "type": "bytes32"},
+            {"name": "recipient", "type": "address"},
+            {"name": "txnHash", "type": "bytes32"},
+            {"name": "txnHeight", "type": "uint64"},
+            {"name": "tokenId", "type": "uint256"},
+        ]
+        data['primaryType'] = 'WrapERC721Token'
+        data['message'] = {
+            'originalChainId': original_chain_id,
+            'originalContract': UTIL.hex_to_bytes(original_contract),
+            'sender': UTIL.hex_to_bytes(sender),
+            'recipient': recipient,
+            'txnHash': UTIL.hex_to_bytes(txn_hash),
+            'txnHeight': txn_height,
+            'tokenId': token_id,
+        }
+        return self.encode_structured_data(data)
+
+    def signWrapERC721Token(self, original_chain_id: int, original_contract: str, sender: str,
+        recipient: str, txn_hash: str, txn_height: int, token_id: int):
+        signable = self.eip721_wrap_erc721(original_chain_id, original_contract, sender, recipient,
+            txn_hash, txn_height, token_id)
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
     class ValidatorFullInfo:
         def __init__(self, validator: str, signer: str, weight: int, gas_price: int,
@@ -1094,6 +1375,66 @@ class EvmChainValidator:
             log.server_logger.error('sumbit_validator exception:%s', str(e))
             self.use_next_endpoint()
 
+    @awaitable
+    def supports_interface(self, address: str, interface: str, block_number='latest') -> Tuple[bool, bool]:
+        contract = self.make_erc721_contract(address)
+        try:
+            return False, contract.functions.supportsInterface(interface).call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('supports_interface exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, False
+
+    @awaitable
+    def get_erc20_name(self, address: str, block_number='latest') -> Tuple[bool, str]:
+        contract = self.make_erc20_contract(address)
+        try:
+            return False, contract.functions.name().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_name exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, ''
+
+    @awaitable
+    def get_erc20_symbol(self, address: str, block_number='latest') -> Tuple[bool, str]:
+        contract = self.make_erc20_contract(address)
+        try:
+            return False, contract.functions.symbol().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_symbol exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, ''
+
+    @awaitable
+    def get_erc20_decimals(self, address: str, block_number='latest') -> Tuple[bool, int]:
+        contract = self.make_erc20_contract(address)
+        try:
+            return False, contract.functions.decimals().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_decimals exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, 0
+
+    @awaitable
+    def get_erc721_name(self, address: str, block_number='latest') -> Tuple[bool, str]:
+        contract = self.make_erc721_contract(address)
+        try:
+            return False, contract.functions.name().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_name exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, ''
+
+    @awaitable
+    def get_erc721_symbol(self, address: str, block_number='latest') -> Tuple[bool, str]:
+        contract = self.make_erc721_contract(address)
+        try:
+            return False, contract.functions.symbol().call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_symbol exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, ''
+
     def use_next_endpoint(self):
         self.endpoint_index = (self.endpoint_index + 1) % len(self.endpoints)
 
@@ -1113,6 +1454,12 @@ class EvmChainValidator:
     
     def make_validator_contract(self):
         return self.make_web3().eth.contract(address=self.validator_contract, abi=self.validator_abi)
+
+    def make_erc20_contract(self, address: str):
+        return self.make_web3().eth.contract(address=address, abi=ERC20_ABI)
+
+    def make_erc721_contract(self, address: str):
+        return self.make_web3().eth.contract(address=address, abi=ERC721_ABI)
 
     async def sync_fee(self, block_number: int):
         error, fee = await self.get_fee(block_number)
@@ -1515,6 +1862,14 @@ class EvmChainValidator:
         await send_cross_chain_message(message)
         return {'pending': ''}
 
+    async def sign_creation(self, uid: str, req: dict) -> dict:
+        if NODE == None:
+            return {'error': 'node offline'}
+        source = NODE['account_hex']
+        destination = req['validator']
+        contract = req['contract']
+        # todo:
+
     def debug_json_encode(self) -> dict:
         result = {}
         validators = None
@@ -1661,6 +2016,18 @@ async def sign_transfer(uid, req, res):
         res['error'] = 'exception'
         log.server_logger.exception('sign_transfer exception:%s', str(e))
 
+async def sign_creation(uid, req, res):
+    try:
+        chain_id = int(req['chain_id'])
+        if chain_id not in VALIDATORS:
+            res['error'] = 'chain not supported'
+            return
+        validator = VALIDATORS[chain_id]['validator']
+        res.update(await validator.sign_creation(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('sign_creation exception:%s', str(e))
+
 async def notify_chain_info(chain_id: ChainId, info: dict):
     chain_id = str(int(chain_id))
     message = {
@@ -1707,6 +2074,8 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
             await chain_info(request, res)
         elif action == 'sign_transfer':
             await sign_transfer(uid, request, res)
+        elif action == 'sign_creation':
+            await sign_creation(uid, request, res)
         else:
             res.update({'error':'unknown action'})
         return res
