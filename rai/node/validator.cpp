@@ -243,7 +243,7 @@ void rai::Validator::ReceiveWsCrossChainMessage_(
         IF_ERROR_THROW(error, "invalid destination");
 
         rai::Chain chain;
-        bool error = GetChain_(message, chain);
+        error = GetChain_(message, chain);
         IF_ERROR_THROW(error, "invalid chain");
 
         std::string payload_str = message->get<std::string>("payload");

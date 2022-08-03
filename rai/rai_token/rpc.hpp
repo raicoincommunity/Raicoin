@@ -26,6 +26,7 @@ public:
     void AccountTokenInfo();
     void AccountTokenIds();
     void AccountTokensInfo();
+    void ChainHead();
     void CrossChainStatus();
     void LedgerVersion();
     void MakerSwaps();

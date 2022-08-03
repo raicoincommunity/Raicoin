@@ -645,9 +645,52 @@ class TransferSignMessage(CrossChainMessage):
                 return True
         return False
 
+class CreationSignMessage(CrossChainMessage):
+    def __init__(self, source: str, destination: str, chain_id: ChainId = ChainId.INVALID,
+        source_signer: str = '', is_request: bool = True, original_chain_id: int = 0,
+        original_contract: str = '', request_id: int = 0, signature: bytes = b''):
+        super().__init__(source, destination, chain_id, source_signer)
+        self.is_request = is_request
+        self.original_chain_id = original_chain_id
+        self.original_contract = original_contract
+        self.request_id = request_id
+        self.signature = signature
+
+    def serialize(self, stream: BytesIO) -> str:
+        Serializer.write_uint8(stream, CrossChainMessageType.CreationSign)
+        Serializer.write_bool(stream, self.is_request)
+        Serializer.write_uint32(stream, self.original_chain_id)
+        Serializer.write_uint256(stream, self.original_contract)
+        Serializer.write_uint256(stream, self.request_id)
+        if not self.is_request:
+            Serializer.write_bytes(stream, self.signature)
+
+    def deserialize(self, stream: BytesIO) -> bool:
+        msg_type = Serializer.read_uint8(stream)
+        if msg_type != CrossChainMessageType.CreationSign:
+            return True
+        self.is_request = Serializer.read_bool(stream)
+        if self.is_request == None:
+            return True
+        self.original_chain_id = Serializer.read_uint32(stream)
+        if self.original_chain_id == None:
+            return True
+        self.original_contract = Serializer.read_uint256(stream)
+        if self.original_contract == None:
+            return True
+        self.request_id = Serializer.read_uint256(stream)
+        if self.request_id == None:
+            return True
+        if not self.is_request:
+            self.signature = Serializer.read_bytes(stream)
+            if self.signature == None:
+                return True
+        return False
+
 class CrossChainMessageType(IntEnum):
     WeightSign = 1
     TransferSign = 2
+    CreationSign = 3
 
 async def send_cross_chain_message(data: CrossChainMessage):
     stream = BytesIO()
@@ -667,7 +710,7 @@ async def send_cross_chain_message(data: CrossChainMessage):
 class EvmChainValidator:
     def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_contract: str,
                  validator_contract: str, core_abi: dict, validator_abi: dict, endpoints: list,
-                 signer_private_key: str, confirmations: int):
+                 signer_private_key: str, confirmations: int, tag: str):
         self.chain_id = chain_id
         self.evm_chain_id = evm_chain_id
         self.core_contract = core_contract
@@ -678,6 +721,7 @@ class EvmChainValidator:
         self.genesis_signer = None
         self.endpoints = endpoints
         self.confirmations = confirmations
+        self.tag = tag
         self.signer = None
         if signer_private_key != '':
             self._account = EvmAccount.from_key(signer_private_key)
@@ -717,7 +761,7 @@ class EvmChainValidator:
                 address = address[2:]
             if len(address) != 64 or not address.startswith('000000000000000000000000'):
                 raise ValueError("Invalid address")
-            address = address[24:]
+            address = '0x' + address[24:]
         return Web3.toChecksumAddress(address)
 
     async def process_bind_query_ack(self, validator: str, signer: str):
@@ -778,7 +822,7 @@ class EvmChainValidator:
             address = int(address, 16)
         return address == 1
 
-    async def process_token_service_query_ack(self, sign: TransferSignMessage, ack: dict):
+    async def process_token_service_transfer_query_ack(self, sign: TransferSignMessage, ack: dict):
         if 'error' in ack:
             return
         token = ack['token']
@@ -832,7 +876,7 @@ class EvmChainValidator:
             return
         if message.is_request:
             async def callback(ack: dict):
-                await self.process_token_service_query_ack(message, ack)
+                await self.process_token_service_transfer_query_ack(message, ack)
             query = {
                 'account': message.account,
                 'height': str(message.height),
@@ -848,14 +892,70 @@ class EvmChainValidator:
         else:
             await CALLBACK_HELPER.callback(message.request_id, message)
 
+    async def process_token_service_token_info_query_ack(self, sign: CreationSignMessage, ack: dict):
+        if 'error' in ack or ack['ack'] != 'token_info':
+            return
+        if ack['type'] not in ('20', '721'):
+            log.server_logger.error('process_token_service_token_info_query_ack unknown type:%s',
+                ack['type'])
+            return
+        signature = None
+        address = self.to_checksum_address(ack['address_raw'])
+        original_chain = to_chain_str(ChainId(sign.original_chain_id)).value
+        if ack['type'] == '20':
+            error, symbol = await self.get_erc20_symbol(address)
+            if error:
+                return
+            name = f'RAI wrapped {symbol}<{self.tag}>'
+            symbol = 'r' + symbol
+            signature = self.signCreateWrappedERC20Token(name, symbol, original_chain,
+                sign.original_chain_id, sign.original_contract, int(ack['decimals']))
+        elif ack['type'] == '721':
+            error, symbol = await self.get_erc721_symbol(address)
+            if error:
+                return
+            name = f'RAI wrapped {symbol}<{self.tag}>'
+            symbol = 'r' + symbol
+            signature = self.signCreateWrappedERC721Token(name, symbol, original_chain,
+                sign.original_chain_id, sign.original_contract)
+        else:
+            return
+        if signature == None:
+            return
+        response = CreationSignMessage(NODE['account_hex'], sign.source, self.chain_id, '', False,
+            sign.original_chain_id, sign.original_contract, sign.request_id, signature)
+        await send_cross_chain_message(response)
+
+    async def process_creation_sign_message(self, message: CreationSignMessage):
+        global NODE
+        if NODE == None:
+            return
+        if message.is_request:
+            if self.chain_id == message.original_chain_id:
+                return
+            async def callback(ack: dict):
+                await self.process_token_service_token_info_query_ack(message, ack)
+            address = message.original_contract
+            if address.startswith('0x'):
+                address = address[2:]
+            query = {
+                'chain_id': str(int(message.original_chain_id)),
+                'address_raw': address,
+            }
+            query['action'] = 'token_info'
+            await send_to_token_service(query, callback)
+        else:
+            await CALLBACK_HELPER.callback(message.request_id, message)
+
     async def process_cross_chain_message(self, message: Union[WeightSignMessage, None]):
         if isinstance(message, WeightSignMessage):
             await self.process_weight_sign_message(message)
         elif isinstance(message, TransferSignMessage):
             await self.process_transfer_sign_message(message)
+        elif isinstance(message, CreationSignMessage):
+            await self.process_creation_sign_message(message)
         else:
             pass
-        # todo:
 
     def encode_structured_data(self, data: dict) -> SignableMessage:
         validate_structured_data(data)
@@ -1214,7 +1314,7 @@ class EvmChainValidator:
 
     def to_chain_info(self):
         info = {
-            'chain': str(to_chain_str(self.chain_id)),
+            'chain': to_chain_str(self.chain_id).value,
             'chain_id': str(int(self.chain_id)),
             'fee': str(self.fee) if self.fee else '0',
             'total_weight': str(self.total_weight) if self.total_weight != None else '',
@@ -1810,7 +1910,7 @@ class EvmChainValidator:
             self.genesis_signer =  Web3.toChecksumAddress(signer)
 
         error, block_number = await self.get_block_number()
-        if error or block_number <= self.synced_height:
+        if error or (self.synced_height != None and block_number <= self.synced_height):
             return
 
         error, updated = await self.sync_fee(block_number)
@@ -1867,8 +1967,25 @@ class EvmChainValidator:
             return {'error': 'node offline'}
         source = NODE['account_hex']
         destination = req['validator']
-        contract = req['contract']
-        # todo:
+        original_chain_id = int(req['original_chain_id'])
+        original_contract = req['original_contract']
+        async def callback(sign: CreationSignMessage):
+            try:
+                resp = {
+                    'validator': sign.source,
+                    'signer': sign.source_signer,
+                    'original_chain_id': str(sign.original_chain_id),
+                    'original_contract': sign.original_contract,
+                    'signature': UTIL.bytes_to_hex(sign.signature),
+                }
+                await send_ack(uid, req, resp)
+            except Exception as e:
+                log.server_logger.exception('sign_creation.callback: uncaught exception=%s', e)
+        request_id = CallbackHelper.add(callback)
+        message = CreationSignMessage(source, destination, self.chain_id, '', True,
+            original_chain_id, original_contract, request_id)
+        await send_cross_chain_message(message)
+        return {'pending': ''}
 
     def debug_json_encode(self) -> dict:
         result = {}
@@ -2193,6 +2310,8 @@ async def handle_node_cross_chain_message(r : dict):
         message = WeightSignMessage(source, destination, chain_id, source_signer)
     elif message_type == CrossChainMessageType.TransferSign:
         message = TransferSignMessage(source, destination, chain_id, source_signer)
+    elif message_type == CrossChainMessageType.CreationSign:
+        message = CreationSignMessage(source, destination, chain_id, source_signer)
     else:
         pass
     # todo:
@@ -2465,7 +2584,7 @@ if TEST_MODE:
                                            EvmChainId.BINANCE_SMART_CHAIN_TEST,
                                            BSC_TEST_CORE_CONTRACT, BSC_TEST_VALIDATOR_CONTRACT,
                                            EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI,
-                                           BSC_TEST_ENDPOINTS, BSC_TEST_SIGNER_PRIVATE_KEY, 30)
+                                           BSC_TEST_ENDPOINTS, BSC_TEST_SIGNER_PRIVATE_KEY, 30, 'bsc_test')
         },
     }
 else:

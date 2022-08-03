@@ -102,6 +102,7 @@ protected:
     bool GetAccountTypes_(std::vector<rai::BlockType>&);
     bool GetChain_(rai::Chain&);
     bool GetChainById_(rai::Chain&);
+    bool GetChainOrId_(rai::Chain&);
 };
 
 std::unique_ptr<rai::Rpc> MakeRpc(boost::asio::io_service&,
