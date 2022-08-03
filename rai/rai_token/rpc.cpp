@@ -47,6 +47,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         AccountTokensInfo();
     }
+    else if (action == "chain_head")
+    {
+        ChainHead();
+    }
     else if (action == "cross_chain_status")
     {
         CrossChainStatus();
@@ -657,6 +661,22 @@ void rai::TokenRpcHandler::AccountTokensInfo()
     }
     response_.put_child("tokens", tokens);
     response_.put("token_count", std::to_string(count));
+}
+
+void rai::TokenRpcHandler::ChainHead()
+{
+    rai::Chain chain;
+    bool error = GetChainOrId_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+    response_.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    uint64_t head;
+    error = token_.ledger_.ChainHeadGet(transaction, chain, head);
+    response_.put("head", error ? "missing" : std::to_string(head));
 }
 
 void rai::TokenRpcHandler::CrossChainStatus()
@@ -1697,9 +1717,19 @@ void rai::TokenRpcHandler::TokenIdOwner()
 void rai::TokenRpcHandler::TokenInfo()
 {
     rai::Chain chain;
-    bool error = GetChain_(chain);
-    IF_ERROR_RETURN_VOID(error);
+    bool error = GetChainById_(chain);
+    if (error)
+    {
+        if (error_code_ != rai::ErrorCode::RPC_MISS_FIELD_CHAIN_ID)
+        {
+            return;
+        }
+        error_code_ = rai::ErrorCode::SUCCESS;
+        error = GetChain_(chain);
+        IF_ERROR_RETURN_VOID(error);
+    }
     response_.put("chain", rai::ChainToString(chain));
+    response_.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
 
     rai::TokenAddress address;
     error = GetTokenAddress_(chain, address);

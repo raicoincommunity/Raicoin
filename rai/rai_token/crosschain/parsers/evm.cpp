@@ -494,6 +494,8 @@ void rai::EvmParser::Status(rai::Ptree& ptree) const
     ptree.put("evm_chain_id", evm_chain_id_.StringDec());
     ptree.put("session_id", std::to_string(session_id_));
     ptree.put("sync_interval", std::to_string(sync_interval_));
+    ptree.put("confirmed_height", std::to_string(confirmed_height_));
+    ptree.put("submitted_height", std::to_string(submitted_height_));
 
     rai::Ptree endpoints;
     for (const auto& i : endpoints_)
@@ -921,10 +923,12 @@ void rai::EvmParser::QueryLogs_(rai::EvmEndpoint& endpoint, uint64_t session_id,
                                 uint64_t tail_height, uint64_t head_height)
 {
     rai::Ptree params;
-    params.put("address", core_contract_);
-    params.put("fromBlock",
+    rai::Ptree entry;
+    entry.put("address", core_contract_);
+    entry.put("fromBlock",
                rai::uint256_union(tail_height).StringEvmShortHex());
-    params.put("toBlock", rai::uint256_union(head_height).StringEvmShortHex());
+    entry.put("toBlock", rai::uint256_union(head_height).StringEvmShortHex());
+    params.push_back(std::make_pair("", entry));
     Send_(endpoint, "eth_getLogs", params,
           std::bind(&EvmParser::QueryLogsCallback_, this, session_id,
                     std::placeholders::_1, std::placeholders::_3,

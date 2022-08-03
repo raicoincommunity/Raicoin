@@ -16,33 +16,43 @@ rai::CrossChain::CrossChain(rai::Token& token)
 {
     const rai::CrossChainConfig& config = token.config_.cross_chain_;
 
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (!config.eth_urls_.empty())
     {
-        parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
-            token, config.eth_urls_, rai::Chain::ETHEREUM, 10, 30, "")));
-    }
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!config.eth_urls_.empty())
+        {
+            parsers_.insert(
+                rai::CrossChainParser(std::make_shared<rai::EvmParser>(
+                    token, config.eth_urls_, rai::Chain::ETHEREUM, 10, 30,
+                    "")));
+        }
 
-    if (!config.bsc_urls_.empty())
-    {
-        parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
-            token, config.bsc_urls_, rai::Chain::BINANCE_SMART_CHAIN, 5, 30,
-            "")));
-    }
+        if (!config.bsc_urls_.empty())
+        {
+            parsers_.insert(
+                rai::CrossChainParser(std::make_shared<rai::EvmParser>(
+                    token, config.bsc_urls_, rai::Chain::BINANCE_SMART_CHAIN, 5,
+                    30, "")));
+        }
 
-    if (!config.eth_test_goerli_urls_.empty())
-    {
-        parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
-            token, config.eth_test_goerli_urls_,
-            rai::Chain::ETHEREUM_TEST_GOERLI, 10, 30, "")));
-    }
+        if (!config.eth_test_goerli_urls_.empty())
+        {
+            parsers_.insert(
+                rai::CrossChainParser(std::make_shared<rai::EvmParser>(
+                    token, config.eth_test_goerli_urls_,
+                    rai::Chain::ETHEREUM_TEST_GOERLI, 10, 30,
+                    "0xfC113A7B68074642cA2FC74733A9BF325C045F14")));
+        }
 
-    if (!config.bsc_test_urls_.empty())
-    {
-        parsers_.insert(rai::CrossChainParser(std::make_shared<rai::EvmParser>(
-            token, config.bsc_test_urls_, rai::Chain::BINANCE_SMART_CHAIN_TEST,
-            5, 30, "0xC777f5b390E79c9634c9d07AF45Dc44b11893055")));
+        if (!config.bsc_test_urls_.empty())
+        {
+            parsers_.insert(
+                rai::CrossChainParser(std::make_shared<rai::EvmParser>(
+                    token, config.bsc_test_urls_,
+                    rai::Chain::BINANCE_SMART_CHAIN_TEST, 5, 30,
+                    "0x68CF8517a569565F0B30f8856F0555d55d539307")));
+        }
     }
+    condition_.notify_all();
 }
 
 rai::CrossChain::~CrossChain()

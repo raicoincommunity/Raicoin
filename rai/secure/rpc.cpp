@@ -615,6 +615,17 @@ bool rai::RpcHandler::GetChainById_(rai::Chain& chain)
     return false;
 }
 
+bool rai::RpcHandler::GetChainOrId_(rai::Chain& chain)
+{
+    bool error = GetChain_(chain);
+    if (!error)
+    {
+        return error;
+    }
+    error_code_ = rai::ErrorCode::SUCCESS;
+    return GetChainById_(chain);
+}
+
 std::unique_ptr<rai::Rpc> rai::MakeRpc(boost::asio::io_service& service,
                                        const rai::RpcConfig& config,
                                        const rai::RpcHandlerMaker& maker)
