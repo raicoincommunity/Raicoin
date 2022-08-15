@@ -68,6 +68,7 @@ enum class EvmSessionState
     SUCCESS                 = 4,
     FAILED                  = 5,
 };
+std::string EvmSessionStateToString(EvmSessionState);
 
 class EvmBlockEvents
 {
@@ -76,6 +77,7 @@ public:
     bool operator==(const rai::EvmBlockEvents&) const;
     bool operator!=(const rai::EvmBlockEvents&) const;
     bool AppendEvent(const std::shared_ptr<rai::CrossChainEvent>&);
+    void Ptree(rai::Ptree&) const;
 
     uint64_t height_;
     rai::BlockHash hash_;
@@ -89,6 +91,7 @@ public:
     bool AppendBlock(rai::EvmBlockEvents&&);
     bool operator==(const rai::EvmSessionEntry&) const;
     bool operator!=(const rai::EvmSessionEntry&) const;
+    void Ptree(rai::Ptree&) const;
 
     uint64_t endpoint_index_;
     rai::EvmSessionState state_;
@@ -104,6 +107,7 @@ public:
     bool Succeeded() const;
     bool Finished() const;
     bool AllEntriesEqual() const;
+    void Ptree(rai::Ptree&) const;
 
     uint64_t id_;
     uint64_t tail_height_;
@@ -142,6 +146,7 @@ public:
                  const EvmRequestCallback&);
     void OnBlocksSubmitted(rai::ErrorCode,
                            const std::vector<rai::CrossChainBlockEvents>&);
+    void OnNativeTokenSubmitted(rai::ErrorCode);
 
     rai::Token& token_;
 
@@ -160,12 +165,12 @@ private:
                                    const rai::Ptree&);
     void TryQueryLogs_();
     void QueryLogs_(rai::EvmEndpoint&, uint64_t, uint64_t, uint64_t);
-    void QueryLogsCallback_(uint64_t, uint64_t, rai::ErrorCode,
+    void QueryLogsCallback_(uint64_t, uint64_t, uint64_t, rai::ErrorCode,
                             const rai::Ptree&);
     std::vector<uint64_t> RandomEndpoints_(size_t) const;
     std::vector<uint64_t> ValidEndpoints_() const;
     boost::optional<rai::EvmSession> MakeSession_();
-    void TrySubmitSession_();
+    void TrySubmitSession_(uint64_t);
     void RunSession_(rai::EvmSession&);
     bool ParseLogs_(const rai::Ptree&, rai::EvmSessionEntry&);
     bool ParseLog_(const rai::Ptree&, std::shared_ptr<rai::CrossChainEvent>&);
@@ -235,7 +240,9 @@ private:
     bool MakeUint8_(const rai::uint256_union&, uint8_t&) const;
     bool MakeBool_(const rai::uint256_union&, bool&) const;
     void HalveBatch_();
+    void DoubleBatch_();
     void SubmitBlocks_();
+    void SubmitNativeToken_();
 
     mutable std::mutex mutex_;
     uint64_t session_id_;
@@ -252,6 +259,7 @@ private:
     std::string core_contract_;
     uint64_t batch_;
     bool waiting_;
+    bool native_token_submitted_;
 };
 
 }  // namespace rai

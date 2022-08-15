@@ -93,6 +93,8 @@ public:
         const std::vector<rai::CrossChainBlockEvents>&,
         const std::function<void(
             rai::ErrorCode, const std::vector<rai::CrossChainBlockEvents>&)>&);
+    void ProcessChainNativeToken(rai::Chain, const rai::TokenInfo&,
+                                 const std::function<void(rai::ErrorCode)>&);
     std::shared_ptr<rai::AppRpcHandler> MakeRpcHandler(
         const rai::UniqueId&, bool, const std::string&,
         const std::function<void(const rai::Ptree&)>&) override;
@@ -109,6 +111,8 @@ public:
         const std::vector<rai::CrossChainBlockEvents>&,
         const std::function<void(
             rai::ErrorCode, const std::vector<rai::CrossChainBlockEvents>&)>&);
+    void SubmitChainNativeToken(rai::Chain, const rai::TokenInfo&,
+                                const std::function<void(rai::ErrorCode)>&);
     void PurgeTakeNackBlock(const rai::Account&, uint64_t);
     rai::Account GetTokenIdOwner(rai::Transaction&, const rai::TokenKey&,
                                  const rai::TokenValue&);

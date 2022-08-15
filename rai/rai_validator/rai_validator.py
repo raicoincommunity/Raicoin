@@ -41,7 +41,8 @@ from eth_account._utils.structured_data.validation import validate_structured_da
 from collections import OrderedDict
 
 ALLOWED_RPC_ACTIONS = [
-    'service_subscribe', 'chain_info', 'sign_transfer', 'sign_creation',
+    'service_subscribe', 'chain_info', 'sign_transfer', 'sign_creation', 'token_symbol',
+    'token_name', 'token_type', 'token_decimals'
 ]
 
 CLIENTS = {}
@@ -749,6 +750,11 @@ class EvmChainValidator:
         self.signatures = {}
         self.signature_collect_count = 0
 
+        self.token_symbols = {}
+        self.token_names = {}
+        self.token_types = {}
+        self.token_decimals = {}
+
         if len(self.endpoints) == 0:
             print("[ERROR] No endpoints found while constructing EvmChainValidator")
             sys.exit(0)
@@ -902,20 +908,16 @@ class EvmChainValidator:
         signature = None
         address = self.to_checksum_address(ack['address_raw'])
         original_chain = to_chain_str(ChainId(sign.original_chain_id)).value
+        result = self.token_symbol(None, {'address': address})
+        if 'symbol' not in result:
+            return
+        symbol = result['symbol']
+        name = f'RAI wrapped {symbol}<{self.tag}>'
+        symbol = 'r' + symbol
         if ack['type'] == '20':
-            error, symbol = await self.get_erc20_symbol(address)
-            if error:
-                return
-            name = f'RAI wrapped {symbol}<{self.tag}>'
-            symbol = 'r' + symbol
             signature = self.signCreateWrappedERC20Token(name, symbol, original_chain,
                 sign.original_chain_id, sign.original_contract, int(ack['decimals']))
         elif ack['type'] == '721':
-            error, symbol = await self.get_erc721_symbol(address)
-            if error:
-                return
-            name = f'RAI wrapped {symbol}<{self.tag}>'
-            symbol = 'r' + symbol
             signature = self.signCreateWrappedERC721Token(name, symbol, original_chain,
                 sign.original_chain_id, sign.original_contract)
         else:
@@ -1250,6 +1252,12 @@ class EvmChainValidator:
         ValidatorSubmitted = '0x8af4f119fc84662aea5dd2e38c11f64f244dd0dd79699db6778a9ce3bcb4e006'
         ValidatorPurged = '0xef1971845d41d94b4fa01bda8806e405a5433145ff767b4ce3d79f738c3624c7'
 
+    class InterfaceId(str, Enum):
+        INVALID = '0xffffffff'
+        ERC165 = '0x01ffc9a7'
+        ERC20 = '0x36372b07'
+        ERC721 = '0x80ac58cd'
+
     class ValidatorActivity:
         def __init__(self, log_height: int, sync_height: int = 0):
             self.log_height = log_height
@@ -1512,6 +1520,16 @@ class EvmChainValidator:
             return False, contract.functions.decimals().call(block_identifier=block_number)
         except Exception as e:
             log.server_logger.error('get_decimals exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, 0
+
+    @awaitable
+    def get_erc20_allowance(self, address: str, owner: str, spender: str, block_number='latest') -> Tuple[bool, int]:
+        contract = self.make_erc20_contract(address)
+        try:
+            return False, contract.functions.allowance(owner, spender).call(block_identifier=block_number)
+        except Exception as e:
+            log.server_logger.error('get_allowance exception:%s', str(e))
             self.use_next_endpoint()
             return True, 0
 
@@ -1987,6 +2005,92 @@ class EvmChainValidator:
         await send_cross_chain_message(message)
         return {'pending': ''}
 
+    async def token_symbol(self, _: str, req: dict) -> dict:
+        address = req['address']
+        if address in self.token_symbols:
+            return {'symbol': self.token_symbols[address]}
+        error, block_number = await self.get_block_number()
+        if error:
+            return {'error': 'failed to get block_number'}
+        block_number -= self.confirmations
+        error, symbol = await self.get_erc20_symbol(address, block_number)
+        if error:
+            return {'error': 'failed to get token symbol'}
+        self.token_symbols[address] = symbol
+        return {'symbol': symbol}
+
+    async def token_name(self, _: str, req: dict) -> dict:
+        address = req['address']
+        result = {'address': address, 'address_raw': req['address_raw']}
+        if address in self.token_names:
+            result['name'] = self.token_names[address]
+            return result
+        error, block_number = await self.get_block_number()
+        if error:
+            return {'error': 'failed to get block_number'}
+        block_number -= self.confirmations
+        error, name = await self.get_erc20_name(address, block_number)
+        if error:
+            result['error'] = 'failed to get token name'
+            return result
+        self.token_names[address] = name
+        result['name'] = self.token_names[address]
+        return result
+
+    async def is_erc20_token(self, address: str, block_number: int) -> bool:
+        error, _ = await self.get_erc20_decimals(address, block_number)
+        if error:
+            return False
+        error, _ = await self.get_erc20_allowance(address, self.core_contract, self.validator_contract, block_number)
+        if error:
+            return False
+        return True
+
+    async def is_erc721_token(self, address: str, block_number: int) -> bool:
+        error,  yes = await self.supports_interface(address, self.InterfaceId.ERC165, block_number)
+        if error or not yes:
+            return False
+        error, yes = await self.supports_interface(address, self.InterfaceId.INVALID, block_number)
+        if error or yes:
+            return False
+        error, yes = await self.supports_interface(address, self.InterfaceId.ERC721, block_number)
+        if error or not yes:
+            return False
+        return True
+
+    async def token_type(self, _: str, req: dict) -> dict:
+        address = req['address']
+        if address in self.token_types:
+            return {'type': self.token_types[address]}
+        error, block_number = await self.get_block_number()
+        if error:
+            return {'error': 'failed to get block_number'}
+        block_number -= self.confirmations
+
+        yes = await self.is_erc20_token(address, block_number)
+        if yes:
+            self.token_types[address] = '20'
+            return {'type': '20'}
+        yes = await self.is_erc721_token(address, block_number)
+        if yes:
+            self.token_types[address] = '721'
+            return {'type': '721'}
+        return {'type': ''}
+
+    async def token_decimals(self, _: str, req: dict) -> dict:
+        address = req['address']
+        if address in self.token_decimals:
+            return {'decimals': self.token_decimals[address]}
+        error, block_number = await self.get_block_number()
+        if error:
+            return {'error': 'failed to get block_number'}
+        block_number -= self.confirmations
+        error, decimals = await self.get_erc20_decimals(address, block_number)
+        if error:
+            return {'error': 'failed to get token decimals'}
+        self.token_decimals[address] = decimals
+        return {'decimals': decimals}
+
     def debug_json_encode(self) -> dict:
         result = {}
         validators = None
@@ -2145,6 +2249,82 @@ async def sign_creation(uid, req, res):
         res['error'] = 'exception'
         log.server_logger.exception('sign_creation exception:%s', str(e))
 
+async def token_symbol(uid, req, res):
+    try:
+        if 'chain' in req:
+            res['chain'] = req['chain']
+        res['chain_id'] = req['chain_id']
+        if 'address' in req:
+            res['address'] = req['address']
+        if 'address_raw' in req:
+            res['address_raw'] = req['address_raw']
+        chain_id = int(req['chain_id'])
+        if chain_id not in VALIDATORS:
+            res['error'] = 'chain not supported'
+            return
+        validator = VALIDATORS[chain_id]['validator']
+        res.update(await validator.token_symbol(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('token_symbol exception:%s', str(e))
+
+async def token_name(uid, req, res):
+    try:
+        if 'chain' in req:
+            res['chain'] = req['chain']
+        res['chain_id'] = req['chain_id']
+        if 'address' in req:
+            res['address'] = req['address']
+        if 'address_raw' in req:
+            res['address_raw'] = req['address_raw']
+        chain_id = int(req['chain_id'])
+        if chain_id not in VALIDATORS:
+            res['error'] = 'chain not supported'
+            return
+        validator = VALIDATORS[chain_id]['validator']
+        res.update(await validator.token_name(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('token_name exception:%s', str(e))
+
+async def token_type(uid, req, res):
+    try:
+        if 'chain' in req:
+            res['chain'] = req['chain']
+        res['chain_id'] = req['chain_id']
+        if 'address' in req:
+            res['address'] = req['address']
+        if 'address_raw' in req:
+            res['address_raw'] = req['address_raw']
+        chain_id = int(req['chain_id'])
+        if chain_id not in VALIDATORS:
+            res['error'] = 'chain not supported'
+            return
+        validator = VALIDATORS[chain_id]['validator']
+        res.update(await validator.token_type(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('token_type exception:%s', str(e))
+
+async def token_decimals(uid, req, res):
+    try:
+        if 'chain' in req:
+            res['chain'] = req['chain']
+        res['chain_id'] = req['chain_id']
+        if 'address' in req:
+            res['address'] = req['address']
+        if 'address_raw' in req:
+            res['address_raw'] = req['address_raw']
+        chain_id = int(req['chain_id'])
+        if chain_id not in VALIDATORS:
+            res['error'] = 'chain not supported'
+            return
+        validator = VALIDATORS[chain_id]['validator']
+        res.update(await validator.token_decimals(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('token_decimals exception:%s', str(e))
+
 async def notify_chain_info(chain_id: ChainId, info: dict):
     chain_id = str(int(chain_id))
     message = {
@@ -2193,6 +2373,14 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
             await sign_transfer(uid, request, res)
         elif action == 'sign_creation':
             await sign_creation(uid, request, res)
+        elif action == 'token_symbol':
+            await token_symbol(uid, request, res)
+        elif action == 'token_name':
+            await token_name(uid, request, res)
+        elif action == 'token_type':
+            await token_type(uid, request, res)
+        elif action == 'token_decimals':
+            await token_decimals(uid, request, res)
         else:
             res.update({'error':'unknown action'})
         return res
