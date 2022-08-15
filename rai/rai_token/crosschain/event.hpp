@@ -3,6 +3,7 @@
 #include <rai/common/numbers.hpp>
 #include <rai/common/chain.hpp>
 #include <rai/common/token.hpp>
+#include <rai/common/util.hpp>
 
 namespace rai
 {
@@ -17,6 +18,7 @@ enum class CrossChainEventType
     WRAP     = 5,
     UNWRAP   = 6,
 };
+std::string CrossChainEventTypeToString(CrossChainEventType);
 
 class CrossChainEvent
 {
@@ -29,6 +31,7 @@ public:
     virtual uint64_t BlockHeight() const                        = 0;
     virtual uint64_t Index() const                              = 0;
     virtual rai::Chain Chain() const                            = 0;
+    virtual void Ptree(rai::Ptree&) const                       = 0;
 };
 
 class CrossChainTokenEvent : public CrossChainEvent
@@ -44,6 +47,7 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
     rai::Chain Chain() const override;
+    void Ptree(rai::Ptree&) const override;
 
     rai::CrossChainEventType type_;
     uint64_t block_height_;
@@ -69,6 +73,7 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
     rai::Chain Chain() const override;
+    void Ptree(rai::Ptree&) const override;
 
     rai::CrossChainEventType type_;
     uint64_t block_height_;
@@ -94,6 +99,7 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
     rai::Chain Chain() const override;
+    void Ptree(rai::Ptree&) const override;
 
     rai::CrossChainEventType type_;
     uint64_t block_height_;
@@ -122,6 +128,7 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
     rai::Chain Chain() const override;
+    void Ptree(rai::Ptree&) const override;
 
     rai::CrossChainEventType type_;
     uint64_t block_height_;
@@ -152,6 +159,7 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
     rai::Chain Chain() const override;
+    void Ptree(rai::Ptree&) const override;
 
     rai::CrossChainEventType type_;
     uint64_t block_height_;
@@ -185,6 +193,7 @@ public:
     uint64_t BlockHeight() const override;
     uint64_t Index() const override;
     rai::Chain Chain() const override;
+    void Ptree(rai::Ptree&) const override;
 
     rai::CrossChainEventType type_;
     uint64_t block_height_;

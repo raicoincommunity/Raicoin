@@ -419,7 +419,7 @@ void rai::Token::ProcessCrossChainBlocks(
         bool error = ledger_.ChainHeadGet(transaction, chain, head);
         if (error)
         {
-            head = rai::ChainSinceHeight(chain);
+            head = rai::ChainSinceHeight(chain) - 1;
         }
 
         for (const auto& block : blocks)
@@ -487,6 +487,38 @@ void rai::Token::ProcessCrossChainBlocks(
         QueueCrossChainWaitingBlocks_(chain, head);
     }
 
+}
+
+void rai::Token::ProcessChainNativeToken(
+    rai::Chain chain, const rai::TokenInfo& info,
+    const std::function<void(rai::ErrorCode)>& callback)
+{
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    do
+    {
+        rai::Transaction transaction(error_code, ledger_, true);
+        IF_NOT_SUCCESS_BREAK(error_code);
+
+        rai::TokenKey key(chain, rai::NativeAddress());
+        rai::TokenInfo existing;
+        bool error = ledger_.TokenInfoGet(transaction, key, existing);
+        if (!error)
+        {
+            break;
+        }
+        error = ledger_.TokenInfoPut(transaction, key, info);
+        if (error)
+        {
+            error_code = rai::ErrorCode::TOKEN_LEDGER_PUT;
+            break;
+        }
+    } while (0);
+
+    Background([callback, error_code]() { callback(error_code); });
+    if (error_code != rai::ErrorCode::SUCCESS)
+    {
+        rai::Stats::Add(error_code, "Token::ProcessChainNativeToken");
+    }
 }
 
 std::shared_ptr<rai::AppRpcHandler> rai::Token::MakeRpcHandler(
@@ -781,6 +813,19 @@ void rai::Token::SubmitCrossChainBlocks(
         if (auto token_s = token_w.lock())
         {
             token_s->ProcessCrossChainBlocks(blocks, callback);
+        }
+    });
+}
+
+void rai::Token::SubmitChainNativeToken(
+    rai::Chain chain, const rai::TokenInfo& info,
+    const std::function<void(rai::ErrorCode)>& callback)
+{
+    std::weak_ptr<rai::Token> token_w(Shared());
+    QueueAction(rai::AppActionPri::NORMAL, [token_w, chain, info, callback]() {
+        if (auto token_s = token_w.lock())
+        {
+            token_s->ProcessChainNativeToken(chain, info, callback);
         }
     });
 }

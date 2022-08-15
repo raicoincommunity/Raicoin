@@ -219,6 +219,41 @@ void rai::EvmEndpoint::DetectBatch(uint64_t batch)
     }
 }
 
+std::string rai::EvmSessionStateToString(rai::EvmSessionState state)
+{
+    switch (state)
+    {
+        case rai::EvmSessionState::INIT:
+        {
+            return "init";
+        }
+        case rai::EvmSessionState::BLOCK_HEIGHT_QUERY:
+        {
+            return "block_height_query";
+        }
+        case rai::EvmSessionState::BLOCK_HEIGHT_RECEIVED:
+        {
+            return "block_height_received";
+        }
+        case rai::EvmSessionState::LOGS_QUERY:
+        {
+            return "logs_query";
+        }
+        case rai::EvmSessionState::SUCCESS:
+        {
+            return "success";
+        }
+        case rai::EvmSessionState::FAILED:
+        {
+            return "failed";
+        }
+        default:
+        {
+            return "unknown";
+        }
+    }
+}
+
 rai::EvmBlockEvents::EvmBlockEvents(uint64_t height, const rai::BlockHash& hash)
     : height_(height), hash_(hash)
 {
@@ -280,6 +315,20 @@ bool rai::EvmBlockEvents::AppendEvent(
     return true;
 }
 
+void rai::EvmBlockEvents::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("height", std::to_string(height_));
+    ptree.put("hash", hash_.StringHex());
+    rai::Ptree events;
+    for (const auto& i : events_)
+    {
+        rai::Ptree event;
+        i->Ptree(event);
+        events.push_back(std::make_pair("", event));
+    }
+    ptree.put_child("events", events);
+}
+
 rai::EvmSessionEntry::EvmSessionEntry(uint64_t index)
     : endpoint_index_(index),
       state_(rai::EvmSessionState::INIT),
@@ -333,6 +382,21 @@ bool rai::EvmSessionEntry::AppendBlock(rai::EvmBlockEvents&& block)
         block.hash_.StringHex()));
 
     return true;
+}
+
+void rai::EvmSessionEntry::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("endpoint_index", std::to_string(endpoint_index_));
+    ptree.put("state", rai::EvmSessionStateToString(state_));
+    ptree.put("head_height", std::to_string(head_height_));
+    rai::Ptree blocks;
+    for (const auto& i : blocks_)
+    {
+        rai::Ptree block;
+        i.Ptree(block);
+        blocks.push_back(std::make_pair("", block));
+    }
+    ptree.put_child("blocks", blocks);
 }
 
 rai::EvmSession::EvmSession(uint64_t id, uint64_t tail,
@@ -389,6 +453,21 @@ bool rai::EvmSession::AllEntriesEqual() const
     return true;
 }
 
+void rai::EvmSession::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("id", std::to_string(id_));
+    ptree.put("tail_height", std::to_string(tail_height_));
+    ptree.put("failed", rai::BoolToString(Failed()));
+    ptree.put("succeeded", rai::BoolToString(Succeeded()));
+    rai::Ptree entries;
+    for (const auto& i : entries_)
+    {
+        rai::Ptree entry;
+        i.Ptree(entry);
+        ptree.push_back(std::make_pair("", entry));
+    }
+}
+
 rai::EvmParser::EvmParser(rai::Token& token, const std::vector<rai::Url>& urls,
                           rai::Chain chain, uint64_t sync_interval,
                           uint64_t confirmations,
@@ -403,7 +482,8 @@ rai::EvmParser::EvmParser(rai::Token& token, const std::vector<rai::Url>& urls,
       since_height_(rai::ChainSinceHeight(chain)),
       core_contract_(core_contract),
       batch_(rai::EvmEndpoint::BATCH_MAX),
-      waiting_(false)
+      waiting_(false),
+      native_token_submitted_(false)
 {
     uint64_t index = 0;
     for (const auto& url : urls)
@@ -457,6 +537,12 @@ void rai::EvmParser::Run()
         return;
     }
 
+    if (!native_token_submitted_)
+    {
+        SubmitNativeToken_();
+        return;
+    }
+
     if (submitted_height_ < confirmed_height_)
     {
         SubmitBlocks_();
@@ -496,6 +582,8 @@ void rai::EvmParser::Status(rai::Ptree& ptree) const
     ptree.put("sync_interval", std::to_string(sync_interval_));
     ptree.put("confirmed_height", std::to_string(confirmed_height_));
     ptree.put("submitted_height", std::to_string(submitted_height_));
+    ptree.put("batch_size", std::to_string(batch_));
+    ptree.put("waiting", rai::BoolToString(waiting_));
 
     rai::Ptree endpoints;
     for (const auto& i : endpoints_)
@@ -520,6 +608,26 @@ void rai::EvmParser::Status(rai::Ptree& ptree) const
         endpoints.push_back(std::make_pair("", entry));
     }
     ptree.put_child("endpoints", endpoints);
+
+    rai::Ptree session;
+    if (session_)
+    {
+        session_->Ptree(session);
+        ptree.put_child("session", session);
+    }
+
+    rai::Ptree blocks;
+    for (const auto& i : blocks_)
+    {
+        if (i.second.events_.size() == 0)
+        {
+            continue;
+        }
+        rai::Ptree block;
+        i.second.Ptree(block);
+        blocks.push_back(std::make_pair("", block));
+    }
+    ptree.put_child("blocks", blocks);
 }
 
 void rai::EvmParser::Receive(uint64_t index, uint64_t request_id,
@@ -618,10 +726,22 @@ void rai::EvmParser::OnBlocksSubmitted(
             return;
         }
 
+        submitted_height_ = i.block_height_;
         blocks_.erase(it);
     }
 
     SubmitBlocks_();
+}
+
+void rai::EvmParser::OnNativeTokenSubmitted(rai::ErrorCode error_code)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    waiting_ = false;
+
+    if (error_code == rai::ErrorCode::SUCCESS)
+    {
+        native_token_submitted_ = true;
+    }
 }
 
 void rai::EvmParser::Send_(rai::EvmEndpoint& endpoint,
@@ -925,17 +1045,17 @@ void rai::EvmParser::QueryLogs_(rai::EvmEndpoint& endpoint, uint64_t session_id,
     rai::Ptree params;
     rai::Ptree entry;
     entry.put("address", core_contract_);
-    entry.put("fromBlock",
-               rai::uint256_union(tail_height).StringEvmShortHex());
+    entry.put("fromBlock", rai::uint256_union(tail_height).StringEvmShortHex());
     entry.put("toBlock", rai::uint256_union(head_height).StringEvmShortHex());
     params.push_back(std::make_pair("", entry));
     Send_(endpoint, "eth_getLogs", params,
           std::bind(&EvmParser::QueryLogsCallback_, this, session_id,
-                    std::placeholders::_1, std::placeholders::_3,
+                    head_height, std::placeholders::_1, std::placeholders::_3,
                     std::placeholders::_4));
 }
 
 void rai::EvmParser::QueryLogsCallback_(uint64_t session_id,
+                                        uint64_t head_height,
                                         uint64_t endpoint_index,
                                         rai::ErrorCode error_code,
                                         const rai::Ptree& ptree)
@@ -1011,7 +1131,7 @@ void rai::EvmParser::QueryLogsCallback_(uint64_t session_id,
 
         entry.state_ = rai::EvmSessionState::SUCCESS;
         endpoint.DetectBatch(batch_);
-        TrySubmitSession_();
+        TrySubmitSession_(head_height);
         return;
     }
 }
@@ -1063,7 +1183,7 @@ boost::optional<rai::EvmSession> rai::EvmParser::MakeSession_()
     return rai::EvmSession(++session_id_, confirmed_height_ + 1, indices);
 }
 
-void rai::EvmParser::TrySubmitSession_()
+void rai::EvmParser::TrySubmitSession_(uint64_t head_height)
 {
     if (!session_)
     {
@@ -1087,22 +1207,24 @@ void rai::EvmParser::TrySubmitSession_()
 
     rai::EvmSessionEntry& entry = session_->entries_[0];
     if (session_->tail_height_ != confirmed_height_ + 1
-        || session_->tail_height_ < entry.head_height_)
+        || session_->tail_height_ > head_height
+        || entry.head_height_ < head_height)
     {
         rai::Log::Error(rai::ToString(
             "EvmParser::TrySubmitSession_: unexpected height, tail_height=",
-            session_->tail_height_, ", head_height=", entry.head_height_,
-            ", confirmed_height_=", confirmed_height_));
+            session_->tail_height_, ", head_height=", head_height,
+            ", confirmed_height_=", confirmed_height_,
+            ", entry.head_height_=", entry.head_height_));
         return;
     }
 
-    if (entry.head_height_ > confirmed_height_ + confirmations_)
+    if (head_height > confirmed_height_ + confirmations_)
     {
-        confirmed_height_ = entry.head_height_ - confirmations_;
+        confirmed_height_ = head_height - confirmations_;
     }
 
     size_t i = 0;
-    for (uint64_t height = session_->tail_height_; height <= entry.head_height_;
+    for (uint64_t height = session_->tail_height_; height <= head_height;
          ++height)
     {
         rai::EvmBlockEvents block(height, rai::BlockHash(0));
@@ -1124,6 +1246,7 @@ void rai::EvmParser::TrySubmitSession_()
     }
 
     SubmitBlocks_();
+    DoubleBatch_();
 }
 
 void rai::EvmParser::RunSession_(rai::EvmSession& session)
@@ -2286,6 +2409,19 @@ void rai::EvmParser::HalveBatch_()
     }
 }
 
+void rai::EvmParser::DoubleBatch_()
+{
+    batch_ *= 2;
+    if (batch_ > rai::EvmEndpoint::BATCH_MAX)
+    {
+        batch_ = rai::EvmEndpoint::BATCH_MAX;
+    }
+    if (batch_ == 0)
+    {
+        batch_ = 1;
+    }
+}
+
 void rai::EvmParser::SubmitBlocks_()
 {
     if (waiting_)
@@ -2326,4 +2462,18 @@ void rai::EvmParser::SubmitBlocks_()
     token_.SubmitCrossChainBlocks(
         blocks, std::bind(&EvmParser::OnBlocksSubmitted, this,
                           std::placeholders::_1, std::placeholders::_2));
+}
+
+void rai::EvmParser::SubmitNativeToken_()
+{
+    if (waiting_ || native_token_submitted_)
+    {
+        return;
+    }
+    rai::TokenInfo info(rai::TokenType::_20, "", "", 18, false, false, true, 0,
+                        since_height_);
+    waiting_ = true;
+    token_.SubmitChainNativeToken(chain_, info,
+                                  std::bind(&EvmParser::OnNativeTokenSubmitted,
+                                            this, std::placeholders::_1));
 }

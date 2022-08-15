@@ -12,6 +12,43 @@ bool CrossChainEventEqual(const T& first, const rai::CrossChainEvent& second)
 }
 }  // namespace
 
+std::string rai::CrossChainEventTypeToString(rai::CrossChainEventType type)
+{
+    switch (type)
+    {
+    case rai::CrossChainEventType::INVALID:
+    {
+        return "invalid";
+    }
+    case rai::CrossChainEventType::TOKEN:
+    {
+        return "token";
+    }
+    case rai::CrossChainEventType::CREATE:
+    {
+        return "create";
+    }
+    case rai::CrossChainEventType::MAP:
+    {
+        return "map";
+    }
+    case rai::CrossChainEventType::UNMAP:
+    {
+        return "unmap";
+    }
+    case rai::CrossChainEventType::WRAP:
+    {
+        return "wrap";
+    }
+    case rai::CrossChainEventType::UNWRAP:
+    {
+        return "unwrap";
+    }
+    default:
+        return "unknown";
+    }
+}
+
 bool rai::CrossChainEvent::operator!=(const rai::CrossChainEvent& other) const
 {
     return !(*this == other);
@@ -69,6 +106,20 @@ rai::Chain rai::CrossChainTokenEvent::Chain() const
     return chain_;
 }
 
+void rai::CrossChainTokenEvent::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("type", rai::CrossChainEventTypeToString(type_));
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("index", std::to_string(index_));
+    ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    ptree.put("address", address_.StringHex());
+    ptree.put("token_type", rai::TokenTypeToString(token_type_));
+    ptree.put("decimals", std::to_string(decimals_));
+    ptree.put("wrapped", rai::BoolToString(wrapped_));
+    ptree.put("txn_hash", tx_hash_.StringHex());
+}
+
 rai::CrossChainCreateEvent::CrossChainCreateEvent(
     uint64_t height, uint64_t index, rai::Chain chain,
     const rai::TokenAddress& address, rai::TokenType token_type,
@@ -123,6 +174,22 @@ rai::Chain rai::CrossChainCreateEvent::Chain() const
     return chain_;
 }
 
+void rai::CrossChainCreateEvent::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("type", rai::CrossChainEventTypeToString(type_));
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("index", std::to_string(index_));
+    ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    ptree.put("address", address_.StringHex());
+    ptree.put("token_type", rai::TokenTypeToString(token_type_));
+    ptree.put("original_chain", rai::ChainToString(original_chain_));
+    ptree.put("original_chain_id",
+              std::to_string(static_cast<uint32_t>(original_chain_)));
+    ptree.put("original_address", original_address_.StringHex());
+    ptree.put("txn_hash", tx_hash_.StringHex());
+}
+
 rai::CrossChainMapEvent::CrossChainMapEvent(
     uint64_t height, uint64_t index, rai::Chain chain,
     const rai::TokenAddress& address, rai::TokenType token_type,
@@ -175,6 +242,21 @@ uint64_t rai::CrossChainMapEvent::Index() const
 rai::Chain rai::CrossChainMapEvent::Chain() const
 {
     return chain_;
+}
+
+void rai::CrossChainMapEvent::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("type", rai::CrossChainEventTypeToString(type_));
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("index", std::to_string(index_));
+    ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    ptree.put("address", address_.StringHex());
+    ptree.put("token_type", rai::TokenTypeToString(token_type_));
+    ptree.put("from", from_.StringHex());
+    ptree.put("to", to_.StringAccount());
+    ptree.put("value", value_.StringDec());
+    ptree.put("txn_hash", tx_hash_.StringHex());
 }
 
 rai::CrossChainUnmapEvent::CrossChainUnmapEvent(
@@ -233,6 +315,23 @@ uint64_t rai::CrossChainUnmapEvent::Index() const
 rai::Chain rai::CrossChainUnmapEvent::Chain() const
 {
     return chain_;
+}
+
+void rai::CrossChainUnmapEvent::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("type", rai::CrossChainEventTypeToString(type_));
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("index", std::to_string(index_));
+    ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    ptree.put("address", address_.StringHex());
+    ptree.put("token_type", rai::TokenTypeToString(token_type_));
+    ptree.put("from", from_.StringAccount());
+    ptree.put("from_height", std::to_string(from_height_));
+    ptree.put("from_txn_hash", from_tx_hash_.StringHex());
+    ptree.put("to", to_.StringAccount());
+    ptree.put("value", value_.StringDec());
+    ptree.put("txn_hash", tx_hash_.StringHex());
 }
 
 rai::CrossChainWrapEvent::CrossChainWrapEvent(
@@ -298,6 +397,27 @@ rai::Chain rai::CrossChainWrapEvent::Chain() const
     return chain_;
 }
 
+void rai::CrossChainWrapEvent::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("type", rai::CrossChainEventTypeToString(type_));
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("index", std::to_string(index_));
+    ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    ptree.put("address", address_.StringHex());
+    ptree.put("token_type", rai::TokenTypeToString(token_type_));
+    ptree.put("original_chain", rai::ChainToString(original_chain_));
+    ptree.put("original_chain_id",
+              std::to_string(static_cast<uint32_t>(original_chain_)));
+    ptree.put("original_address", original_address_.StringHex());
+    ptree.put("from", from_.StringAccount());
+    ptree.put("from_height", std::to_string(from_height_));
+    ptree.put("from_txn_hash", from_tx_hash_.StringHex());
+    ptree.put("to", to_.StringHex());
+    ptree.put("value", value_.StringDec());
+    ptree.put("txn_hash", tx_hash_.StringHex());
+}
+
 rai::CrossChainUnwrapEvent::CrossChainUnwrapEvent(
     uint64_t height, uint64_t index, rai::Chain chain,
     const rai::TokenAddress& address, rai::TokenType token_type,
@@ -355,6 +475,25 @@ uint64_t rai::CrossChainUnwrapEvent::Index() const
 rai::Chain rai::CrossChainUnwrapEvent::Chain() const
 {
     return chain_;
+}
+
+void rai::CrossChainUnwrapEvent::Ptree(rai::Ptree& ptree) const
+{
+    ptree.put("type", rai::CrossChainEventTypeToString(type_));
+    ptree.put("block_height", std::to_string(block_height_));
+    ptree.put("index", std::to_string(index_));
+    ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
+    ptree.put("address", address_.StringHex());
+    ptree.put("token_type", rai::TokenTypeToString(token_type_));
+    ptree.put("original_chain", rai::ChainToString(original_chain_));
+    ptree.put("original_chain_id",
+              std::to_string(static_cast<uint32_t>(original_chain_)));
+    ptree.put("original_address", original_address_.StringHex());
+    ptree.put("from", from_.StringHex());
+    ptree.put("to", to_.StringAccount());
+    ptree.put("value", value_.StringDec());
+    ptree.put("txn_hash", tx_hash_.StringHex());
 }
 
 rai::CrossChainBlockEvents::CrossChainBlockEvents(
