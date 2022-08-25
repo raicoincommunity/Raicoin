@@ -1164,6 +1164,32 @@ bool rai::Token::MakeAccountTokenBalancePtree(
     return false;
 }
 
+bool rai::Token::MakeTokenMapInfoPtree(rai::Transaction& transaction,
+                                       const rai::TokenMapKey& key,
+                                       const rai::TokenMapInfo& map,
+                                       std::string& error_info,
+                                       rai::Ptree& ptree) const
+{
+    ptree.put("account", key.to_.StringAccount());
+    ptree.put("height", std::to_string(key.height_));
+    ptree.put("index", std::to_string(key.index_));
+    TokenKeyToPtree(map.token_, ptree);
+    rai::TokenInfo token_info;
+    bool error = ledger_.TokenInfoGet(transaction, map.token_, token_info);
+    if (error)
+    {
+        error_info = "token not created";
+        return true;
+    }
+    ptree.put("type", rai::TokenTypeToString(token_info.type_));
+    ptree.put("decimals", std::to_string(token_info.decimals_));
+    ptree.put("value", map.value_.StringDec());
+    ptree.put("from", map.from_.StringHex());
+    ptree.put("to", key.to_.StringAccount());
+    ptree.put("source_transaction", map.source_tx_hash_.StringHex());
+    return false;
+}
+
 bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
                                          const rai::Account& account,
                                          uint64_t height,
@@ -1173,8 +1199,7 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
 {
     ptree.put("account", account.StringAccount());
     ptree.put("height", std::to_string(height));
-    rai::Ptree token;
-    TokenKeyToPtree(unmap.token_, token);
+    TokenKeyToPtree(unmap.token_, ptree);
     rai::TokenInfo token_info;
     bool error = ledger_.TokenInfoGet(transaction, unmap.token_, token_info);
     if (error)
@@ -1182,9 +1207,10 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
         error_info = "token not created";
         return true;
     }
-    TokenInfoToPtree(token_info, token);
-    ptree.put_child("token", token);
+    ptree.put("type", rai::TokenTypeToString(token_info.type_));
+    ptree.put("decimals", std::to_string(token_info.decimals_));
     ptree.put("value", unmap.value_.StringDec());
+    ptree.put("from", account.StringAccount());
     ptree.put("to", unmap.to_.StringHex());
     ptree.put("source_transaction", unmap.source_tx_.StringHex());
     std::shared_ptr<rai::Block> block;
@@ -1198,8 +1224,24 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
     block->SerializeJson(block_ptree);
     ptree.put_child("source_block", block_ptree);
     ptree.put("extra_data", std::to_string(unmap.extra_data_));
-    ptree.put("target_transaction", unmap.target_tx_.StringHex());
-    ptree.put("target_height", std::to_string(unmap.target_height_));
+    rai::BlockHash target_tx = unmap.target_tx_;
+    uint64_t target_height = unmap.target_height_;
+    if (target_tx.IsZero())
+    {
+        ptree.put("target_confirmed", rai::BoolToString(false));
+        auto event = PendingUnmapEvent(unmap.token_.chain_, unmap.source_tx_);
+        if (event)
+        {
+            target_tx = event->tx_hash_;
+            target_height = event->block_height_;
+        }
+    }
+    else
+    {
+        ptree.put("target_confirmed", rai::BoolToString(true));
+    }
+    ptree.put("target_transaction", target_tx.StringHex());
+    ptree.put("target_height", std::to_string(target_height));
     return false;
 }
 
@@ -1242,6 +1284,32 @@ bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
     ptree.put("target_transaction", wrap.target_tx_.StringHex());
     ptree.put("target_height", std::to_string(wrap.target_height_));
     return false;
+}
+
+std::shared_ptr<rai::CrossChainUnmapEvent> rai::Token::PendingUnmapEvent(
+    rai::Chain chain, const rai::BlockHash& source_hash) const
+{
+    std::shared_ptr<rai::BaseParser> parser = cross_chain_.Parser(chain);
+    if (!parser)
+    {
+        return nullptr;
+    }
+
+    auto events = parser->Events([&](const rai::CrossChainEvent& event) {
+        if (event.Type() != rai::CrossChainEventType::UNMAP)
+        {
+            return false;
+        }
+        const rai::CrossChainUnmapEvent& unmap =
+            static_cast<const rai::CrossChainUnmapEvent&>(event);
+        return unmap.from_tx_hash_ == source_hash;
+    });
+
+    if (events.empty())
+    {
+        return nullptr;
+    }
+    return std::static_pointer_cast<rai::CrossChainUnmapEvent>(events[0]);
 }
 
 std::vector<rai::BlockType> rai::Token::BlockTypes()
@@ -1290,6 +1358,9 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_ID_OWNER);
     info.actions_.push_back(P::Action::TOKEN_UNMAP_INFO);
     info.actions_.push_back(P::Action::TOKEN_WRAP_INFO);
+    info.actions_.push_back(P::Action::TOKEN_MAP_INFOS);
+    info.actions_.push_back(P::Action::TOKEN_PENDING_MAP_INFOS);
+    info.actions_.push_back(P::Action::TOKEN_UNMAP_INFOS);
     // todo:
 
     return info;

@@ -72,6 +72,10 @@ public:
         TOKEN_ID_OWNER                      = 229,
         TOKEN_UNMAP_INFO                    = 230,
         TOKEN_WRAP_INFO                     = 231,
+        TOKEN_MAP_INFO                      = 232,
+        TOKEN_MAP_INFOS                     = 233,
+        TOKEN_PENDING_MAP_INFOS             = 234,
+        TOKEN_UNMAP_INFOS                   = 235,
 
     };
     static std::string ToString(Action);

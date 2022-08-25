@@ -83,6 +83,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         OrderSwaps();
     }
+    else if (action == "pending_token_map_infos")
+    {
+        PendingTokenMapInfos();
+    }
     else if (action == "previous_account_token_links")
     {
         PreviousAccountTokenLinks();
@@ -147,9 +151,21 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         TokenReceivablesSummary();
     }
+    else if (action == "token_map_info")
+    {
+        TokenMapInfo();
+    }
+    else if (action == "token_map_infos")
+    {
+        TokenMapInfos();
+    }
     else if (action == "token_unmap_info")
     {
         TokenUnmapInfo();
+    }
+    else if (action == "token_unmap_infos")
+    {
+        TokenUnmapInfos();
     }
     else if (action == "token_wrap_info")
     {
@@ -1000,6 +1016,59 @@ void rai::TokenRpcHandler::OrderSwaps()
 
     response_.put_child("swaps", swaps);
     response_.put("more", rai::BoolToString(i != n));
+}
+
+void rai::TokenRpcHandler::PendingTokenMapInfos()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+    response_.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
+
+    auto parser = token_.cross_chain_.Parser(chain);
+    if (!parser)
+    {
+        response_.put("error", "Failed to get parser");
+        return;
+    }
+
+    auto events = parser->Events([&](const rai::CrossChainEvent& event) {
+        if (event.Type() != rai::CrossChainEventType::MAP)
+        {
+            return false;
+        }
+        const rai::CrossChainMapEvent& map =
+            static_cast<const rai::CrossChainMapEvent&>(event);
+        return map.to_ == account;
+    });
+
+    rai::Ptree maps;
+    for (auto i = events.rbegin(), n = events.rend(); i != n; ++i)
+    {
+        const rai::CrossChainMapEvent& map =
+            static_cast<const rai::CrossChainMapEvent&>(**i);
+        rai::Ptree entry;
+        entry.put("account", map.to_.StringAccount());
+        entry.put("height", std::to_string(map.block_height_));
+        entry.put("index", std::to_string(map.index_));
+        entry.put("chain", rai::ChainToString(chain));
+        entry.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
+        entry.put("address", rai::TokenAddressToString(chain, map.address_));
+        entry.put("address_raw", map.address_.StringHex());
+        entry.put("type", rai::TokenTypeToString(map.token_type_));
+        entry.put("value", map.value_.StringDec());
+        entry.put("from", map.from_.StringHex());
+        entry.put("to", map.to_.StringAccount());
+        entry.put("source_transaction", map.tx_hash_.StringHex());
+        maps.push_back(std::make_pair("", entry));
+    }
+    response_.put_child("maps", maps);
 }
 
 void rai::TokenRpcHandler::PreviousAccountTokenLinks()
@@ -1953,6 +2022,121 @@ void rai::TokenRpcHandler::TokenReceivablesSummary()
     response_.put_child("tokens", tokens);
 }
 
+void rai::TokenRpcHandler::TokenMapInfo()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+    response_.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
+
+    uint64_t height;
+    error = GetHeight_(height);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("height", std::to_string(height));
+
+    uint64_t index;
+    error = GetIndex_(index);
+    IF_ERROR_RETURN_VOID(error);
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::TokenMapKey key(account, chain, height, index);
+    rai::TokenMapInfo info;
+    error = token_.ledger_.TokenMapInfoGet(transaction, key, info);
+    if (error)
+    {
+        response_.put("error", "missing");
+        return;
+    }
+
+    std::string error_info;
+    error = token_.MakeTokenMapInfoPtree(transaction, key, info,
+                                         error_info, response_);
+    if (error)
+    {
+        response_.put("error", error_info);
+        return;
+    }
+}
+
+void rai::TokenRpcHandler::TokenMapInfos()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    rai::Chain chain;
+    error = GetChain_(chain);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("chain", rai::ChainToString(chain));
+    response_.put("chain_id", std::to_string(static_cast<uint32_t>(chain)));
+
+    uint64_t height;
+    error = GetHeight_(height);
+    if (error)
+    {
+        height = std::numeric_limits<uint64_t>::max();
+    }
+    response_.put("height", std::to_string(height));
+
+    uint64_t index;
+    error = GetIndex_(index);
+    if (error)
+    {
+        index = std::numeric_limits<uint64_t>::max();
+    }
+    response_.put("index", std::to_string(index));
+
+    uint64_t count;
+    error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree maps;
+    rai::Iterator i = token_.ledger_.TokenMapInfoLowerBound(
+        transaction, account, chain, height, index);
+    rai::Iterator n =
+        token_.ledger_.TokenMapInfoUpperBound(transaction, account, chain);
+    for (; i != n && count > 0; ++i, --count)
+    {
+        rai::TokenMapKey key;
+        rai::TokenMapInfo info;
+        error = token_.ledger_.TokenMapInfoGet(i, key, info);
+        if (error)
+        {
+            response_.put("error", "Failed to get token map info");
+            return;
+        }
+
+        std::string error_info;
+        rai::Ptree map;
+        error = token_.MakeTokenMapInfoPtree(transaction, key, info, error_info,
+                                             map);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+
+        maps.push_back(std::make_pair("", map));
+    }
+
+    response_.put_child("maps", maps);
+    response_.put("more", rai::BoolToString(i != n));
+}
+
 void rai::TokenRpcHandler::TokenUnmapInfo()
 {
     rai::Account account;
@@ -1984,6 +2168,62 @@ void rai::TokenRpcHandler::TokenUnmapInfo()
         response_.put("error", error_info);
         return;
     }
+}
+
+void rai::TokenRpcHandler::TokenUnmapInfos()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    if (error)
+    {
+        height = std::numeric_limits<uint64_t>::max();
+    }
+    response_.put("height", std::to_string(height));
+
+    uint64_t count;
+    error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree unmaps;
+    rai::Iterator i =
+        token_.ledger_.TokenUnmapInfoLowerBound(transaction, account, height);
+    rai::Iterator n =
+        token_.ledger_.TokenUnmapInfoUpperBound(transaction, account);
+    for (; i != n && count > 0; ++i, --count)
+    {
+        rai::TokenUnmapInfo info;
+        error = token_.ledger_.TokenUnmapInfoGet(i, account, height, info);
+        if (error)
+        {
+            response_.put("error", "Failed to get token unmap info");
+            return;
+        }
+
+        std::string error_info;
+        rai::Ptree unmap;
+        error = token_.MakeTokenUnmapInfoPtree(transaction, account, height,
+                                               info, error_info, unmap);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+
+        unmaps.push_back(std::make_pair("", unmap));
+    }
+
+    response_.put_child("unmaps", unmaps);
+    response_.put("more", rai::BoolToString(i != n));
 }
 
 void rai::TokenRpcHandler::TokenWrapInfo()
@@ -2276,6 +2516,25 @@ bool rai::TokenRpcHandler::GetOrder_(rai::Account& maker,
     {
         error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_ORDER_HEIGHT;
         return true;
+    }
+
+    return false;
+}
+
+bool rai::TokenRpcHandler::GetIndex_(uint64_t& index)
+{
+    auto index_o = request_.get_optional<std::string>("index");
+    if (!index_o)
+    {
+        error_code_ = rai::ErrorCode::RPC_MISS_FIELD_INDEX;
+        return true;
+    }
+
+    bool error = rai::StringToUint(*index_o, index);
+    if (error)
+    {
+        error_code_ = rai::ErrorCode::RPC_INVALID_FIELD_INDEX;
+        return  true;
     }
 
     return false;

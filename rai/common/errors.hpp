@@ -328,6 +328,8 @@ enum class ErrorCode : int
     RPC_INVALID_FIELD_ORDER_HEIGHT      = 373,
     RPC_MISS_FIELD_CHAIN_ID             = 374,
     RPC_INVALID_FIELD_CHAIN_ID          = 375,
+    RPC_MISS_FIELD_INDEX                = 376,
+    RPC_INVALID_FIELD_INDEX             = 377,
 
 
     // Block process errors: 400 ~ 499

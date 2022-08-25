@@ -630,6 +630,29 @@ void rai::EvmParser::Status(rai::Ptree& ptree) const
     ptree.put_child("blocks", blocks);
 }
 
+rai::Chain rai::EvmParser::Chain() const
+{
+    return chain_;
+}
+
+std::vector<std::shared_ptr<rai::CrossChainEvent>> rai::EvmParser::Events(
+    const std::function<bool(const rai::CrossChainEvent&)>& predicate) const
+{
+    std::vector<std::shared_ptr<rai::CrossChainEvent>> result;
+    std::unique_lock<std::mutex> lock(mutex_);
+    for (const auto& i : blocks_)
+    {
+        for (const auto& j : i.second.events_)
+        {
+            if (predicate(*j))
+            {
+                result.push_back(j);
+            }
+        }
+    }
+    return result;
+}
+
 void rai::EvmParser::Receive(uint64_t index, uint64_t request_id,
                              rai::ErrorCode error_code,
                              const std::string& response,
@@ -2396,7 +2419,7 @@ bool rai::EvmParser::MakeBool_(const rai::uint256_union& data, bool& b) const
         return true;
     }
 
-    b = data == 0;
+    b = data == 1;
     return false;
 }
 

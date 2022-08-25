@@ -7,7 +7,7 @@
 
 rai::CrossChainParser::CrossChainParser(
     const std::shared_ptr<rai::BaseParser>& parser)
-    : wakeup_(), parser_(parser)
+    : chain_(parser->Chain()), wakeup_(), parser_(parser)
 {
 }
 
@@ -124,4 +124,16 @@ void rai::CrossChain::Status(rai::Ptree& ptree) const
     }
     ptree.add_child("parsers", parsers);
     ptree.put("parser_count", std::to_string(parsers_.size()));
+}
+
+std::shared_ptr<rai::BaseParser> rai::CrossChain::Parser(rai::Chain chain) const
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    const auto& index = parsers_.get<1>();
+    auto it = index.find(chain);
+    if (it == index.end())
+    {
+        return nullptr;
+    }
+    return it->parser_;
 }

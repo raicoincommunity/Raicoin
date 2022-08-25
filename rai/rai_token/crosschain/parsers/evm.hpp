@@ -141,6 +141,9 @@ public:
     virtual void Run() override;
     virtual uint64_t Delay() const override;
     virtual void Status(rai::Ptree&) const override;
+    virtual rai::Chain Chain() const override;
+    virtual std::vector<std::shared_ptr<rai::CrossChainEvent>> Events(
+        const std::function<bool(const rai::CrossChainEvent&)>&) const override;
 
     void Receive(uint64_t, uint64_t, rai::ErrorCode, const std::string&,
                  const EvmRequestCallback&);
