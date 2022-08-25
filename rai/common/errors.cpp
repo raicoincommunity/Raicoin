@@ -1372,6 +1372,14 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "[RPC] Invalid chain_id field";
         }
+        case rai::ErrorCode::RPC_MISS_FIELD_INDEX:
+        {
+            return "[RPC] The index field is missing";
+        }
+        case rai::ErrorCode::RPC_INVALID_FIELD_INDEX:
+        {
+            return "[RPC] Invalid index field";
+        }
         case rai::ErrorCode::BLOCK_PROCESS_GENERIC:
         {
             return "Error in block processor";

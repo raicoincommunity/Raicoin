@@ -222,6 +222,22 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_wrap_info";
         }
+        case rai::Provider::Action::TOKEN_MAP_INFO:
+        {
+            return "token_map_info";
+        }
+        case rai::Provider::Action::TOKEN_MAP_INFOS:
+        {
+            return "token_map_infos";
+        }
+        case rai::Provider::Action::TOKEN_PENDING_MAP_INFOS:
+        {
+            return "pending_token_map_infos";
+        }
+        case rai::Provider::Action::TOKEN_UNMAP_INFOS:
+        {
+            return "token_unmap_infos";
+        }
         default:
         {
             return "";

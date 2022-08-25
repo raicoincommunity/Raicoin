@@ -136,12 +136,17 @@ public:
                                        const rai::TokenKey&, rai::TokenType,
                                        const boost::optional<rai::TokenValue>&,
                                        std::string&, rai::Ptree&) const;
+    bool MakeTokenMapInfoPtree(rai::Transaction&, const rai::TokenMapKey&,
+                               const rai::TokenMapInfo&, std::string&,
+                               rai::Ptree&) const;
     bool MakeTokenUnmapInfoPtree(rai::Transaction&, const rai::Account&,
                                  uint64_t, const rai::TokenUnmapInfo&,
                                  std::string&, rai::Ptree&) const;
     bool MakeTokenWrapInfoPtree(rai::Transaction&, const rai::Account&,
                                 uint64_t, const rai::TokenWrapInfo&,
                                 std::string&, rai::Ptree&) const;
+    std::shared_ptr<rai::CrossChainUnmapEvent> PendingUnmapEvent(
+        rai::Chain, const rai::BlockHash&) const;
     static std::vector<rai::BlockType> BlockTypes();
     static rai::Provider::Info Provide();
 

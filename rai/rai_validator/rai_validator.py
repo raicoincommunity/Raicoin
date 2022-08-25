@@ -753,7 +753,7 @@ class EvmChainValidator:
         self.token_symbols = {}
         self.token_names = {}
         self.token_types = {}
-        self.token_decimals = {}
+        self.token_decimals_entries = {}
 
         if len(self.endpoints) == 0:
             print("[ERROR] No endpoints found while constructing EvmChainValidator")
@@ -1324,11 +1324,13 @@ class EvmChainValidator:
         info = {
             'chain': to_chain_str(self.chain_id).value,
             'chain_id': str(int(self.chain_id)),
+            'confirmations': str(self.confirmations),
             'fee': str(self.fee) if self.fee else '0',
             'total_weight': str(self.total_weight) if self.total_weight != None else '',
             'genesis_validator': self.genesis_validator,
             'genesis_signer': self.genesis_signer,
             'genesis_weight': str(self.genesis_weight()),
+            'height': str(self.synced_height) if self.synced_height != None else '0',
         }
         if self.validators != None:
             info['validators'] = [{
@@ -2079,8 +2081,8 @@ class EvmChainValidator:
 
     async def token_decimals(self, _: str, req: dict) -> dict:
         address = req['address']
-        if address in self.token_decimals:
-            return {'decimals': self.token_decimals[address]}
+        if address in self.token_decimals_entries:
+            return {'decimals': str(self.token_decimals_entries[address])}
         error, block_number = await self.get_block_number()
         if error:
             return {'error': 'failed to get block_number'}
@@ -2088,8 +2090,8 @@ class EvmChainValidator:
         error, decimals = await self.get_erc20_decimals(address, block_number)
         if error:
             return {'error': 'failed to get token decimals'}
-        self.token_decimals[address] = decimals
-        return {'decimals': decimals}
+        self.token_decimals_entries[address] = decimals
+        return {'decimals': str(decimals)}
 
     def debug_json_encode(self) -> dict:
         result = {}
@@ -2811,9 +2813,11 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        LOOP.run_until_complete(end())
-
-    LOOP.close()
+        try:
+            LOOP.run_until_complete(end())
+            LOOP.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     if TEST_MODE:

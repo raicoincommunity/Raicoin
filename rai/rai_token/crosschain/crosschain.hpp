@@ -19,6 +19,7 @@ class CrossChainParser
 public:
     CrossChainParser(const std::shared_ptr<rai::BaseParser>&);
 
+    rai::Chain chain_;
     std::chrono::steady_clock::time_point wakeup_;
     std::shared_ptr<rai::BaseParser> parser_;
 };
@@ -32,6 +33,7 @@ public:
     void Run();
     void Stop();
     void Status(rai::Ptree&) const;
+    std::shared_ptr<rai::BaseParser> Parser(rai::Chain) const;
 
     rai::Token& token_;
 
@@ -43,7 +45,9 @@ private:
         boost::multi_index::indexed_by<
             boost::multi_index::ordered_non_unique<boost::multi_index::member<
                 CrossChainParser, std::chrono::steady_clock::time_point,
-                &CrossChainParser::wakeup_>>>>
+                &CrossChainParser::wakeup_>>,
+            boost::multi_index::ordered_unique<boost::multi_index::member<
+                CrossChainParser, rai::Chain, &CrossChainParser::chain_>>>>
         parsers_;
     std::condition_variable condition_;
     std::thread thread_;

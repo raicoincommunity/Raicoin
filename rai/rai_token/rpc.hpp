@@ -35,6 +35,7 @@ public:
     void OrderCount();
     void OrderInfo();
     void OrderSwaps();
+    void PendingTokenMapInfos();
     void PreviousAccountTokenLinks();
     void PreviousTokenBlocks();
     void ReceivableTokens();
@@ -54,7 +55,10 @@ public:
     void TokenReceivables();
     void TokenReceivablesAll();
     void TokenReceivablesSummary();
+    void TokenMapInfo();
+    void TokenMapInfos();
     void TokenUnmapInfo();
+    void TokenUnmapInfos();
     void TokenWrapInfo();
 
 private:
@@ -69,6 +73,7 @@ private:
     bool GetTaker_(rai::Account&);
     bool GetInquiryHeight_(uint64_t&);
     bool GetOrder_(rai::Account&, uint64_t&);
+    bool GetIndex_(uint64_t&);
     bool PutTokenBlock_(rai::Transaction&, uint64_t, const rai::TokenBlock&,
                         rai::Ptree&);
 

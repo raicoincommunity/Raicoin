@@ -1585,6 +1585,7 @@ rai::ErrorCode rai::ExtensionTokenInfo::Deserialize(rai::Stream& stream)
 void rai::ExtensionTokenInfo::SerializeJson(rai::Ptree& ptree) const
 {
     ptree.put("chain", rai::ChainToString(chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(chain_)));
     ptree.put("type", rai::TokenTypeToString(type_));
     ptree.put("address", rai::TokenAddressToString(chain_, address_));
     ptree.put("address_raw", address_.StringHex());
@@ -1596,8 +1597,21 @@ rai::ErrorCode rai::ExtensionTokenInfo::DeserializeJson(const rai::Ptree& ptree)
     try
     {
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_CHAIN;
-        std::string chain = ptree.get<std::string>("chain");
-        chain_ = rai::StringToChain(chain);
+        auto chain_o = ptree.get_optional<std::string>("chain");
+        if (chain_o)
+        {
+            chain_ = rai::StringToChain(*chain_o);
+        }
+        else
+        {
+            auto chain_id_str = ptree.get<std::string>("chain_id");
+            uint32_t chain_id;
+            if (rai::StringToUint(chain_id_str, chain_id))
+            {
+                return error_code;
+            }
+            chain_ = static_cast<rai::Chain>(chain_id);
+        }
         
         error_code = rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_TYPE;
         std::string type = ptree.get<std::string>("type");
