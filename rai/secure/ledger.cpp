@@ -905,13 +905,20 @@ rai::Iterator rai::Ledger::TokenMapInfoUpperBound(rai::Transaction& transaction,
                                                   const rai::Account& to,
                                                   rai::Chain chain) const
 {
-    rai::Account next(to + 1);
-    if (next.IsZero())
+    uint32_t next = static_cast<uint32_t>(chain) + 1;
+    rai::Account account(to);
+    if (next == 0)
+    {
+        account = to + 1;
+    }
+
+    if (account.IsZero())
     {
         return rai::Iterator(rai::StoreIterator(nullptr));
     }
 
-    return TokenMapInfoLowerBound(transaction, next, chain);
+    return TokenMapInfoLowerBound(transaction, account,
+                                  static_cast<rai::Chain>(next));
 }
 
 bool rai::Ledger::TokenUnmapInfoPut(rai::Transaction& transaction,

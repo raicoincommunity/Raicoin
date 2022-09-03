@@ -41,8 +41,8 @@ from eth_account._utils.structured_data.validation import validate_structured_da
 from collections import OrderedDict
 
 ALLOWED_RPC_ACTIONS = [
-    'service_subscribe', 'chain_info', 'sign_transfer', 'sign_creation', 'token_symbol',
-    'token_name', 'token_type', 'token_decimals'
+    'service_subscribe', 'chain_info', 'chain_head_height', 'sign_transfer', 'sign_creation',
+    'token_symbol', 'token_name', 'token_type', 'token_decimals'
 ]
 
 CLIENTS = {}
@@ -214,7 +214,7 @@ class Util:
             hex_str = hex_str[2:]
         return bytes.fromhex(hex_str)
     
-    def bytes_to_hex(value: bytes) -> str:
+    def bytes_to_hex(self, value: bytes) -> str:
         return f'0x{value.hex()}'.lower()
 
 UTIL = Util(USE_CLOUDFLARE, USE_NGINX)
@@ -307,7 +307,7 @@ class CallbackHelper:
     async def callback(self, key: int, *args, **kwargs):
         if key not in self.__data:
             return
-        await self.__data[key]['callback'](args, kwargs)
+        await self.__data[key]['callback'](*args, **kwargs)
         del self.__data[key]
 
     async def __call__(self):
@@ -525,6 +525,14 @@ class CrossChainMessage:
         self.destination = destination
         self.chain_id = chain_id
         self.source_signer = source_signer
+
+    def to_dict(self) -> dict:
+        return {
+            'source': self.source,
+            'destination': self.destination,
+            'chain_id': self.chain_id,
+            'source_signer': self.source_signer,
+        }
     
     def serialize(self) -> str:
         raise NotImplementedError
@@ -604,12 +612,28 @@ class TransferSignMessage(CrossChainMessage):
         self.request_id = request_id
         self.signature = signature
 
+    def __str__(self) -> str:
+        return json.dumps(self.to_dict())
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            'type': 'TransferSignMessage',
+            'is_request': self.is_request,
+            'account': self.account,
+            'height': self.height,
+            'opcode': self.opcode,
+            'request_id': self.request_id,
+            'signature':  UTIL.bytes_to_hex(self.signature)
+        })
+        return d
+
     def serialize(self, stream: BytesIO) -> str:
         Serializer.write_uint8(stream, CrossChainMessageType.TransferSign)
         Serializer.write_bool(stream, self.is_request)
         Serializer.write_uint256(stream, self.account)
         Serializer.write_uint64(stream, self.height)
-        Serializer.write_uin8(stream, int(self.opcode))
+        Serializer.write_uint8(stream, int(self.opcode))
         Serializer.write_uint256(stream, self.request_id)
         if not self.is_request:
             Serializer.write_bytes(stream, self.signature)
@@ -770,8 +794,15 @@ class EvmChainValidator:
             address = '0x' + address[24:]
         return Web3.toChecksumAddress(address)
 
+    def to_hex(self, address: Union[str, int]) -> str:
+        if isinstance(address, int):
+            return UTIL.uint256_to_hex(address)
+        if len(address) != 42 or not address.startswith('0x'):
+            raise ValueError("Invalid address")
+        return '0x000000000000000000000000' + address[2:].lower()
+
     async def process_bind_query_ack(self, validator: str, signer: str):
-        if NODE == None:
+        if not node_synced():
             return
         if validator != NODE['account_hex']:
             return
@@ -793,7 +824,7 @@ class EvmChainValidator:
 
     async def process_weight_sign_message(self, message: WeightSignMessage):
         global NODE
-        if NODE == None:
+        if not node_synced():
             return
         if message.is_request:
             if self.signer == None:
@@ -831,7 +862,6 @@ class EvmChainValidator:
     async def process_token_service_transfer_query_ack(self, sign: TransferSignMessage, ack: dict):
         if 'error' in ack:
             return
-        token = ack['token']
         error, account, _ = ACCOUNT.decode(ack['account'])
         height = int(ack['height'])
         if error:
@@ -839,31 +869,31 @@ class EvmChainValidator:
             return
         signature = None
         if sign.opcode == CrossChainOpcode.UNMAP and ack['ack'] == 'token_unmap_info':
-            if self.chain_id != int(token['chain_id']):
+            if self.chain_id != int(ack['chain_id']):
                 return
-            to = self.to_checksum_address(ack['to'])
+            to = self.to_checksum_address(ack['to_raw'])
             value = int(ack['value'])
             txn_hash = ack['source_transaction']
-            if self.is_native_token(token['address_raw']):
+            if self.is_native_token(ack['address_raw']):
                 signature = self.signUnmapETH(account, to, txn_hash, height, value)
-            elif token['type'] == '20':
+            elif ack['type'] == '20':
                 signature = self.signUnmapERC20(account, to, txn_hash, height, value)
-            elif token['type'] == '721':
+            elif ack['type'] == '721':
                 signature = self.signUnmapERC721(account, to, txn_hash, height, value)
             else:
                 return
         elif sign.opcode == CrossChainOpcode.WRAP and ack['ack'] == 'token_wrap_info':
             if self.chain_id != int(ack['to_chain_id']):
                 return
-            token_chain_id = int(token['chain_id'])
-            token_address = token['address_raw']
-            to = self.to_checksum_address(ack['to_account'])
+            token_chain_id = int(ack['chain_id'])
+            token_address = ack['address_raw']
+            to = self.to_checksum_address(ack['to_account_raw'])
             value = int(ack['value'])
             txn_hash = ack['source_transaction']
-            if token['type'] == '20':
+            if ack['type'] == '20':
                 signature = self.signWrapERC20Token(token_chain_id, token_address, account, to,
                     txn_hash, height, value)
-            elif token['type'] == '721':
+            elif ack['type'] == '721':
                 signature = self.signWrapERC721Token(token_chain_id, token_address, account, to,
                     txn_hash, height, value)
             else:
@@ -877,8 +907,7 @@ class EvmChainValidator:
         await send_cross_chain_message(response)
 
     async def process_transfer_sign_message(self, message: TransferSignMessage):
-        global NODE
-        if NODE == None:
+        if not node_synced():
             return
         if message.is_request:
             async def callback(ack: dict):
@@ -929,8 +958,7 @@ class EvmChainValidator:
         await send_cross_chain_message(response)
 
     async def process_creation_sign_message(self, message: CreationSignMessage):
-        global NODE
-        if NODE == None:
+        if not node_synced():
             return
         if message.is_request:
             if self.chain_id == message.original_chain_id:
@@ -949,7 +977,11 @@ class EvmChainValidator:
         else:
             await CALLBACK_HELPER.callback(message.request_id, message)
 
-    async def process_cross_chain_message(self, message: Union[WeightSignMessage, None]):
+    async def process_cross_chain_message(self, message: Union[WeightSignMessage, TransferSignMessage, CreationSignMessage]):
+        if message.source == self.genesis_validator:
+            if not self.genesis_signer_raw:
+                return
+            message.source_signer = self.genesis_signer_raw
         if isinstance(message, WeightSignMessage):
             await self.process_weight_sign_message(message)
         elif isinstance(message, TransferSignMessage):
@@ -968,7 +1000,7 @@ class EvmChainValidator:
             hash_eip712_message(structured_data),
         )
 
-    def eip721_base(self, contract: str):
+    def eip712_base(self, contract: str):
         return {
             "types": {
                 "EIP712Domain": [
@@ -986,8 +1018,8 @@ class EvmChainValidator:
             },
         }
 
-    def eip721_submit_validator(self, validator: str, signer: str, weight: int, epoch: int) -> SignableMessage:
-        data = self.eip721_base(self.validator_contract)
+    def eip712_submit_validator(self, validator: str, signer: str, weight: int, epoch: int) -> SignableMessage:
+        data = self.eip712_base(self.validator_contract)
         data['types']['SubmitValidator'] = [
             {"name": "validator", "type": "bytes32"},
             {"name": "signer", "type": "address"},
@@ -1004,7 +1036,7 @@ class EvmChainValidator:
         return self.encode_structured_data(data)
 
     def signSubmitValidator(self, validator: str, signer: str, weight: int, epoch: int) -> bytes:
-        signable = self.eip721_submit_validator(validator, signer, weight, epoch)
+        signable = self.eip712_submit_validator(validator, signer, weight, epoch)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
@@ -1012,12 +1044,12 @@ class EvmChainValidator:
         signature: bytes) -> bool:
         if len(signature) != 65:
             return True
-        signable = self.eip721_submit_validator(validator, signer, weight, epoch)
+        signable = self.eip712_submit_validator(validator, signer, weight, epoch)
         return self._account.recover_message(signable, signature) != self.to_checksum_address(signer)
 
-    def eip721_unmap_erc20(self, token: str, sender: str, recipient: str, txn_hash: str,
+    def eip712_unmap_erc20(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, share: int) -> SignableMessage:
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['UnmapERC20'] = [
             {"name": "token", "type": "address"},
             {"name": "sender", "type": "bytes32"},
@@ -1039,13 +1071,13 @@ class EvmChainValidator:
 
     def signUnmapERC20(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, share: int):
-        signable = self.eip721_unmap_erc20(token, sender, recipient, txn_hash, txn_height, share)
+        signable = self.eip712_unmap_erc20(token, sender, recipient, txn_hash, txn_height, share)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
-    def eip721_unmap_erc721(self, token: str, sender: str, recipient: str, txn_hash: str,
+    def eip712_unmap_erc721(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, token_id: int) -> SignableMessage:
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['UnmapERC721'] = [
             {"name": "token", "type": "address"},
             {"name": "sender", "type": "bytes32"},
@@ -1067,13 +1099,13 @@ class EvmChainValidator:
 
     def signUnmapERC721(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, token_id: int):
-        signable = self.eip721_unmap_erc721(token, sender, recipient, txn_hash, txn_height, token_id)
+        signable = self.eip712_unmap_erc721(token, sender, recipient, txn_hash, txn_height, token_id)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
-    def eip721_unmap_eth(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
+    def eip712_unmap_eth(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
         amount: int) -> SignableMessage:
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['UnmapETH'] = [
             {"name": "sender", "type": "bytes32"},
             {"name": "recipient", "type": "address"},
@@ -1093,13 +1125,13 @@ class EvmChainValidator:
 
     def signUnmapETH(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
         amount: int):
-        signable = self.eip721_unmap_eth(sender, recipient, txn_hash, txn_height, amount)
+        signable = self.eip712_unmap_eth(sender, recipient, txn_hash, txn_height, amount)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
-    def eip721_create_wrapped_erc20(self, name: str, symbol: str, original_chain: str,
+    def eip712_create_wrapped_erc20(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str, decimals: int):
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['CreateWrappedERC20Token'] = [
             {"name": "name", "type": "string"},
             {"name": "symbol", "type": "string"},
@@ -1121,14 +1153,14 @@ class EvmChainValidator:
 
     def signCreateWrappedERC20Token(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str, decimals: int):
-        signable = self.eip721_create_wrapped_erc20(name, symbol, original_chain, original_chain_id,
+        signable = self.eip712_create_wrapped_erc20(name, symbol, original_chain, original_chain_id,
             original_contract, decimals)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
-    def eip721_create_wrapped_erc721(self, name: str, symbol: str, original_chain: str,
+    def eip712_create_wrapped_erc721(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str):
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['CreateWrappedERC721Token'] = [
             {"name": "name", "type": "string"},
             {"name": "symbol", "type": "string"},
@@ -1148,14 +1180,14 @@ class EvmChainValidator:
 
     def signCreateWrappedERC721Token(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str):
-        signable = self.eip721_create_wrapped_erc721(name, symbol, original_chain, original_chain_id,
+        signable = self.eip712_create_wrapped_erc721(name, symbol, original_chain, original_chain_id,
             original_contract)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
-    def eip721_wrap_erc20(self, original_chain_id: int, original_contract: str, sender: str,
+    def eip712_wrap_erc20(self, original_chain_id: int, original_contract: str, sender: str,
         recipient: str, txn_hash: str, txn_height: int, amount: int):
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['WrapERC20Token'] = [
             {"name": "originalChainId", "type": "uint32"},
             {"name": "originalContract", "type": "bytes32"},
@@ -1179,14 +1211,14 @@ class EvmChainValidator:
 
     def signWrapERC20Token(self, original_chain_id: int, original_contract: str, sender: str,
         recipient: str, txn_hash: str, txn_height: int, amount: int):
-        signable = self.eip721_wrap_erc20(original_chain_id, original_contract, sender, recipient,
+        signable = self.eip712_wrap_erc20(original_chain_id, original_contract, sender, recipient,
             txn_hash, txn_height, amount)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
-    def eip721_wrap_erc721(self, original_chain_id: int, original_contract: str, sender: str,
+    def eip712_wrap_erc721(self, original_chain_id: int, original_contract: str, sender: str,
         recipient: str, txn_hash: str, txn_height: int, token_id: int):
-        data = self.eip721_base(self.core_contract)
+        data = self.eip712_base(self.core_contract)
         data['types']['WrapERC721Token'] = [
             {"name": "originalChainId", "type": "uint32"},
             {"name": "originalContract", "type": "bytes32"},
@@ -1210,7 +1242,7 @@ class EvmChainValidator:
 
     def signWrapERC721Token(self, original_chain_id: int, original_contract: str, sender: str,
         recipient: str, txn_hash: str, txn_height: int, token_id: int):
-        signable = self.eip721_wrap_erc721(original_chain_id, original_contract, sender, recipient,
+        signable = self.eip712_wrap_erc721(original_chain_id, original_contract, sender, recipient,
             txn_hash, txn_height, token_id)
         signed = self._account.sign_message(signable)
         return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
@@ -1328,7 +1360,7 @@ class EvmChainValidator:
             'fee': str(self.fee) if self.fee else '0',
             'total_weight': str(self.total_weight) if self.total_weight != None else '',
             'genesis_validator': self.genesis_validator,
-            'genesis_signer': self.genesis_signer,
+            'genesis_signer': self.genesis_signer_raw,
             'genesis_weight': str(self.genesis_weight()),
             'height': str(self.synced_height) if self.synced_height != None else '0',
         }
@@ -1344,6 +1376,13 @@ class EvmChainValidator:
         else:
             info['validators'] = ''
         return info
+
+    def chain_head_height(self):
+        return {
+            'chain': to_chain_str(self.chain_id).value,
+            'chain_id': str(int(self.chain_id)),
+            'height': str(self.synced_height) if self.synced_height != None else '0',
+        }
 
     async def check_evm_chain_id(self):
         for _ in range(len(self.endpoints)):
@@ -1679,10 +1718,10 @@ class EvmChainValidator:
             return False
         if self.signer == None or self.signer == self.genesis_signer:
             return False
-        if not self.binding_status_synced or self.signer != self.bound_signer:
+        if not self.binding_status_synced or self.signer != self.to_checksum_address(self.bound_signer):
             return False
 
-        if NODE == None:
+        if not node_synced():
             return False
         validator = NODE['account_hex']
         if validator == self.genesis_validator:
@@ -1778,7 +1817,7 @@ class EvmChainValidator:
         return None
 
     async def node_weight_query(self):
-        if NODE == None:
+        if not node_synced():
             return
         self.weight_query_count += 1
         count = self.weight_query_count 
@@ -1802,7 +1841,7 @@ class EvmChainValidator:
             await send_to_node(message)
 
     async def collect_weight_signatures(self):
-        if NODE == None:
+        if not node_synced():
             return
         source = NODE['account_hex']
 
@@ -1851,7 +1890,7 @@ class EvmChainValidator:
             }
             await send_to_node(message)
             return
-        if self.signer == self.bound_signer:
+        if self.signer == self.to_checksum_address(self.bound_signer):
             return
         message = {
             'action': 'bind',
@@ -1862,7 +1901,7 @@ class EvmChainValidator:
         await send_to_node(message)
 
     async def submit(self):
-        if NODE == None:
+        if not node_synced():
             return
         validator = NODE['account_hex']
 
@@ -1928,6 +1967,7 @@ class EvmChainValidator:
             if error:
                 return
             self.genesis_signer =  Web3.toChecksumAddress(signer)
+            self.genesis_signer_raw = self.to_hex(self.genesis_signer)
 
         error, block_number = await self.get_block_number()
         if error or (self.synced_height != None and block_number <= self.synced_height):
@@ -1951,7 +1991,7 @@ class EvmChainValidator:
         await self.submit()
 
     async def sign_transfer(self, uid: str, req: dict) -> dict:
-        if NODE == None:
+        if not node_synced():
             return {'error': 'node offline'}
         source = NODE['account_hex']
         destination = req['validator']
@@ -1965,6 +2005,8 @@ class EvmChainValidator:
         async def callback(sign: TransferSignMessage):
             try:
                 resp = {
+                    'chain': to_chain_str(self.chain_id).value,
+                    'chain_id': str(int(self.chain_id)),
                     'validator': sign.source,
                     'signer': sign.source_signer,
                     'account': sign.account,
@@ -1975,7 +2017,7 @@ class EvmChainValidator:
                 await send_ack(uid, req, resp)
             except Exception as e:
                 log.server_logger.exception('sign_transfer.callback: uncaught exception=%s', e)
-        request_id = CallbackHelper.add(callback)
+        request_id = CALLBACK_HELPER.add(callback)
         message = TransferSignMessage(source, destination, self.chain_id, '', True, account,
             height, opcode, request_id)
 
@@ -1983,7 +2025,7 @@ class EvmChainValidator:
         return {'pending': ''}
 
     async def sign_creation(self, uid: str, req: dict) -> dict:
-        if NODE == None:
+        if not node_synced():
             return {'error': 'node offline'}
         source = NODE['account_hex']
         destination = req['validator']
@@ -1994,6 +2036,8 @@ class EvmChainValidator:
                 resp = {
                     'validator': sign.source,
                     'signer': sign.source_signer,
+                    'chain': to_chain_str(self.chain_id).value,
+                    'chain_id': str(int(self.chain_id)),
                     'original_chain_id': str(sign.original_chain_id),
                     'original_contract': sign.original_contract,
                     'signature': UTIL.bytes_to_hex(sign.signature),
@@ -2001,7 +2045,7 @@ class EvmChainValidator:
                 await send_ack(uid, req, resp)
             except Exception as e:
                 log.server_logger.exception('sign_creation.callback: uncaught exception=%s', e)
-        request_id = CallbackHelper.add(callback)
+        request_id = CALLBACK_HELPER.add(callback)
         message = CreationSignMessage(source, destination, self.chain_id, '', True,
             original_chain_id, original_contract, request_id)
         await send_cross_chain_message(message)
@@ -2115,6 +2159,7 @@ class EvmChainValidator:
         result['validator_contract'] = self.validator_contract
         result['genesis_validator'] = self.genesis_validator
         result['genesis_signer'] = self.genesis_signer
+        result['genesis_signer_raw'] = self.genesis_signer_raw
         result['endpoints'] = self.endpoints
         result['endpoint_index'] = self.endpoint_index
         result['fee'] = self.fee
@@ -2147,8 +2192,10 @@ async def send_ack(uid, req: dict, resp: dict):
         return
     message['ack'] = req['action']
     message.update(resp)
+    message_str = json.dumps(message)
     try:
-        await CLIENTS[uid]['ws'].send_str(json.dumps(message))
+        log.server_logger.info('Response to client, %s, %s', message_str, uid)
+        await CLIENTS[uid]['ws'].send_str(message_str)
     except Exception as e:
         log.server_logger.error(
             'send_ack: message=%s, exception=%s', message, str(e))
@@ -2225,7 +2272,19 @@ async def chain_info(req, res):
         res.update(validator.to_chain_info())
     except Exception as e:
         res['error'] = 'exception'
-        log.server_logger.exception('fee_query exception:%s', str(e))
+        log.server_logger.exception('chain_info exception:%s', str(e))
+
+async def chain_head_height(req, res):
+    try:
+        chain_id = int(req['chain_id'])
+        if chain_id not in VALIDATORS:
+            res['error'] = 'chain not supported'
+            return
+        validator = VALIDATORS[chain_id]['validator']
+        res.update(validator.chain_head_height())
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('chain_info exception:%s', str(e))
 
 async def sign_transfer(uid, req, res):
     try:
@@ -2342,7 +2401,7 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
     global CLIENTS
     ip = UTIL.get_request_ip(r)
     uid = ws.id
-    log.server_logger.info('request: %s, %s, %s', message, ip, uid)
+    log.server_logger.info('Client request: %s, %s, %s', message, ip, uid)
 
     try:
         res = {'service': SERVICE}
@@ -2371,6 +2430,8 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
                 res.update({'success':''})
         elif action == 'chain_info':
             await chain_info(request, res)
+        elif action == 'chain_head_height':
+            await chain_head_height(request, res)
         elif action == 'sign_transfer':
             await sign_transfer(uid, request, res)
         elif action == 'sign_creation':
@@ -2420,7 +2481,7 @@ async def client_handler(r : web.Request):
                     res = await handle_client_messages(r, msg.data, ws=ws)
                     if res:
                         res = json.dumps(res)
-                        log.server_logger.debug('Sending response %s to %s', res, ip)
+                        log.server_logger.info('Response to client, %s, %s', res, ip)
                         await ws.send_str(res)
             elif msg.type == WSMsgType.CLOSE:
                 log.server_logger.info('Client Connection closed normally')
@@ -2470,7 +2531,9 @@ async def sync_with_node():
 async def send_to_node(message):
     if NODE == None:
         return
-    await NODE['ws'].send_str(json.dumps(message))
+    message = json.dumps(message)
+    log.server_logger.info('Message to node, %s', message)
+    await NODE['ws'].send_str(message)
 
 async def handle_node_weight_snapshot_ack(r : dict):
     global NODE
@@ -2484,7 +2547,9 @@ async def handle_node_weight_snapshot_ack(r : dict):
 async def handle_node_cross_chain_message(r : dict):
     source = '0x' + r['source_hex'].lower()
     destination = '0x' + r['destination_hex'].lower()
-    source_signer = '0x' + r['source_signer'].lower()
+    source_signer = ''
+    if r['source_signer'] != '':
+        source_signer = '0x' + r['source_signer'].lower()
     chain_id = int(r['chain_id'])
     payload = bytes.fromhex(r['payload'])
 
@@ -2504,7 +2569,6 @@ async def handle_node_cross_chain_message(r : dict):
         message = CreationSignMessage(source, destination, chain_id, source_signer)
     else:
         pass
-    # todo:
 
     error = message.deserialize(stream)
     if error:
@@ -2536,7 +2600,7 @@ async def handle_node_bind_query_ack(r : dict):
 async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by node"""
     ip = UTIL.get_request_ip(r)
-    log.server_logger.info('node message; %s, %s', message, ip)
+    log.server_logger.info('Message from node, %s, %s', message, ip)
 
     global NODE
     try:
@@ -2563,8 +2627,18 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
         log.server_logger.exception('uncaught error;%s;%s', str(e), ip)
 
 NODE = None
-def node_snapshot_weight(account: str) -> Union[int, None]:
+
+def node_synced():
     if NODE == None:
+        return False
+    if 'account' not in NODE:
+        return False
+    if 'snapshot' not in NODE:
+        return False
+    return True
+
+def node_snapshot_weight(account: str) -> Union[int, None]:
+    if not node_synced():
         return None
     if not account.startswith('rai_'):
         error, account = ACCOUNT.encode(account)
@@ -2621,11 +2695,13 @@ async def send_to_token_service(message : dict, callback: Callable[[dict], None]
         return
     key = CALLBACK_HELPER.add(callback)
     message['request_id'] = UTIL.uint256_to_hex(key)[2:]
-    await TOKEN_SERVICE['ws'].send_str(json.dumps(message))
+    message_str = json.dumps(message)
+    log.server_logger.info('Message to token service, %s', message_str)
+    await TOKEN_SERVICE['ws'].send_str(message_str)
 
 async def handle_token_service_message(msg_str, ws):
     global TOKEN_SERVICE
-    log.server_logger.info('message from token service: %s', msg_str)
+    log.server_logger.info('Message from token service: %s', msg_str)
     try:
         msg = json.loads(msg_str)
         if 'register' in msg:
@@ -2646,7 +2722,7 @@ async def handle_token_service_message(msg_str, ws):
     except Exception as e:
         log.server_logger.exception('handle_token_service_message: uncaught exception=%s', e)
 
-async def connect_to_token_service(task):
+async def connect_to_token_service():
     global TOKEN_SERVICE
 
     try:
@@ -2711,6 +2787,8 @@ async def debug_handler(r : web.Request):
             return web.json_response(VALIDATORS, dumps=DEBUG_DUMPS)
         elif query == 'node':
             return web.json_response(NODE, dumps=DEBUG_DUMPS)
+        elif query == 'token_service':
+            return web.json_response(TOKEN_SERVICE, dumps=DEBUG_DUMPS)
         else:
             pass
         return web.HTTPOk()
@@ -2761,8 +2839,8 @@ async def periodic(period, fn, *args):
         if elapsed < period:
             await asyncio.sleep(period - elapsed)
 
-BSC_TEST_CORE_CONTRACT = '0xC777f5b390E79c9634c9d07AF45Dc44b11893055'
-BSC_TEST_VALIDATOR_CONTRACT = '0x98431eB42A087333F7E167d3586D3b47Bc4f28D3'
+BSC_TEST_CORE_CONTRACT = '0x68CF8517a569565F0B30f8856F0555d55d539307'
+BSC_TEST_VALIDATOR_CONTRACT = '0x47D2d5e7F498f44466241700c197BB050f43C9B1'
 BSC_TEST_GENESIS_VALIDATOR = 'rai_1nxp5qgqhwxof81oardbyraygcp3s15rbo38adecwzbq8p3kpy76sq3999ia'
 BSC_TEST_GENESIS_SIGNER = '0xd24EBE3D7879330509Bf1f9d8dffAF8CA8F32fdc'
 
@@ -2809,6 +2887,7 @@ def main():
             print(f'Start validator for {to_chain_str(v.chain_id)}, signer={v.signer}')
         tasks.append(LOOP.create_task(periodic(5, sync_with_node)))
         tasks.append(LOOP.create_task(periodic(10, CALLBACK_HELPER)))
+        tasks.append(LOOP.create_task(periodic(5, connect_to_token_service)))
         LOOP.run_forever()
     except KeyboardInterrupt:
         pass

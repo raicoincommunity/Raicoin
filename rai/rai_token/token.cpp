@@ -1184,8 +1184,10 @@ bool rai::Token::MakeTokenMapInfoPtree(rai::Transaction& transaction,
     ptree.put("type", rai::TokenTypeToString(token_info.type_));
     ptree.put("decimals", std::to_string(token_info.decimals_));
     ptree.put("value", map.value_.StringDec());
-    ptree.put("from", map.from_.StringHex());
+    ptree.put("from", rai::TokenAddressToString(map.token_.chain_, map.from_));
+    ptree.put("from_raw", map.from_.StringHex());
     ptree.put("to", key.to_.StringAccount());
+    ptree.put("to_raw", key.to_.StringHex());
     ptree.put("source_transaction", map.source_tx_hash_.StringHex());
     return false;
 }
@@ -1211,7 +1213,9 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
     ptree.put("decimals", std::to_string(token_info.decimals_));
     ptree.put("value", unmap.value_.StringDec());
     ptree.put("from", account.StringAccount());
-    ptree.put("to", unmap.to_.StringHex());
+    ptree.put("from_raw", account.StringHex());
+    ptree.put("to", rai::TokenAddressToString(unmap.token_.chain_, unmap.to_));
+    ptree.put("to_raw", unmap.to_.StringHex());
     ptree.put("source_transaction", unmap.source_tx_.StringHex());
     std::shared_ptr<rai::Block> block;
     error = ledger_.BlockGet(transaction, unmap.source_tx_, block);
@@ -1269,7 +1273,7 @@ bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
     ptree.put("to_chain", rai::ChainToString(wrap.to_chain_));
     ptree.put("to_chain_id",
               std::to_string(static_cast<uint32_t>(wrap.to_chain_)));
-    ptree.put("to_account", wrap.to_account_.StringHex());
+    ptree.put("to_account_raw", wrap.to_account_.StringHex());
     ptree.put("source_transaction", wrap.source_tx_.StringHex());
     std::shared_ptr<rai::Block> block;
     error = ledger_.BlockGet(transaction, wrap.source_tx_, block);
