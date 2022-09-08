@@ -1260,11 +1260,18 @@ void rai::EvmParser::TrySubmitSession_(uint64_t head_height)
         auto it = blocks_.find(height);
         if (it == blocks_.end())
         {
-            blocks_.insert(std::make_pair(height, std::move(block)));
+            blocks_.insert(std::make_pair(height, block));
+            Notify_(block, false);
+
         }
         else
         {
-            it->second = std::move(block);
+            if (it->second != block)
+            {
+                Notify_(it->second, true);
+                it->second = std::move(block);
+                Notify_(it->second, false);
+            }
         }
     }
 
@@ -2499,4 +2506,16 @@ void rai::EvmParser::SubmitNativeToken_()
     token_.SubmitChainNativeToken(chain_, info,
                                   std::bind(&EvmParser::OnNativeTokenSubmitted,
                                             this, std::placeholders::_1));
+}
+
+void rai::EvmParser::Notify_(const rai::EvmBlockEvents& block, bool rollback)
+{
+    if (!event_observer_)
+    {
+        return;
+    }
+    for (const auto& i : block.events_)
+    {
+        event_observer_(i, rollback);
+    }
 }

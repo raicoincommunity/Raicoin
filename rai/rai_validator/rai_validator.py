@@ -98,6 +98,8 @@ if not RAI_TOKEN_URL.startswith('wss://'):
     print("Error found in .env: invalid RAI_TOKEN_URL")
     sys.exit(0)
 
+EXECUTE_PROPOSALS = True if int(os.getenv('EXECUTE_PROPOSALS', 0)) == 1 else False
+
 ERC20_ABI_FILE = os.getenv('EVM_CHAIN_CORE_ABI_FILE', 'erc20_abi.json')
 ERC20_ABI = None
 with open(ERC20_ABI_FILE, 'r') as f:
@@ -216,6 +218,13 @@ class Util:
     
     def bytes_to_hex(self, value: bytes) -> str:
         return f'0x{value.hex()}'.lower()
+
+    def date_to_timestamp(self, date: str) -> int:
+        try:
+            dt = datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%SUTC")
+            return int(dt.replace(tzinfo=datetime.timezone.utc).timestamp())
+        except:
+            return 0
 
 UTIL = Util(USE_CLOUDFLARE, USE_NGINX)
 
@@ -703,8 +712,68 @@ class CreationSignMessage(CrossChainMessage):
         self.original_contract = Serializer.read_uint256(stream)
         if self.original_contract == None:
             return True
+        self.original_contract = UTIL.uint256_to_hex(self.original_contract)
         self.request_id = Serializer.read_uint256(stream)
         if self.request_id == None:
+            return True
+        if not self.is_request:
+            self.signature = Serializer.read_bytes(stream)
+            if self.signature == None:
+                return True
+        return False
+
+class UpgradeSignMessage(CrossChainMessage):
+    def __init__(self, source: str, destination: str, chain_id: ChainId = ChainId.INVALID,
+        source_signer: str = '', is_request: bool = True, proposal_id: int = 0, impl: str = '',
+        nonce: int = 0, signature: bytes = b''):
+        super().__init__(source, destination, chain_id, source_signer)
+        self.is_request = is_request
+        self.proposal_id = proposal_id
+        self.impl = impl
+        self.nonce = nonce
+        if not self.is_request:
+            self.signature = signature
+
+    def __str__(self) -> str:
+        return json.dumps(self.to_dict())
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            'type': 'UpgradeSignMessage',
+            'is_request': self.is_request,
+            'proposal_id': self.proposal_id,
+            'impl': self.impl,
+            'nonce': self.nonce,
+            'signature':  UTIL.bytes_to_hex(self.signature)
+        })
+        return d
+    
+    def serialize(self, stream: BytesIO) -> str:
+        Serializer.write_uint8(stream, CrossChainMessageType.UpgradeSign)
+        Serializer.write_bool(stream, self.is_request)
+        Serializer.write_uint32(stream, self.proposal_id)
+        Serializer.write_uint256(stream, self.impl)
+        Serializer.write_uint256(stream, self.nonce)
+        if not self.is_request:
+            Serializer.write_bytes(stream, self.signature)
+
+    def deserialize(self, stream: BytesIO) -> bool:
+        msg_type = Serializer.read_uint8(stream)
+        if msg_type != CrossChainMessageType.UpgradeSign:
+            return True
+        self.is_request = Serializer.read_bool(stream)
+        if self.is_request == None:
+            return True
+        self.proposal_id = Serializer.read_uint32(stream)
+        if self.proposal_id == None:
+            return True
+        impl = Serializer.read_uint256(stream)
+        if impl == None:
+            return True
+        self.impl = UTIL.uint256_to_hex(impl)
+        self.nonce = Serializer.read_uint256(stream)
+        if self.nonce == None:
             return True
         if not self.is_request:
             self.signature = Serializer.read_bytes(stream)
@@ -716,6 +785,7 @@ class CrossChainMessageType(IntEnum):
     WeightSign = 1
     TransferSign = 2
     CreationSign = 3
+    UpgradeSign = 4
 
 async def send_cross_chain_message(data: CrossChainMessage):
     stream = BytesIO()
@@ -778,6 +848,12 @@ class EvmChainValidator:
         self.token_names = {}
         self.token_types = {}
         self.token_decimals_entries = {}
+        self.proposals = {}
+        self.proposal_active = None
+        self.proposal_last_submit = None
+        self.proposal_submission_state = self.SubmissionState.IDLE
+        self.proposal_signatures = {}
+        self.proposal_signature_collect_count = 0
 
         if len(self.endpoints) == 0:
             print("[ERROR] No endpoints found while constructing EvmChainValidator")
@@ -874,12 +950,15 @@ class EvmChainValidator:
             to = self.to_checksum_address(ack['to_raw'])
             value = int(ack['value'])
             txn_hash = ack['source_transaction']
+            token_address = self.to_checksum_address(ack['address_raw'])
             if self.is_native_token(ack['address_raw']):
                 signature = self.signUnmapETH(account, to, txn_hash, height, value)
             elif ack['type'] == '20':
-                signature = self.signUnmapERC20(account, to, txn_hash, height, value)
+                signature = self.signUnmapERC20(token_address, account, to, txn_hash,
+                    height, value)
             elif ack['type'] == '721':
-                signature = self.signUnmapERC721(account, to, txn_hash, height, value)
+                signature = self.signUnmapERC721(token_address, account, to, txn_hash,
+                    height, value)
             else:
                 return
         elif sign.opcode == CrossChainOpcode.WRAP and ack['ack'] == 'token_wrap_info':
@@ -910,6 +989,8 @@ class EvmChainValidator:
         if not node_synced():
             return
         if message.is_request:
+            if not self.signer:
+                return
             async def callback(ack: dict):
                 await self.process_token_service_transfer_query_ack(message, ack)
             query = {
@@ -961,6 +1042,8 @@ class EvmChainValidator:
         if not node_synced():
             return
         if message.is_request:
+            if not self.signer:
+                return
             if self.chain_id == message.original_chain_id:
                 return
             async def callback(ack: dict):
@@ -977,7 +1060,35 @@ class EvmChainValidator:
         else:
             await CALLBACK_HELPER.callback(message.request_id, message)
 
-    async def process_cross_chain_message(self, message: Union[WeightSignMessage, TransferSignMessage, CreationSignMessage]):
+    async def process_upgrade_sign_message(self, message: UpgradeSignMessage):
+        if not node_synced():
+            return
+        if message.is_request:
+            if not self.signer:
+                return
+            if message.proposal_id not in self.proposals:
+                return
+            proposal = self.proposals[message.proposal_id]
+            if proposal['contract'] != self.core_contract or proposal['method'] != 'upgrade':
+                return
+            now = time.time()
+            if now < proposal['begin_timestamp'] or now > proposal['end_timestamp']:
+                return
+            params = proposal['params']
+            if not params['impl'] or int(params['nonce']) != message.nonce:
+                return
+            signatures = self.signUpgrade(params['impl'], params['nonce'])
+            response = UpgradeSignMessage(NODE['account_hex'], message.source, self.chain_id, '',
+                False, int(proposal['id']), params['impl'], int(params['nonce']), signatures)
+            await send_cross_chain_message(response)
+        else:
+            if self.proposal_active == None:
+                return
+            ...
+            # todo:
+
+    async def process_cross_chain_message(self, message: Union[WeightSignMessage,
+        TransferSignMessage, CreationSignMessage, UpgradeSignMessage]):
         if message.source == self.genesis_validator:
             if not self.genesis_signer_raw:
                 return
@@ -988,6 +1099,8 @@ class EvmChainValidator:
             await self.process_transfer_sign_message(message)
         elif isinstance(message, CreationSignMessage):
             await self.process_creation_sign_message(message)
+        elif isinstance(message, UpgradeSignMessage):
+            await self.process_upgrade_sign_message(message)
         else:
             pass
 
@@ -999,6 +1112,10 @@ class EvmChainValidator:
             hash_domain(structured_data),
             hash_eip712_message(structured_data),
         )
+
+    def sign(self, signable: SignableMessage) -> bytes:
+        signed = self._account.sign_message(signable)
+        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
 
     def eip712_base(self, contract: str):
         return {
@@ -1037,8 +1154,7 @@ class EvmChainValidator:
 
     def signSubmitValidator(self, validator: str, signer: str, weight: int, epoch: int) -> bytes:
         signable = self.eip712_submit_validator(validator, signer, weight, epoch)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
 
     def verifySubmitValidator(self, validator: str, signer: str, weight: int, epoch: int,
         signature: bytes) -> bool:
@@ -1072,8 +1188,7 @@ class EvmChainValidator:
     def signUnmapERC20(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, share: int):
         signable = self.eip712_unmap_erc20(token, sender, recipient, txn_hash, txn_height, share)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
 
     def eip712_unmap_erc721(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, token_id: int) -> SignableMessage:
@@ -1100,8 +1215,7 @@ class EvmChainValidator:
     def signUnmapERC721(self, token: str, sender: str, recipient: str, txn_hash: str,
         txn_height: int, token_id: int):
         signable = self.eip712_unmap_erc721(token, sender, recipient, txn_hash, txn_height, token_id)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
 
     def eip712_unmap_eth(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
         amount: int) -> SignableMessage:
@@ -1126,8 +1240,7 @@ class EvmChainValidator:
     def signUnmapETH(self, sender: str, recipient: str, txn_hash: str, txn_height: int,
         amount: int):
         signable = self.eip712_unmap_eth(sender, recipient, txn_hash, txn_height, amount)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
 
     def eip712_create_wrapped_erc20(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str, decimals: int):
@@ -1155,8 +1268,7 @@ class EvmChainValidator:
         original_chain_id: int, original_contract: str, decimals: int):
         signable = self.eip712_create_wrapped_erc20(name, symbol, original_chain, original_chain_id,
             original_contract, decimals)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
 
     def eip712_create_wrapped_erc721(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str):
@@ -1180,10 +1292,9 @@ class EvmChainValidator:
 
     def signCreateWrappedERC721Token(self, name: str, symbol: str, original_chain: str,
         original_chain_id: int, original_contract: str):
-        signable = self.eip712_create_wrapped_erc721(name, symbol, original_chain, original_chain_id,
-            original_contract)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        signable = self.eip712_create_wrapped_erc721(name, symbol, original_chain, \
+            original_chain_id, original_contract)
+        return self.sign(signable)
 
     def eip712_wrap_erc20(self, original_chain_id: int, original_contract: str, sender: str,
         recipient: str, txn_hash: str, txn_height: int, amount: int):
@@ -1213,8 +1324,7 @@ class EvmChainValidator:
         recipient: str, txn_hash: str, txn_height: int, amount: int):
         signable = self.eip712_wrap_erc20(original_chain_id, original_contract, sender, recipient,
             txn_hash, txn_height, amount)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
 
     def eip712_wrap_erc721(self, original_chain_id: int, original_contract: str, sender: str,
         recipient: str, txn_hash: str, txn_height: int, token_id: int):
@@ -1244,8 +1354,24 @@ class EvmChainValidator:
         recipient: str, txn_hash: str, txn_height: int, token_id: int):
         signable = self.eip712_wrap_erc721(original_chain_id, original_contract, sender, recipient,
             txn_hash, txn_height, token_id)
-        signed = self._account.sign_message(signable)
-        return UTIL.uint256_to_bytes(signed.r) + UTIL.uint256_to_bytes(signed.s) + bytes((signed.v, ))
+        return self.sign(signable)
+
+    def eip712_upgrade(self, impl: str, nonce: int):
+        data = self.eip712_base(self.core_contract)
+        data['types']['Upgrade'] = [
+            {"name": "newImplementation", "type": "address"},
+            {"name": "nonce", "type": "uint256"},
+        ]
+        data['primaryType'] = 'Upgrade'
+        data['message'] = {
+            'newImplementation': impl,
+            'nonce': nonce,
+        }
+        return self.encode_structured_data(data)
+
+    def signUpgrade(self, impl: str, nonce: int) -> bytes:
+        signable = self.eip712_upgrade(impl, nonce)
+        return self.sign(signable)
 
     class ValidatorFullInfo:
         def __init__(self, validator: str, signer: str, weight: int, gas_price: int,
@@ -1384,6 +1510,12 @@ class EvmChainValidator:
             'height': str(self.synced_height) if self.synced_height != None else '0',
         }
 
+    def update_proposals(self, proposals):
+        self.proposals = proposals
+        self.proposal_active = None
+        self.proposal_signatures = {}
+        self.proposal_signature_collect_count = 0
+
     async def check_evm_chain_id(self):
         for _ in range(len(self.endpoints)):
             error, chain_id = await self.get_chain_id()
@@ -1394,7 +1526,7 @@ class EvmChainValidator:
                     f"[ERROR] Chain id mismatch, expected {self.evm_chain_id}, got {chain_id}, endpoint={self.get_endpoint()}")
                 sys.exit(0)
             self.use_next_endpoint()
-        self.evm_chain_id_checked  = True
+        self.evm_chain_id_checked = True
 
     @awaitable
     def get_block_number(self):
@@ -1513,6 +1645,28 @@ class EvmChainValidator:
             return True, None
 
     @awaitable
+    def get_core_contract_nonce(self, block_number='latest'):
+        contract = self.make_core_contract()
+        try:
+            nonce = contract.functions.getNonce().call(block_identifier=block_number)
+            return False, nonce
+        except Exception as e:
+            log.server_logger.error('get_core_contract_nonce exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, 0
+
+    @awaitable
+    def get_validator_contract_nonce(self, block_number='latest'):
+        contract = self.make_validator_contract()
+        try:
+            nonce = contract.functions.getNonce().call(block_identifier=block_number)
+            return False, nonce
+        except Exception as e:
+            log.server_logger.error('get_validator_contract_nonce exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, 0
+
+    @awaitable
     def sumbit_validator(self, validator: str, signer: str, weight: int, epoch: int, reward_to: str,
         signatures: bytes):
         contract = self.make_validator_contract()
@@ -1522,6 +1676,17 @@ class EvmChainValidator:
             })
         except Exception as e:
             log.server_logger.error('sumbit_validator exception:%s', str(e))
+            self.use_next_endpoint()
+
+    @awaitable
+    def upgrade_core(self, impl: str, nonce: int, signatures: bytes):
+        contract = self.make_core_contract()
+        try:
+            contract.functions.upgrade(impl, nonce, signatures).transact({
+                'from': self.signer
+            })
+        except Exception as e:
+            log.server_logger.error('upgrade_core exception:%s', str(e))
             self.use_next_endpoint()
 
     @awaitable
@@ -1737,7 +1902,8 @@ class EvmChainValidator:
             return False
         if info.epoch >= current_epoch():
             return False
-        return in_reward_time_range(info.last_submit, int(time.time() - 10))
+        return info.last_submit == 0 or \
+            in_reward_time_range(info.last_submit, int(time.time() - 10))
 
     def genesis_weight(self):
         if self.total_weight == None or self.__total_weight == None:
@@ -1857,6 +2023,35 @@ class EvmChainValidator:
                 self.signer, self.submission_weight, self.submission_epoch)
             await send_cross_chain_message(message)
 
+    def proposal_to_cross_chain_message(self, proposal: dict, replier: str) -> Union[None, UpgradeSignMessage]:
+        contract = proposal['contract']
+        method = proposal['method']
+        params = proposal['params']
+        source = NODE['account_hex']
+        if contract == self.core_contract and method == 'upgrade':
+            return UpgradeSignMessage(source, replier, self.chain_id, '', True,
+            int(proposal['id']), params['impl'], int(params['nonce']))
+        else:
+            log.server_logger.error('unexpected proposal: id=%s', proposal['id'])
+            return None
+
+    async def collect_proposal_signatures(self):
+        if not node_synced() or not self.proposal_active:
+            return
+
+        self.proposal_signature_collect_count += 1
+        threshold = self.weight_threshold(0.99)
+        for i in self.weights:
+            if i.replier in self.proposal_signatures:
+                continue
+            weight = self.weight_of_validator(i.replier)
+            if weight < threshold:
+                continue
+            message = self.proposal_to_cross_chain_message(self.proposal_active, i.replier)
+            if message == None:
+                continue
+            await send_cross_chain_message(message)
+
     def purge_outdated_weights(self):
         epoch = current_epoch()
         purgeable = []
@@ -1866,16 +2061,16 @@ class EvmChainValidator:
         for validator in purgeable:
             del self.weights[validator]
 
-    def enough_signatures(self):
-        l = list(self.signatures.values())
+    def enough_signatures(self, signatures: dict):
+        l = list(signatures.values())
         l.sort(key = lambda x: self.weight_of_validator(x.replier), reverse = True)
-        signatures = []
+        result = []
         weight = 0
         for i in l:
             weight += self.weight_of_validator(i.replier)
-            signatures.append(i)
+            result.append(i)
             if weight > self.total_weight * 0.51:
-                return signatures
+                return result
         return None
 
     async def bind(self):
@@ -1931,7 +2126,7 @@ class EvmChainValidator:
             if self.submission_epoch != current_epoch():
                 self.submission_state = self.SubmissionState.IDLE
                 return
-            signatures = self.enough_signatures()
+            signatures = self.enough_signatures(self.signatures)
             if signatures == None or len(signatures) > 100:
                 if self.signature_collect_count >= 10:
                     self.submission_state = self.SubmissionState.IDLE
@@ -1947,7 +2142,73 @@ class EvmChainValidator:
             self.last_submit = time.time()
             self.submission_state = self.SubmissionState.IDLE
         else:
-            log.server_logger.error('unexpected submission state:%s', state.name)
+            log.server_logger.error('unexpected submission state: %s', state.name)
+
+    def get_valid_proposal(self, contract: str, nonce: int):
+        proposal_id = None
+        for k, v in self.proposals.values():
+            if int(v['params']['nonce']) == int(nonce) and v['contract'] == contract \
+                and v['begin_timestamp'] < time.time() < v['end_timestamp']:
+                if proposal_id == None or k > proposal_id:
+                    proposal_id = k
+        if proposal_id == None:
+            return None
+        return self.proposals[proposal_id]
+
+    async def execute_proposal(self, proposal: dict, signatures: bytes):
+        contract = proposal['contract']
+        method = proposal['method']
+        params = proposal['params']
+        if contract == self.core_contract and method == 'upgrade':
+            if not params['impl']:
+                return
+            await self.upgrade_core(params['impl'], int(params['nonce']), signatures)
+        else:
+            log.server_logger.error('execute_proposal: logic error, id=%s', proposal['id'])
+            return None
+
+    async def process_proposals(self):
+        if not EXECUTE_PROPOSALS or self.signer == None:
+            return
+        if self.synced_height == None or not node_synced():
+            return
+
+        state = self.proposal_submission_state
+        if state == self.SubmissionState.IDLE:
+            last_submit = self.proposal_last_submit
+            if last_submit != None and last_submit + 300 > time.time():
+                return
+            error, nonce = await self.get_core_contract_nonce()
+            if error:
+                return
+            proposal = self.get_valid_proposal(self.core_contract, nonce)
+            if proposal == None:
+                return
+            self.proposal_active = proposal
+            self.proposal_signatures = {}
+            self.proposal_signature_collect_count = 0
+            self.proposal_submission_state = self.SubmissionState.COLLECT_SIGNATURES
+            await self.collect_proposal_signatures()
+        elif state == self.SubmissionState.COLLECT_SIGNATURES:
+            if self.proposal_active == None or time.time() > self.proposal_active['end_timestamp']:
+                self.proposal_submission_state = self.SubmissionState.IDLE
+                return
+            signatures = self.enough_signatures(self.proposal_signatures)
+            if signatures == None or len(signatures) > 100:
+                if self.signature_collect_count >= 10:
+                    self.proposal_submission_state = self.SubmissionState.IDLE
+                else:
+                    await self.collect_proposal_signatures()
+                return
+            signatures.sort(key = lambda x: x.signer.lower())
+            pack = b''
+            for i in signatures:
+                pack += i.r + i.s + i.v
+            await self.execute_proposal(proposal, pack)
+            self.proposal_last_submit = time.time()
+            self.proposal_submission_state = self.SubmissionState.IDLE
+        else:
+            log.server_logger.error('process_proposals:unexpected submission state:%s', state.name)
 
     async def __call__(self):
         notify = False
@@ -1989,6 +2250,7 @@ class EvmChainValidator:
 
         await self.bind()
         await self.submit()
+        await self.process_proposals()
 
     async def sign_transfer(self, uid: str, req: dict) -> dict:
         if not node_synced():
@@ -2177,6 +2439,8 @@ class EvmChainValidator:
         result['weight_query_count'] = self.weight_query_count
         result['signature_collect_count'] = self.signature_collect_count
         result['last_submit'] = self.last_submit
+        result['proposals'] = self.proposals
+        result['proposal_last_submit'] = self.proposal_last_submit
         return result
 
 async def send_ack(uid, req: dict, resp: dict):
@@ -2567,6 +2831,8 @@ async def handle_node_cross_chain_message(r : dict):
         message = TransferSignMessage(source, destination, chain_id, source_signer)
     elif message_type == CrossChainMessageType.CreationSign:
         message = CreationSignMessage(source, destination, chain_id, source_signer)
+    elif message_type == CrossChainMessageType.UpgradeSign:
+        message = UpgradeSignMessage(source, destination, chain_id, source_signer)
     else:
         pass
 
@@ -2754,6 +3020,58 @@ async def connect_to_token_service():
                 pass
         TOKEN_SERVICE = None
 
+PROPOSALS = {}
+PROPOSALS_FILE = 'proposals.json'
+def proposals_file_hash() -> Union[None, str]:
+    if not os.path.exists(PROPOSALS_FILE):
+        return ''
+    ctx = blake2b(digest_size=32)
+    try:
+        with open(PROPOSALS_FILE, 'rb') as f:
+            while True:
+                data = f.read(4096)
+                if not data:
+                    break
+                ctx.update(data)
+        return ctx.hexdigest()
+    except Exception as e:
+        log.server_logger.exception('proposals_file_hash: exception, %s', e)
+        return None
+
+PROPOSALS_FILE_HASH = None
+async def sync_proposals():
+    global PROPOSALS_FILE_HASH, PROPOSALS, VALIDATORS
+    file_hash = proposals_file_hash()
+    if file_hash == None:
+        return
+    if file_hash == PROPOSALS_FILE_HASH:
+        return
+
+    proposals = {}
+    if file_hash in ['', '0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8']:
+        # missing or empty file
+        pass
+    else:
+        try:
+            with open(PROPOSALS_FILE, 'r') as f:
+                j = json.load(f)
+            for i in j:
+                chain_id = int(i['chain_id'])
+                if chain_id not in proposals:
+                    proposals[chain_id] = {}
+                proposal_id = int(i['id'])
+                i['begin_timestamp'] = UTIL.date_to_timestamp(i['begin_time'])
+                i['end_timestamp'] = UTIL.date_to_timestamp(i['end_time'])
+                proposals[chain_id][proposal_id] = i
+        except Exception as e:
+            log.server_logger.exception('sync_proposals: exception, %s', e)
+            return
+    PROPOSALS = proposals
+    for chain, v in VALIDATORS.items():
+        validator = v['validator']
+        if 'update_proposals' in dir(validator):
+            validator.update_proposals(proposals[chain] if chain in proposals else {})
+
 def debug_check_ip(r : web.Request):
     ip = UTIL.get_request_ip(r)
     if not ip or ip != '127.0.0.1':
@@ -2789,6 +3107,8 @@ async def debug_handler(r : web.Request):
             return web.json_response(NODE, dumps=DEBUG_DUMPS)
         elif query == 'token_service':
             return web.json_response(TOKEN_SERVICE, dumps=DEBUG_DUMPS)
+        elif query == 'proposals':
+            return web.json_response(PROPOSALS, dumps=DEBUG_DUMPS)
         else:
             pass
         return web.HTTPOk()
@@ -2888,6 +3208,7 @@ def main():
         tasks.append(LOOP.create_task(periodic(5, sync_with_node)))
         tasks.append(LOOP.create_task(periodic(10, CALLBACK_HELPER)))
         tasks.append(LOOP.create_task(periodic(5, connect_to_token_service)))
+        tasks.append(LOOP.create_task(periodic(5, sync_proposals)))
         LOOP.run_forever()
     except KeyboardInterrupt:
         pass

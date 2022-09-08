@@ -21,7 +21,7 @@ public:
         const std::function<bool(const rai::CrossChainEvent&)>&) const = 0;
 
     static constexpr uint64_t MIN_DELAY = 5;
-
-
+    std::function<void(const std::shared_ptr<rai::CrossChainEvent>&, bool)>
+        event_observer_;
 };
 }  // namespace rai

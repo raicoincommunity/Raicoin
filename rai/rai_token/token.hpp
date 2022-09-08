@@ -51,6 +51,8 @@ public:
         take_nack_block_submitted_;
     rai::ObserverContainer<const rai::Account&, uint64_t> token_unmap_;
     rai::ObserverContainer<const rai::Account&, uint64_t> token_wrap_;
+    rai::ObserverContainer<const std::shared_ptr<rai::CrossChainEvent>&, bool>
+        cross_chain_event_;
 };
 
 class TokenError

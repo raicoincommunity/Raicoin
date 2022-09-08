@@ -34,6 +34,9 @@ public:
     void Stop();
     void Status(rai::Ptree&) const;
     std::shared_ptr<rai::BaseParser> Parser(rai::Chain) const;
+    void RegisterEventObserver(
+        const std::function<void(const std::shared_ptr<rai::CrossChainEvent>&,
+                                 bool)>&);
 
     rai::Token& token_;
 

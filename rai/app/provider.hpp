@@ -76,6 +76,7 @@ public:
         TOKEN_MAP_INFOS                     = 233,
         TOKEN_PENDING_MAP_INFOS             = 234,
         TOKEN_UNMAP_INFOS                   = 235,
+        TOKEN_PENDING_MAP_INFO              = 236,
 
     };
     static std::string ToString(Action);
