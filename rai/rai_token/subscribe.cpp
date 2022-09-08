@@ -73,6 +73,10 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             NotifyTakeNackBlockSubmitted(account, height, block);
         });
 
+    token_.observers_.cross_chain_event_.Add(
+        [this](const std::shared_ptr<rai::CrossChainEvent>& event,
+               bool rollback) { ProcessCrossChainEvent(event, rollback); });
+
     // todo:
 }
 
@@ -307,4 +311,73 @@ void rai::TokenSubscriptions::NotifyTakeNackBlockSubmitted(
     P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
 
     Notify(account, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyPendingTokenMapInfo(
+    const std::shared_ptr<rai::CrossChainEvent>& event, bool rollback)
+{
+    const rai::CrossChainMapEvent& map =
+        static_cast<const rai::CrossChainMapEvent&>(*event);
+    if (!Subscribed(map.to_)) return;
+
+    rai::Ptree ptree;
+    ptree.put("account", map.to_.StringAccount());
+    ptree.put("height", std::to_string(map.block_height_));
+    ptree.put("index", std::to_string(map.index_));
+    ptree.put("chain", rai::ChainToString(map.chain_));
+    ptree.put("chain_id", std::to_string(static_cast<uint32_t>(map.chain_)));
+    ptree.put("address", rai::TokenAddressToString(map.chain_, map.address_));
+    ptree.put("address_raw", map.address_.StringHex());
+    ptree.put("type", rai::TokenTypeToString(map.token_type_));
+    ptree.put("value", map.value_.StringDec());
+    ptree.put("from", map.from_.StringHex());
+    ptree.put("to", map.to_.StringAccount());
+    ptree.put("source_transaction", map.tx_hash_.StringHex());
+    ptree.put("rollback", rai::BoolToString(rollback));
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_TAKE_NACK_BLOCK_SUBMITTED);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, map.to_.StringAccount());
+
+    Notify(map.to_, ptree);
+}
+
+void rai::TokenSubscriptions::ProcessCrossChainEvent(
+    const std::shared_ptr<rai::CrossChainEvent>& event, bool rollback)
+{
+    switch (event->Type())
+    {
+        case rai::CrossChainEventType::TOKEN:
+        case rai::CrossChainEventType::CREATE:
+        {
+            break;
+        }
+        case rai::CrossChainEventType::MAP:
+        {
+            NotifyPendingTokenMapInfo(event, rollback);
+            break;
+        }
+        case rai::CrossChainEventType::UNMAP:
+        {
+            // todo:
+            break;
+        }
+        case rai::CrossChainEventType::WRAP:
+        {
+            // todo:
+            break;
+        }
+        case rai::CrossChainEventType::UNWRAP:
+        {
+            // todo:
+            break;
+        }
+        default:
+        {
+            rai::Log::Error(
+                rai::ToString("Token::ProcessCrossChainEvent_: unknown cross "
+                              "chain event, type=",
+                              event->Type()));
+        }
+    }
 }

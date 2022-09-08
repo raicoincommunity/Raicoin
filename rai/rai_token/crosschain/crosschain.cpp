@@ -137,3 +137,14 @@ std::shared_ptr<rai::BaseParser> rai::CrossChain::Parser(rai::Chain chain) const
     }
     return it->parser_;
 }
+
+void rai::CrossChain::RegisterEventObserver(
+    const std::function<void(const std::shared_ptr<rai::CrossChainEvent>&,
+                             bool)>& observer)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    for (auto& i : parsers_)
+    {
+        i.parser_->event_observer_ = observer;
+    }
+}

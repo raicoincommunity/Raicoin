@@ -746,6 +746,21 @@ void rai::Token::Start()
         });
     };
 
+    cross_chain_.RegisterEventObserver(
+        [token](const std::shared_ptr<rai::CrossChainEvent>& event,
+                bool rollback) {
+            auto token_s = token.lock();
+            if (token_s == nullptr) return;
+
+            token_s->Background([token, event, rollback]() {
+                if (auto token_s = token.lock())
+                {
+                    token_s->observers_.cross_chain_event_.Notify(event,
+                                                                  rollback);
+                }
+            });
+        });
+
     App::Start();
 
     Ongoing(std::bind(&rai::ChainWaiting::Age, &chain_waiting_, 7200),
@@ -1365,6 +1380,7 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_MAP_INFOS);
     info.actions_.push_back(P::Action::TOKEN_PENDING_MAP_INFOS);
     info.actions_.push_back(P::Action::TOKEN_UNMAP_INFOS);
+    info.actions_.push_back(P::Action::TOKEN_PENDING_MAP_INFO);
     // todo:
 
     return info;

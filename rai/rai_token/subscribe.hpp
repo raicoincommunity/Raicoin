@@ -28,6 +28,12 @@ public:
     void NotifyAccountSwapInfo(const rai::Account&);
     void NotifyTakeNackBlockSubmitted(const rai::Account&, uint64_t,
                                       const std::shared_ptr<rai::Block>&);
+    void NotifyPendingTokenMapInfo(const std::shared_ptr<rai::CrossChainEvent>&,
+                                   bool);
+    void NotifyTokenUnmapInfo();
+
+    void ProcessCrossChainEvent(const std::shared_ptr<rai::CrossChainEvent>&,
+                                bool);
 
     rai::Token& token_;
 };

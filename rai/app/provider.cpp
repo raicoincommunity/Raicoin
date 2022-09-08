@@ -238,6 +238,10 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_unmap_infos";
         }
+        case rai::Provider::Action::TOKEN_PENDING_MAP_INFO:
+        {
+            return "pending_token_map_info";
+        }
         default:
         {
             return "";

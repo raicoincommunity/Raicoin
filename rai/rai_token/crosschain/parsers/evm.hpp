@@ -246,6 +246,7 @@ private:
     void DoubleBatch_();
     void SubmitBlocks_();
     void SubmitNativeToken_();
+    void Notify_(const rai::EvmBlockEvents&, bool);
 
     mutable std::mutex mutex_;
     uint64_t session_id_;
