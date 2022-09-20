@@ -3266,6 +3266,7 @@ void rai::ExtensionTokenWrap::SerializeJson(rai::Ptree& ptree) const
 
     token_.SerializeJson(ptree);
     ptree.put("to_chain", rai::ChainToString(to_chain_));
+    ptree.put("to_chain_id", std::to_string(static_cast<uint32_t>(to_chain_)));
     ptree.put("to_account", rai::TokenAddressToString(to_chain_, to_account_));
     ptree.put("to_account_raw", to_account_.StringHex());
     ptree.put("value", value_.StringDec());

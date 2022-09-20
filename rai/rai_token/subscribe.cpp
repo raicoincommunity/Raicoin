@@ -73,6 +73,17 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             NotifyTakeNackBlockSubmitted(account, height, block);
         });
 
+    token_.observers_.token_map_.Add([this](const rai::Account& account,
+                                            rai::Chain chain, uint64_t height,
+                                            uint64_t index) {
+        NotifyTokenMapInfo(account, chain, height, index);
+    });
+
+    token_.observers_.token_unmap_.Add(
+        [this](const rai::Account& account, uint64_t height) {
+            NotifyTokenUnmapInfo(account, height);
+        });
+
     token_.observers_.cross_chain_event_.Add(
         [this](const std::shared_ptr<rai::CrossChainEvent>& event,
                bool rollback) { ProcessCrossChainEvent(event, rollback); });
@@ -330,16 +341,147 @@ void rai::TokenSubscriptions::NotifyPendingTokenMapInfo(
     ptree.put("address_raw", map.address_.StringHex());
     ptree.put("type", rai::TokenTypeToString(map.token_type_));
     ptree.put("value", map.value_.StringDec());
-    ptree.put("from", map.from_.StringHex());
+    ptree.put("from", rai::TokenAddressToString(map.chain_, map.from_));
+    ptree.put("from_raw", map.from_.StringHex());
     ptree.put("to", map.to_.StringAccount());
+    ptree.put("to_raw", map.to_.StringHex());
     ptree.put("source_transaction", map.tx_hash_.StringHex());
     ptree.put("rollback", rai::BoolToString(rollback));
     using P = rai::Provider;
-    P::PutAction(ptree, P::Action::TOKEN_TAKE_NACK_BLOCK_SUBMITTED);
+    P::PutAction(ptree, P::Action::TOKEN_PENDING_MAP_INFO);
     P::PutId(ptree, token_.provider_info_.id_);
     P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, map.to_.StringAccount());
 
     Notify(map.to_, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyTokenMapInfo(const rai::Account& account,
+                                                 rai::Chain chain,
+                                                 uint64_t height,
+                                                 uint64_t index)
+{
+    if (!Subscribed(account)) return;
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::TokenMapKey key(account, chain, height, index);
+    rai::TokenMapInfo info;
+    bool error = token_.ledger_.TokenMapInfoGet(transaction, key, info);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("TokenSubscriptions::NotifyTokenMapInfo: failed to "
+                          "get map info, account=",
+                          account.StringAccount(), ", chain=", chain,
+                          ", height=", height, ", index=", index));
+        return;
+    }
+
+    std::string error_info;
+    rai::Ptree ptree;
+    error =
+        token_.MakeTokenMapInfoPtree(transaction, key, info, error_info, ptree);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "TokenSubscriptions::NotifyTokenMapInfo: failed to "
+            "make map ptree, account=",
+            account.StringAccount(), ", chain=", chain, ", height=", height,
+            ", index=", index, ", error=", error_info));
+        return;
+    }
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_MAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
+    Notify(account, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyTokenUnmapInfo(const rai::Account& account,
+                                                   uint64_t height)
+{
+    if (!Subscribed(account)) return;
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::TokenUnmapInfo info;
+    bool error =
+        token_.ledger_.TokenUnmapInfoGet(transaction, account, height, info);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("TokenSubscriptions::NotifyTokenUnmapInfo: failed to "
+                          "get unmap info, account=",
+                          account.StringAccount(), ", height=", height));
+        return;
+    }
+
+    std::string error_info;
+    rai::Ptree ptree;
+    error = token_.MakeTokenUnmapInfoPtree(transaction, account, height, info,
+                                           error_info, ptree);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("TokenSubscriptions::NotifyTokenUnmapInfo: failed to "
+                          "make unmap ptree, account=",
+                          account.StringAccount(), ", height=", height,
+                          ", error=", error_info));
+        return;
+    }
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_UNMAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
+    Notify(account, ptree);
+}
+
+void rai::TokenSubscriptions::NotifyTokenWrapInfo(const rai::Account& account,
+                                                  uint64_t height)
+{
+    if (!Subscribed(account)) return;
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::TokenWrapInfo info;
+    bool error =
+        token_.ledger_.TokenWrapInfoGet(transaction, account, height, info);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("TokenSubscriptions::NotifyTokenWrapInfo: failed to "
+                          "get wrap info, account=",
+                          account.StringAccount(), ", height=", height));
+        return;
+    }
+
+    std::string error_info;
+    rai::Ptree ptree;
+    error = token_.MakeTokenWrapInfoPtree(transaction, account, height, info,
+                                          error_info, ptree);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("TokenSubscriptions::NotifyTokenWrapInfo: failed to "
+                          "make unmap ptree, account=",
+                          account.StringAccount(), ", height=", height,
+                          ", error=", error_info));
+        return;
+    }
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_WRAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
+    Notify(account, ptree);
 }
 
 void rai::TokenSubscriptions::ProcessCrossChainEvent(
@@ -359,12 +501,16 @@ void rai::TokenSubscriptions::ProcessCrossChainEvent(
         }
         case rai::CrossChainEventType::UNMAP:
         {
-            // todo:
+            const rai::CrossChainUnmapEvent& unmap =
+                static_cast<const rai::CrossChainUnmapEvent&>(*event);
+            NotifyTokenUnmapInfo(unmap.from_, unmap.from_height_);
             break;
         }
         case rai::CrossChainEventType::WRAP:
         {
-            // todo:
+            const rai::CrossChainWrapEvent& wrap =
+                static_cast<const rai::CrossChainWrapEvent&>(*event);
+            NotifyTokenUnmapInfo(wrap.from_, wrap.from_height_);
             break;
         }
         case rai::CrossChainEventType::UNWRAP:

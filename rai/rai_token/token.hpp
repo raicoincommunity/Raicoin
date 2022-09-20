@@ -49,6 +49,8 @@ public:
     rai::ObserverContainer<const rai::Account&, uint64_t,
                            const std::shared_ptr<rai::Block>&>
         take_nack_block_submitted_;
+    rai::ObserverContainer<const rai::Account&, rai::Chain, uint64_t, uint64_t>
+        token_map_;
     rai::ObserverContainer<const rai::Account&, uint64_t> token_unmap_;
     rai::ObserverContainer<const rai::Account&, uint64_t> token_wrap_;
     rai::ObserverContainer<const std::shared_ptr<rai::CrossChainEvent>&, bool>
@@ -148,6 +150,8 @@ public:
                                 uint64_t, const rai::TokenWrapInfo&,
                                 std::string&, rai::Ptree&) const;
     std::shared_ptr<rai::CrossChainUnmapEvent> PendingUnmapEvent(
+        rai::Chain, const rai::BlockHash&) const;
+    std::shared_ptr<rai::CrossChainWrapEvent> PendingWrapEvent(
         rai::Chain, const rai::BlockHash&) const;
     static std::vector<rai::BlockType> BlockTypes();
     static rai::Provider::Info Provide();
@@ -364,6 +368,8 @@ private:
     std::function<void(const rai::Account&, uint64_t,
                        const std::shared_ptr<rai::Block>&)>
         take_nack_block_submitted_observer_;
+    std::function<void(const rai::Account&, rai::Chain, uint64_t, uint64_t)>
+        token_map_observer_;
     std::function<void(const rai::Account&, uint64_t)> token_unmap_observer_;
     std::function<void(const rai::Account&, uint64_t)> token_wrap_observer_;
 };

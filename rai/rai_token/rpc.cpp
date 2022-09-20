@@ -171,6 +171,10 @@ void rai::TokenRpcHandler::ProcessImpl()
     {
         TokenWrapInfo();
     }
+    else if (action == "token_wrap_infos")
+    {
+        TokenWrapInfos();
+    }
     else if (action == "stop")
     {
         if (!CheckLocal_())
@@ -2250,12 +2254,68 @@ void rai::TokenRpcHandler::TokenWrapInfo()
     }
     std::string error_info;
     error = token_.MakeTokenWrapInfoPtree(transaction, account, height, info,
-                                           error_info, response_);
+                                          error_info, response_);
     if (error)
     {
         response_.put("error", error_info);
         return;
     }
+}
+
+void rai::TokenRpcHandler::TokenWrapInfos()
+{
+    rai::Account account;
+    bool error = GetAccount_(account);
+    IF_ERROR_RETURN_VOID(error);
+    response_.put("account", account.StringAccount());
+
+    uint64_t height;
+    error = GetHeight_(height);
+    if (error)
+    {
+        height = std::numeric_limits<uint64_t>::max();
+    }
+    response_.put("height", std::to_string(height));
+
+    uint64_t count;
+    error = GetCount_(count);
+    error_code_ = rai::ErrorCode::SUCCESS;
+    if (error || count == 0) count = 10;
+    if (count > 100) count = 100;
+
+    rai::Transaction transaction(error_code_, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code_);
+
+    rai::Ptree wraps;
+    rai::Iterator i =
+        token_.ledger_.TokenWrapInfoLowerBound(transaction, account, height);
+    rai::Iterator n =
+        token_.ledger_.TokenWrapInfoUpperBound(transaction, account);
+    for (; i != n && count > 0; ++i, --count)
+    {
+        rai::TokenWrapInfo info;
+        error = token_.ledger_.TokenWrapInfoGet(i, account, height, info);
+        if (error)
+        {
+            response_.put("error", "Failed to get token wrap info");
+            return;
+        }
+
+        std::string error_info;
+        rai::Ptree wrap;
+        error = token_.MakeTokenWrapInfoPtree(transaction, account, height,
+                                              info, error_info, wrap);
+        if (error)
+        {
+            response_.put("error", error_info);
+            return;
+        }
+
+        wraps.push_back(std::make_pair("", wrap));
+    }
+
+    response_.put_child("wraps", wraps);
+    response_.put("more", rai::BoolToString(i != n));
 }
 
 bool rai::TokenRpcHandler::GetTokenAddress_(rai::Chain chain,

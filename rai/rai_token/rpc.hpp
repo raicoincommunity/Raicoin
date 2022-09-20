@@ -60,6 +60,7 @@ public:
     void TokenUnmapInfo();
     void TokenUnmapInfos();
     void TokenWrapInfo();
+    void TokenWrapInfos();
 
 private:
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);
