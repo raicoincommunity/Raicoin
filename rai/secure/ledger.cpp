@@ -1072,6 +1072,7 @@ void rai::TokenWrapInfo::Serialize(rai::Stream& stream) const
     rai::Write(stream, source_tx_.bytes);
     rai::Write(stream, target_tx_.bytes);
     rai::Write(stream, target_height_);
+    rai::Write(stream, wrapped_token_.bytes);
 }
 
 bool rai::TokenWrapInfo::Deserialize(rai::Stream& stream)
@@ -1093,6 +1094,8 @@ bool rai::TokenWrapInfo::Deserialize(rai::Stream& stream)
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, target_height_);
     IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, wrapped_token_.bytes);
+    IF_ERROR_RETURN(error);
     return false;
 }
 

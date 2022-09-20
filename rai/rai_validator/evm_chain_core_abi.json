@@ -1,7 +1,7 @@
 [
   {
     "inputs": [],
-    "name": "AlreadyUnmapped",
+    "name": "AlreadySubmitted",
     "type": "error"
   },
   {
@@ -1268,6 +1268,57 @@
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "tokenInfo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "reserve",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum Core.TokenType",
+            "name": "tokenType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "volatile",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "wrapped",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "initialized",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "decimals",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct Core.TokenInfo",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "contract IERC20Upgradeable",
         "name": "token",
         "type": "address"
@@ -1625,6 +1676,30 @@
     "name": "wrapERC721Token",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "originalChainId",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "originalContract",
+        "type": "bytes32"
+      }
+    ],
+    "name": "wrappedToken",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   }
 ]

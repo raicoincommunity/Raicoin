@@ -30,7 +30,10 @@ public:
                                       const std::shared_ptr<rai::Block>&);
     void NotifyPendingTokenMapInfo(const std::shared_ptr<rai::CrossChainEvent>&,
                                    bool);
-    void NotifyTokenUnmapInfo();
+    void NotifyTokenMapInfo(const rai::Account&, rai::Chain, uint64_t,
+                            uint64_t);
+    void NotifyTokenUnmapInfo(const rai::Account&, uint64_t);
+    void NotifyTokenWrapInfo(const rai::Account&, uint64_t);
 
     void ProcessCrossChainEvent(const std::shared_ptr<rai::CrossChainEvent>&,
                                 bool);

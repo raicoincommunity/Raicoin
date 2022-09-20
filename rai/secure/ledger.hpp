@@ -354,6 +354,7 @@ public:
     rai::BlockHash source_tx_;
     rai::BlockHash target_tx_;
     uint64_t target_height_;
+    rai::TokenAddress wrapped_token_;
 };
 
 using TokenUnwrapKey = TokenMapKey;
