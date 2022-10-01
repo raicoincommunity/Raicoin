@@ -1008,12 +1008,10 @@ rai::ErrorCode rai::Rewarder::ProcessCredit_(std::shared_ptr<rai::Block>& block)
         uint64_t count = 0;
         error =
             node_.ledger_.BindingCountGet(transaction, node_.account_, count);
-        if (!error && count >= rai::AllowedBindings(head->Credit())
-            && count < rai::MAX_ALLOWED_BINDINGS)
+        if (!error && count >= rai::AllowedBindings(head->Credit()))
         {
             break;
         }
-
         return error_code;
     } while (0);
 

@@ -1747,9 +1747,9 @@ public:
             }
         }
 
-        rai::BindingEntry entry(block.Chain(), block.Link());
-        error = ledger_.BindingEntryPut(transaction_, block.Account(),
-                                        block.Height(), entry);
+        rai::BindingKey binding_key(block.Account(), block.Chain(),
+                                    block.Height());
+        error = ledger_.BindingPut(transaction_, binding_key, block.Link());
         IF_ERROR_RETURN(error,
                         rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_PUT);
 
@@ -2226,9 +2226,10 @@ public:
         std::string error_info;
         do
         {
-            rai::BindingEntry entry;
-            bool error = ledger_.BindingEntryGet(transaction_, block.Account(),
-                                                 block.Height(), entry);
+            rai::BindingKey binding_key(block.Account(), block.Chain(),
+                                        block.Height());
+            rai::SignerAddress signer;
+            bool error = ledger_.BindingGet(transaction_, binding_key, signer);
             if (error)
             {
                 error_info = rai::ToString(
@@ -2261,8 +2262,7 @@ public:
                 break;
             }
 
-            error = ledger_.BindingEntryDel(transaction_, block.Account(),
-                                            block.Height());
+            error = ledger_.BindingDel(transaction_, binding_key);
             IF_ERROR_RETURN(
                 error, rai::ErrorCode::BLOCK_PROCESS_LEDGER_BINDING_ENTRY_DEL);
 

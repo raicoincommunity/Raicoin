@@ -100,7 +100,6 @@ size_t constexpr MAX_EXTENSIONS_SIZE = 256;
 uint64_t constexpr SWAP_PING_PONG_INTERVAL = 60;
 uint64_t constexpr BASE_ALLOWED_BINDINGS = 16;
 uint64_t constexpr EXTRA_BINDINGS_PER_CREDIT = 1;
-uint64_t constexpr MAX_ALLOWED_BINDINGS = 2048;
 uint32_t constexpr CROSS_CHAIN_EPOCH_INTERVAL = 3 * 24 * 60 * 60;
 
 // Votes from qualified representatives will be broadcasted

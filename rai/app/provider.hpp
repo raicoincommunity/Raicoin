@@ -78,7 +78,10 @@ public:
         TOKEN_UNMAP_INFOS                   = 235,
         TOKEN_PENDING_MAP_INFO              = 236,
         TOKEN_WRAP_INFOS                    = 237,
-
+        TOKEN_PENDING_UNWRAP_INFO           = 238,
+        TOKEN_PENDING_UNWRAP_INFOS          = 239,
+        TOKEN_UNWRAP_INFO                   = 240,
+        TOKEN_UNWRAP_INFOS                  = 241,
     };
     static std::string ToString(Action);
 

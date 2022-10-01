@@ -1312,6 +1312,10 @@ rai::ErrorCode rai::MessageParser::Parse(rai::Stream& stream)
         {
             return Parse<rai::ConflictMessage>(stream, header);
         }
+        case rai::MessageType::WEIGHT:
+        {
+            return Parse<rai::WeightMessage>(stream, header);
+        }
         case rai::MessageType::CROSSCHAIN:
         {
             return Parse<rai::CrosschainMessage>(stream, header);

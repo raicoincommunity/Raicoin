@@ -26,7 +26,6 @@
 #include <rai/node/rewarder.hpp>
 #include <rai/node/rpc.hpp>
 #include <rai/node/config.hpp>
-#include <rai/node/bindingcache.hpp>
 #include <rai/node/validator.hpp>
 
 namespace rai
@@ -310,7 +309,6 @@ public:
     rai::Rewarder rewarder_;
     rai::ActiveAccounts active_accounts_;
     std::shared_ptr<rai::WebsocketClient> websocket_;
-    rai::BindingCaches binding_caches_;
     rai::Validator validator_;
 
 private:
@@ -320,8 +318,6 @@ private:
                         const std::shared_ptr<rai::Block>&);
     void UpdateActiveAccounts_(const rai::BlockProcessResult&,
                                const std::shared_ptr<rai::Block>&);
-    void UpdateBindingCaches_(const rai::BlockProcessResult&,
-                              const std::shared_ptr<rai::Block>&);
     void ProcessReceivable_(const rai::BlockProcessResult&,
                             const std::shared_ptr<rai::Block>&);
 

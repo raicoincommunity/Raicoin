@@ -84,11 +84,21 @@ rai::TokenSubscriptions::TokenSubscriptions(rai::Token& token)
             NotifyTokenUnmapInfo(account, height);
         });
 
+    token_.observers_.token_wrap_.Add(
+        [this](const rai::Account& account, uint64_t height) {
+            NotifyTokenWrapInfo(account, height);
+        });
+
+    token_.observers_.token_unwrap_.Add(
+        [this](const rai::Account& account, rai::Chain chain, uint64_t height,
+               uint64_t index) {
+            NotifyTokenUnwrapInfo(account, chain, height, index);
+        });
+
     token_.observers_.cross_chain_event_.Add(
         [this](const std::shared_ptr<rai::CrossChainEvent>& event,
                bool rollback) { ProcessCrossChainEvent(event, rollback); });
 
-    // todo:
 }
 
 void rai::TokenSubscriptions::NotifyTokenInfo(const rai::TokenKey& key,
@@ -355,6 +365,42 @@ void rai::TokenSubscriptions::NotifyPendingTokenMapInfo(
     Notify(map.to_, ptree);
 }
 
+void rai::TokenSubscriptions::NotifyPendingTokenUnwrapInfo(
+    const std::shared_ptr<rai::CrossChainEvent>& event, bool rollback)
+{
+    const rai::CrossChainUnwrapEvent& unwrap =
+        static_cast<const rai::CrossChainUnwrapEvent&>(*event);
+    if (!Subscribed(unwrap.to_)) return;
+
+    rai::Ptree ptree;
+    ptree.put("account", unwrap.to_.StringAccount());
+    ptree.put("height", std::to_string(unwrap.block_height_));
+    ptree.put("index", std::to_string(unwrap.index_));
+    ptree.put("chain", rai::ChainToString(unwrap.original_chain_));
+    ptree.put("chain_id",
+              std::to_string(static_cast<uint32_t>(unwrap.original_chain_)));
+    ptree.put("address", rai::TokenAddressToString(unwrap.original_chain_,
+                                                   unwrap.original_address_));
+    ptree.put("address_raw", unwrap.original_address_.StringHex());
+    ptree.put("type", rai::TokenTypeToString(unwrap.token_type_));
+    ptree.put("value", unwrap.value_.StringDec());
+    ptree.put("from_chain", rai::ChainToString(unwrap.chain_));
+    ptree.put("from_chain_id",
+              std::to_string(static_cast<uint32_t>(unwrap.chain_)));
+    ptree.put("from_account_raw", unwrap.from_.StringHex());
+    ptree.put("to", unwrap.to_.StringAccount());
+    ptree.put("to_raw", unwrap.to_.StringHex());
+    ptree.put("source_transaction", unwrap.tx_hash_.StringHex());
+    ptree.put("wrapped_address_raw", unwrap.address_.StringHex());
+    ptree.put("rollback", rai::BoolToString(rollback));
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_PENDING_UNWRAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, unwrap.to_.StringAccount());
+
+    Notify(unwrap.to_, ptree);
+}
+
 void rai::TokenSubscriptions::NotifyTokenMapInfo(const rai::Account& account,
                                                  rai::Chain chain,
                                                  uint64_t height,
@@ -484,6 +530,51 @@ void rai::TokenSubscriptions::NotifyTokenWrapInfo(const rai::Account& account,
     Notify(account, ptree);
 }
 
+void rai::TokenSubscriptions::NotifyTokenUnwrapInfo(const rai::Account& account,
+                                                    rai::Chain chain,
+                                                    uint64_t height,
+                                                    uint64_t index)
+{
+    if (!Subscribed(account)) return;
+    rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
+    rai::Transaction transaction(error_code, token_.ledger_, false);
+    IF_NOT_SUCCESS_RETURN_VOID(error_code);
+
+    rai::TokenUnwrapKey key(account, chain, height, index);
+    rai::TokenUnwrapInfo info;
+    bool error = token_.ledger_.TokenUnwrapInfoGet(transaction, key, info);
+    if (error)
+    {
+        rai::Log::Error(
+            rai::ToString("TokenSubscriptions::NotifyTokenUnwrapInfo: failed "
+                          "to get unwrap info, account=",
+                          account.StringAccount(), ", chain=", chain,
+                          ", height=", height, ", index=", index));
+        return;
+    }
+
+    std::string error_info;
+    rai::Ptree ptree;
+    error = token_.MakeTokenUnwrapInfoPtree(transaction, key, info, error_info,
+                                            ptree);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "TokenSubscriptions::NotifyTokenUnwrapInfo: failed to make map "
+            "ptree, account=",
+            account.StringAccount(), ", chain=", chain, ", height=", height,
+            ", index=", index, ", error=", error_info));
+        return;
+    }
+
+    using P = rai::Provider;
+    P::PutAction(ptree, P::Action::TOKEN_UNWRAP_INFO);
+    P::PutId(ptree, token_.provider_info_.id_);
+    P::AppendFilter(ptree, P::Filter::APP_ACCOUNT, account.StringAccount());
+
+    Notify(account, ptree);
+}
+
 void rai::TokenSubscriptions::ProcessCrossChainEvent(
     const std::shared_ptr<rai::CrossChainEvent>& event, bool rollback)
 {
@@ -510,12 +601,12 @@ void rai::TokenSubscriptions::ProcessCrossChainEvent(
         {
             const rai::CrossChainWrapEvent& wrap =
                 static_cast<const rai::CrossChainWrapEvent&>(*event);
-            NotifyTokenUnmapInfo(wrap.from_, wrap.from_height_);
+            NotifyTokenWrapInfo(wrap.from_, wrap.from_height_);
             break;
         }
         case rai::CrossChainEventType::UNWRAP:
         {
-            // todo:
+            NotifyPendingTokenUnwrapInfo(event, rollback);
             break;
         }
         default:

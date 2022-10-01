@@ -127,6 +127,7 @@ public:
     void Add(const std::shared_ptr<rai::Block>&);
     void Add(const std::vector<std::shared_ptr<rai::Block>>&);
     std::vector<std::pair<rai::Account, uint64_t>> GetAll() const;
+    std::vector<std::pair<rai::Account, uint64_t>> GetActives() const;
     bool Get(const rai::Account&, rai::Ptree&) const;
     void Run();
     void Stop();

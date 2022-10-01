@@ -319,6 +319,23 @@ std::vector<std::pair<rai::Account, uint64_t>> rai::Elections::GetAll() const
     return result;
 }
 
+std::vector<std::pair<rai::Account, uint64_t>> rai::Elections::GetActives()
+    const
+{
+    std::vector<std::pair<rai::Account, uint64_t>> result;
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    for (const auto& account : actives_)
+    {
+        auto it = elections_.find(account);
+        if (it != elections_.end())
+        {
+            result.emplace_back(it->account_, it->height_);
+        }
+    }
+    return result;
+}
+
 bool rai::Elections::Get(const rai::Account& account, rai::Ptree& ptree) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
