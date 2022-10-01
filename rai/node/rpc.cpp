@@ -153,6 +153,18 @@ void rai::NodeRpcHandler::ProcessImpl()
     {
         ActiveAccountHeads();
     }
+    else if (action == "binding_count")
+    {
+        BindingCount();
+    }
+    else if (action == "binding_query")
+    {
+        BindingQuery();
+    }
+    else if (action == "binding_entries")
+    {
+        BindingEntries();
+    }
     else if (action == "block_confirm")
     {
         BlockConfirm();
@@ -703,16 +715,15 @@ void rai::NodeRpcHandler::BindingEntries()
     uint64_t count = 0;
     rai::Ptree entries;
     rai::Iterator i =
-        node_.ledger_.BindingEntryLowerBound(transaction, account);
+        node_.ledger_.BindingLowerBound(transaction, account);
     rai::Iterator n =
-        node_.ledger_.BindingEntryUpperBound(transaction, account);
+        node_.ledger_.BindingUpperBound(transaction, account);
     for (; i != n; ++i)
     {
         rai::Ptree entry_ptree;
-        rai::Account account_l;
-        uint64_t height;
-        rai::BindingEntry entry;
-        bool error = node_.ledger_.BindingEntryGet(i, account_l, height, entry);
+        rai::BindingKey key;
+        rai::SignerAddress signer;
+        bool error = node_.ledger_.BindingGet(i, key, signer);
         if (error)
         {
             rai::Log::Error(rai::ToString(
@@ -723,12 +734,12 @@ void rai::NodeRpcHandler::BindingEntries()
         }
 
         ++count;
-        entry_ptree.put("account", account_l.StringAccount());
-        entry_ptree.put("height", std::to_string(height));
-        entry_ptree.put("chain", rai::ChainToString(entry.chain_));
+        entry_ptree.put("account", key.account_.StringAccount());
+        entry_ptree.put("height", std::to_string(key.height_));
+        entry_ptree.put("chain", rai::ChainToString(key.chain_));
         entry_ptree.put("chain_id",
-                        std::to_string(static_cast<uint32_t>(entry.chain_)));
-        entry_ptree.put("signer", entry.signer_.StringHex());
+                        std::to_string(static_cast<uint32_t>(key.chain_)));
+        entry_ptree.put("signer", signer.StringHex());
         entries.push_back(std::make_pair("", entry_ptree));
     }
 
@@ -1466,8 +1477,19 @@ void rai::NodeRpcHandler::ElectionActiveForks()
 
 void rai::NodeRpcHandler::Elections()
 {
-    auto elections = node_.elections_.GetAll();
-    response_.put("count", std::to_string(elections.size()));
+    auto only_active_o = request_.get_optional<std::string>("only_active");
+    bool only_active = only_active_o && *only_active_o == "true";
+    std::vector<std::pair<rai::Account, uint64_t>> elections;
+    if (only_active)
+    {
+        elections = node_.elections_.GetActives();
+    }
+    else
+    {
+        elections = node_.elections_.GetAll();
+    }
+
+    size_t count = 0;
     rai::Ptree elections_ptree;
     for (const auto& i : elections)
     {
@@ -1475,8 +1497,11 @@ void rai::NodeRpcHandler::Elections()
         election.put("account", i.first.StringAccount());
         election.put("height", std::to_string(i.second));
         elections_ptree.push_back(std::make_pair("", election));
+        count++;
     }
     response_.put_child("elections", elections_ptree);
+    response_.put("count", std::to_string(elections.size()));
+    response_.put("only_active", rai::BoolToString(only_active));
 }
 
 void rai::NodeRpcHandler::EventSubscribe()

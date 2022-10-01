@@ -21,7 +21,7 @@ import uuid
 import traceback
 import struct
 
-from typing import Tuple, Union, Callable
+from typing import Tuple, Union, Callable, List
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
 from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
 from web3 import Web3, Account as EvmAccount
@@ -43,7 +43,8 @@ from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 ALLOWED_RPC_ACTIONS = [
     'service_subscribe', 'chain_info', 'chain_head_height', 'sign_transfer', 'sign_creation',
-    'token_symbol', 'token_name', 'token_type', 'token_decimals', 'creation_parameters'
+    'token_symbol', 'token_name', 'token_type', 'token_decimals', 'token_wrapped',
+    'creation_parameters'
 ]
 
 CLIENTS = {}
@@ -190,7 +191,7 @@ BSC_TEST_SIGNER_PRIVATE_KEY = os.getenv('BSC_TEST_SIGNER_PRIVATE_KEY', '')
 if BSC_TEST_SIGNER_PRIVATE_KEY.lower() == 'input':
     BSC_TEST_SIGNER_PRIVATE_KEY = getpass(
         prompt='Input the private key of your signer account for BSC testnet: ')
-    if valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
+    if not valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
         if len(BSC_TEST_SIGNER_PRIVATE_KEY) > 0:
             print('Error: invalid private key format')
         sys.exit(0)
@@ -203,7 +204,7 @@ GOERLI_SIGNER_PRIVATE_KEY = os.getenv('GOERLI_SIGNER_PRIVATE_KEY', '')
 if GOERLI_SIGNER_PRIVATE_KEY.lower() == 'input':
     GOERLI_SIGNER_PRIVATE_KEY = getpass(
         prompt='Input the private key of your signer account for Goerli testnet: ')
-    if valid_evm_private_key(GOERLI_SIGNER_PRIVATE_KEY):
+    if not valid_evm_private_key(GOERLI_SIGNER_PRIVATE_KEY):
         if len(GOERLI_SIGNER_PRIVATE_KEY) > 0:
             print('Error: invalid private key format')
         sys.exit(0)
@@ -251,6 +252,9 @@ class Util:
     
     def bytes_to_hex(self, value: bytes) -> str:
         return f'0x{value.hex()}'.lower()
+
+    def format_hex(self, hex_str: str) -> str:
+        return self.uint256_to_hex(int(hex_str, 16))
 
     def date_to_timestamp(self, date: str) -> int:
         try:
@@ -826,19 +830,38 @@ async def send_cross_chain_message(data: CrossChainMessage):
     stream.seek(0)
     payload = stream.read()
 
+    source = data.source
+    if not source.startswith('rai_'):
+        error, source = ACCOUNT.encode(source)
+        if error:
+            log.server_logger.error('failed to encode account %s', source)
+            return
+    destination = data.destination
+    if not destination.startswith('rai_'):
+        error, destination = ACCOUNT.encode(destination)
+        if error:
+            log.server_logger.error('failed to encode account %s', destination)
+            return
+
     message = {
         'action': 'cross_chain',
-        'source': data.source,
-        'destination': data.destination,
+        'source': source,
+        'destination': destination,
         'chain_id': str(int(data.chain_id)),
         'payload': payload.hex(),
     }
     await send_to_node(message)
 
+class TokenSymbol():
+    def __init__(self, chainId: ChainId, address: str, symbol: str):
+        self.chainId = chainId
+        self.address = address
+        self.symbol = symbol
+
 class EvmChainValidator:
     def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_contract: str,
                  validator_contract: str, core_abi: dict, validator_abi: dict, endpoints: list,
-                 signer_private_key: str, confirmations: int, tag: str, native: str):
+                 signer_private_key: str, confirmations: int, tag: str, native: str, token_symbol_patch: List[TokenSymbol] = []):
         self.chain_id = chain_id
         self.evm_chain_id = evm_chain_id
         self.core_contract = self.to_checksum_address(core_contract)
@@ -883,6 +906,7 @@ class EvmChainValidator:
         self.token_names = {}
         self.token_types = {}
         self.token_decimals_entries = {}
+        self.token_wrapped_entries = {}
 
         self.proposals = {}
         self.proposal_active = None
@@ -896,6 +920,11 @@ class EvmChainValidator:
             sys.exit(0)
 
         self.token_symbols[self.native_address()] = native
+        for i in token_symbol_patch:
+            if i.chainId != self.chain_id:
+                raise ValueError("invalid rai address")
+                ...
+                self.token_symbols[self.to_checksum_address(i.address)] = i.symbol
 
     def zero_address(self) -> str:
         return '0x0000000000000000000000000000000000000000'
@@ -958,7 +987,8 @@ class EvmChainValidator:
                 return
             signature = self.signSubmitValidator(message.validator, message.signer,
                 message.weight, message.epoch)
-            response = WeightSignMessage(NODE['account_hex'], i.source, self.chain_id, '', False,
+            response = WeightSignMessage(NODE['account_hex'], message.source, self.chain_id,
+                '', False,
                 message.validator, message.signer, message.weight, message.epoch, signature)
             await send_cross_chain_message(response)
         else:
@@ -1227,7 +1257,7 @@ class EvmChainValidator:
         data['primaryType'] = 'SubmitValidator'
         data['message'] = {
             'validator': UTIL.hex_to_bytes(validator),
-            'signer': signer,
+            'signer': self.to_checksum_address(signer),
             'weight': weight,
             'epoch': epoch,
         }
@@ -1457,7 +1487,7 @@ class EvmChainValidator:
         signable = self.eip712_upgrade(impl, nonce)
         return self.sign(signable)
 
-    def verifyUpgrade(self, signer: str, impl: str, nonce: int, signature: bytes) -> boolean:
+    def verifyUpgrade(self, signer: str, impl: str, nonce: int, signature: bytes) -> bool:
         if len(signature) != 65 or not impl:
             return True
         signable = self.eip712_upgrade(impl, nonce)
@@ -1471,6 +1501,7 @@ class EvmChainValidator:
                      last_submit: int, epoch: int):
             self.validator = validator
             self.signer = signer
+            self.signer_raw = UTIL.format_hex(signer)
             self.weight = weight
             self.gas_price = gas_price
             self.last_submit = last_submit
@@ -1524,6 +1555,12 @@ class EvmChainValidator:
             self.replier = replier
             self.epoch = epoch
             self.weight = weight
+        def debug_json_encode(self):
+            return {
+                'replier': self.replier,
+                'epoch': self.epoch,
+                'weight': self.weight,
+            }
 
     class SignatureInfo:
         def __init__(self, validator: str, signer: str, signature: bytes):
@@ -1589,7 +1626,8 @@ class EvmChainValidator:
             return self.genesis_signer
         if validator not in self.validator_indices:
             return ''
-        info = self.validator_indices[validator]
+        index = self.validator_indices[validator]
+        info = self.validators[index]
         if info.signer == self.zero_address():
             return ''
         return info.signer
@@ -1608,8 +1646,8 @@ class EvmChainValidator:
         }
         if self.validators != None:
             info['validators'] = [{
-                'validator': str(x.validator),
-                'signer': str(x.signer),
+                'validator': x.validator,
+                'signer': x.signer_raw,
                 'weight': str(x.weight),
                 'gas_price': str(x.gas_price),
                 'last_submit': str(x.last_submit),
@@ -1684,6 +1722,17 @@ class EvmChainValidator:
             log.server_logger.error('get_fee exception:%s', str(e))
             self.use_next_endpoint()
             return True, 0
+    
+    @awaitable
+    def get_token_info(self, address: str, block_number = 'latest'):
+        contract = self.make_core_contract()
+        try:
+            token_info = contract.functions.tokenInfo(address).call(block_identifier=block_number)
+            return False, token_info
+        except Exception as e:
+            log.server_logger.error('get_token_info exception:%s', str(e))
+            self.use_next_endpoint()
+            return True, None
 
     @awaitable
     def get_chain_id(self):
@@ -1787,8 +1836,12 @@ class EvmChainValidator:
         signatures: bytes):
         contract = self.make_validator_contract()
         try:
+            gas = contract.functions.submitValidator(validator, signer, weight, epoch, reward_to,
+                signatures).estimateGas({ 'from': signer })
+            gas = int(gas) * 2
             contract.functions.submitValidator(validator, signer, weight, epoch, reward_to, signatures).transact({
-                'from': signer
+                'from': signer,
+                'gas': gas
             })
         except Exception as e:
             log.server_logger.error('sumbit_validator exception:%s', str(e))
@@ -1798,8 +1851,13 @@ class EvmChainValidator:
     def upgrade_core(self, impl: str, nonce: int, signatures: bytes):
         contract = self.make_core_contract()
         try:
-            contract.functions.upgrade(impl, nonce, signatures).transact({
+            gas= contract.functions.upgrade(impl, nonce, signatures).estimateGas({
                 'from': self.signer
+            })
+            gas = int(gas) * 2
+            contract.functions.upgrade(impl, nonce, signatures).transact({
+                'from': self.signer,
+                'gas': gas
             })
         except Exception as e:
             log.server_logger.error('upgrade_core exception:%s', str(e))
@@ -1930,8 +1988,8 @@ class EvmChainValidator:
             if error:
                 return error, updated
             for i in array:
-                validators.append(self.ValidatorFullInfo('0x' + i.validator.hex(), i.signer,
-                    int(i.weight), int(i.gasPrice), int(i.lastSubmit), int(i.epoch)))
+                validators.append(self.ValidatorFullInfo('0x' + i[0].hex(),
+                    self.to_checksum_address(i[2]), int(i[5]), int(i[1]), int(i[3]), int(i[4])))
             await asyncio.sleep(0.1)
         validators.sort(reverse=True)
         self.validators = validators
@@ -1950,12 +2008,13 @@ class EvmChainValidator:
             if error:
                 return error, updated
             weight = 0
-            if self.to_checksum_address(info.signer) != self.zero_address():
-                error, weight = await self.get_weight(info.signer, block_number)
+            signer = self.to_checksum_address(info[1])
+            if signer != self.zero_address():
+                error, weight = await self.get_weight(signer, block_number)
                 if error:
                     return error, updated
-            updated = self.update_validator(validator, info.signer, int(weight), int(info.gasPrice),
-                int(info.lastSubmit), int(info.epoch)) or updated
+            updated = self.update_validator(validator, signer, int(weight), int(info[0]),
+                int(info[2]), int(info[3])) or updated
             activity.sync_height = block_number
             if activity.sync_height >= activity.log_height + self.confirmations:
                 purgeable.append(validator)
@@ -2116,11 +2175,16 @@ class EvmChainValidator:
         for validator in validators:
             if validator in self.weights:
                 continue
+            error, account = ACCOUNT.encode(validator)
+            if error:
+                log.server_logger.error('node_weight_query: failed to encode validator %s',
+                    validator)
+                continue
             message = {
                 'action': 'weight_query',
                 'request_id': f'{int(self.chain_id):064X}',
                 'representative': NODE['account'],
-                'replier': validator,
+                'replier': account,
             }
             await send_to_node(message)
 
@@ -2201,6 +2265,8 @@ class EvmChainValidator:
         return None
 
     async def bind(self):
+        if not node_synced():
+            return
         if self.signer == None or self.signer == self.genesis_signer:
             return
         if not self.binding_status_synced:
@@ -2385,7 +2451,7 @@ class EvmChainValidator:
         if not node_synced():
             return {'error': 'node offline'}
 
-        result = await self.token_symbol(req)
+        result = await self.token_symbol(None, req)
         if 'error' in result:
             return result
         symbol = result['symbol']
@@ -2472,7 +2538,7 @@ class EvmChainValidator:
         return {'symbol': symbol}
 
     async def token_name(self, _: str, req: dict) -> dict:
-        address = req['address']
+        address = self.to_checksum_address(req['address'])
         result = {'address': address, 'address_raw': req['address_raw']}
         if address in self.token_names:
             result['name'] = self.token_names[address]
@@ -2511,7 +2577,7 @@ class EvmChainValidator:
         return True
 
     async def token_type(self, _: str, req: dict) -> dict:
-        address = req['address']
+        address = self.to_checksum_address(req['address'])
         if address in self.token_types:
             return {'type': self.token_types[address]}
         error, block_number = await self.get_block_number()
@@ -2530,7 +2596,7 @@ class EvmChainValidator:
         return {'type': ''}
 
     async def token_decimals(self, _: str, req: dict) -> dict:
-        address = req['address']
+        address = self.to_checksum_address(req['address'])
         if address in self.token_decimals_entries:
             return {'decimals': str(self.token_decimals_entries[address])}
         error, block_number = await self.get_block_number()
@@ -2542,6 +2608,24 @@ class EvmChainValidator:
             return {'error': 'failed to get token decimals'}
         self.token_decimals_entries[address] = decimals
         return {'decimals': str(decimals)}
+
+    async def token_wrapped(self, _: str, req: dict) -> dict:
+        address = self.to_checksum_address(req['address'])
+        if address in self.token_wrapped_entries:
+            return {'wrapped': 'true' if self.token_wrapped_entries[address] else 'false'}
+        error, block_number = await self.get_block_number()
+        if error:
+            return {'error': 'failed to get block_number'}
+        block_number -= self.confirmations
+        error, token_info = await self.get_token_info(address, block_number)
+        if error:
+            return {'error': 'failed to get token info'}
+        wrapped = token_info[3]
+        initialized = token_info[4]
+        if not initialized:
+            return { 'wrapped': 'false' }
+        self.token_wrapped_entries[address] = wrapped
+        return {'wrapped': 'true' if wrapped else 'false'}
 
     def debug_json_encode(self) -> dict:
         result = {}
@@ -2644,6 +2728,13 @@ class RaiChainValidator:
         }
         return result
 
+    def debug_json_encode(self) -> dict:
+        result = {}
+        result['token_infos'] = self.token_infos
+        result['chain_id'] = self.chain_id.value
+        result['tag'] = self.tag
+        return result
+
 def get_validator(chain_id: int):
     if chain_id not in VALIDATORS:
         return None
@@ -2653,7 +2744,7 @@ def wrapped_token_symbol(symbol: str) -> str:
     return f'r{symbol}'
 
 def wrapped_token_name(symbol: str, chainTag: str) -> str:
-    return f'RAI wrapped {symbol}<{chainTag}>'
+    return f'{symbol} from {chainTag}'
 
 async def send_ack(uid, req: dict, resp: dict):
     if uid not in CLIENTS:
@@ -2879,6 +2970,25 @@ async def token_decimals(uid, req, res):
         res['error'] = 'exception'
         log.server_logger.exception('token_decimals exception:%s', str(e))
 
+async def token_wrapped(uid, req, res):
+    try:
+        if 'chain' in req:
+            res['chain'] = req['chain']
+        res['chain_id'] = req['chain_id']
+        if 'address' in req:
+            res['address'] = req['address']
+        if 'address_raw' in req:
+            res['address_raw'] = req['address_raw']
+        chain_id = int(req['chain_id'])
+        validator = get_validator(chain_id)
+        if validator == None:
+            res['error'] = 'chain not supported'
+            return
+        res.update(await validator.token_wrapped(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('token_wrapped exception:%s', str(e))
+
 async def notify_chain_info(chain_id: ChainId, info: dict):
     chain_id = str(int(chain_id))
     message = {
@@ -2939,6 +3049,8 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
             await token_type(uid, request, res)
         elif action == 'token_decimals':
             await token_decimals(uid, request, res)
+        elif action == 'token_wrapped':
+            await token_wrapped(uid, request, res)
         else:
             res.update({'error':'unknown action'})
         return res
@@ -3322,6 +3434,10 @@ class JsonEncoder(json.JSONEncoder):
             return obj.debug_json_encode()
         if isinstance(obj, EvmChainValidator.SignatureInfo):
             return obj.debug_json_encode()
+        if isinstance(obj, RaiChainValidator):
+            return obj.debug_json_encode()
+        if isinstance(obj, EvmChainValidator.WeightInfo):
+            return obj.debug_json_encode()
         return json.JSONEncoder.default(self, obj)
 
 DEBUG_DUMPS = partial(json.dumps, cls=JsonEncoder, indent=4)
@@ -3393,6 +3509,25 @@ async def periodic(period, fn, *args):
         if elapsed < period:
             await asyncio.sleep(period - elapsed)
 
+class EthTokenSymbol(TokenSymbol):
+    def __init__(self, address: str, symbol: str):
+        super().__init__(ChainId.ETHEREUM, address, symbol)
+
+class BscTokenSymbol(TokenSymbol):
+    def __init__(self, address: str, symbol: str):
+        super().__init__(ChainId.BINANCE_SMART_CHAIN, address, symbol)
+
+
+ETH_TOKEN_SYMBOL_PATCH = [
+    EthTokenSymbol('0x50D1c9771902476076eCFc8B2A83Ad6b9355a4c9', 'FTT'),
+    EthTokenSymbol('0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1', 'TON'),
+    EthTokenSymbol('0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', 'MKR'),
+]
+
+BSC_TOKEN_SYMBOL_PATCH = [
+    EthTokenSymbol('0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', 'CAKE'),
+]
+
 BSC_TEST_CORE_CONTRACT = '0x68CF8517a569565F0B30f8856F0555d55d539307'
 BSC_TEST_VALIDATOR_CONTRACT = '0x4f428DD655246e5e5a30e7853D6F575D7eE74449'
 
@@ -3404,15 +3539,15 @@ if TEST_MODE:
     VALIDATORS = {
         ChainId.RAICOIN_TEST: {
             'period': 0,
-            'validator': RaiChainValidator(ChainId.RAICOIN_TEST, 'raicoin_test')
+            'validator': RaiChainValidator(ChainId.RAICOIN_TEST, 'Raicoin testnet')
         },
         ChainId.ETHEREUM_TEST_GOERLI: {
-            'period': 10,
+            'period': 12,
             'validator': EvmChainValidator(ChainId.ETHEREUM_TEST_GOERLI,
                                            EvmChainId.ETHEREUM_TEST_GOERLI,
                                            GOERLI_CORE_CONTRACT, GOERLI_VALIDATOR_CONTRACT,
                                            EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI,
-                                           GOERLI_ENDPOINTS, GOERLI_SIGNER_PRIVATE_KEY, 30, 'goerli', 'ETH')
+                                           GOERLI_ENDPOINTS, GOERLI_SIGNER_PRIVATE_KEY, 96, 'Goerli', 'ETH')
         },
         ChainId.BINANCE_SMART_CHAIN_TEST: {
             'period': 5,
@@ -3420,7 +3555,7 @@ if TEST_MODE:
                                            EvmChainId.BINANCE_SMART_CHAIN_TEST,
                                            BSC_TEST_CORE_CONTRACT, BSC_TEST_VALIDATOR_CONTRACT,
                                            EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI,
-                                           BSC_TEST_ENDPOINTS, BSC_TEST_SIGNER_PRIVATE_KEY, 30, 'bsc_test', 'BNB')
+                                           BSC_TEST_ENDPOINTS, BSC_TEST_SIGNER_PRIVATE_KEY, 30, 'BSC testnet', 'BNB')
         },
     }
 else:

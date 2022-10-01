@@ -135,16 +135,17 @@ public:
     rai::Account account_;
 };
 
-class BindingEntry
+class BindingKey
 {
 public:
-    BindingEntry() = default;
-    BindingEntry(rai::Chain, const rai::SignerAddress&);
+    BindingKey() = default;
+    BindingKey(const rai::Account&, rai::Chain, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
+    rai::Account account_;
     rai::Chain chain_;
-    rai::SignerAddress signer_;
+    uint64_t height_;
 };
 
 class TokenKey
@@ -358,7 +359,22 @@ public:
 };
 
 using TokenUnwrapKey = TokenMapKey;
-using TokenUnwrapInfo = TokenMapInfo;
+class TokenUnwrapInfo
+{
+public:
+    TokenUnwrapInfo();
+    TokenUnwrapInfo(const rai::TokenKey&, const rai::BlockHash&,
+                    const rai::Account&, const rai::TokenValue&,
+                    const rai::TokenAddress&);
+    void Serialize(rai::Stream&) const;
+    bool Deserialize(rai::Stream&);
+
+    rai::TokenKey token_;
+    rai::BlockHash source_tx_hash_;
+    rai::Account from_;
+    rai::TokenValue value_;
+    rai::TokenAddress wrapped_token_;
+};
 
 class TokenIdInfo
 {
@@ -831,17 +847,23 @@ public:
     bool BindingCountGet(rai::Transaction&, const rai::Account&,
                          uint64_t&) const;
     bool BindingCountDel(rai::Transaction&, const rai::Account&);
-    bool BindingEntryPut(rai::Transaction&, const rai::Account&, uint64_t,
-                         const rai::BindingEntry&);
-    bool BindingEntryGet(rai::Transaction&, const rai::Account&, uint64_t,
-                         rai::BindingEntry&) const;
-    bool BindingEntryGet(const rai::Iterator&, rai::Account&, uint64_t&,
-                         rai::BindingEntry&) const;
-    bool BindingEntryDel(rai::Transaction&, const rai::Account&, uint64_t);
-    rai::Iterator BindingEntryLowerBound(rai::Transaction&,
-                                         const rai::Account&) const;
-    rai::Iterator BindingEntryUpperBound(rai::Transaction&,
-                                         const rai::Account&) const;
+    bool BindingPut(rai::Transaction&, const rai::BindingKey&,
+                    const rai::SignerAddress&);
+    bool BindingGet(rai::Transaction&, const rai::BindingKey&,
+                    rai::SignerAddress&) const;
+    bool BindingGet(const rai::Iterator&, rai::BindingKey&,
+                    rai::SignerAddress&) const;
+    bool BindingGet(rai::Transaction&, const rai::Account&, rai::Chain,
+                    rai::SignerAddress&);
+    bool BindingDel(rai::Transaction&, const rai::BindingKey&);
+    rai::Iterator BindingLowerBound(rai::Transaction&, const rai::Account&,
+                                    rai::Chain) const;
+    rai::Iterator BindingLowerBound(rai::Transaction&,
+                                    const rai::Account&) const;
+    rai::Iterator BindingUpperBound(rai::Transaction&, const rai::Account&,
+                                    rai::Chain) const;
+    rai::Iterator BindingUpperBound(rai::Transaction&,
+                                    const rai::Account&) const;
     bool AccountTokenInfoPut(rai::Transaction&, const rai::Account&, rai::Chain,
                              const rai::TokenAddress&,
                              const rai::AccountTokenInfo&);

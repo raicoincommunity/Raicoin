@@ -36,6 +36,7 @@ public:
     void OrderInfo();
     void OrderSwaps();
     void PendingTokenMapInfos();
+    void PendingTokenUnwrapInfos();
     void PreviousAccountTokenLinks();
     void PreviousTokenBlocks();
     void ReceivableTokens();
@@ -61,6 +62,8 @@ public:
     void TokenUnmapInfos();
     void TokenWrapInfo();
     void TokenWrapInfos();
+    void TokenUnwrapInfo();
+    void TokenUnwrapInfos();
 
 private:
     bool GetTokenAddress_(rai::Chain, rai::TokenAddress&);

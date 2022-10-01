@@ -239,10 +239,6 @@ uint64_t rai::AllowedBindings(uint32_t credit)
 {
     uint64_t allowed = rai::BASE_ALLOWED_BINDINGS
                        + uint64_t(credit) * rai::EXTRA_BINDINGS_PER_CREDIT;
-    if (allowed > rai::MAX_ALLOWED_BINDINGS)
-    {
-        allowed = rai::MAX_ALLOWED_BINDINGS;
-    }
     return allowed;
 }
 

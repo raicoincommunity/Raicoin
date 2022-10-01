@@ -34,8 +34,6 @@ add_library (node
 	syncer.cpp
 	rewarder.hpp
 	rewarder.cpp
-	bindingcache.hpp
-	bindingcache.cpp
 	validator.hpp
 	validator.cpp
 	)

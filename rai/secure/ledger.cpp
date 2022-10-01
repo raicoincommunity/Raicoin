@@ -270,25 +270,29 @@ bool rai::AliasIndex::Deserialize(rai::Stream& stream)
     return false;
 }
 
-rai::BindingEntry::BindingEntry(rai::Chain chain,
-                                const rai::SignerAddress& signer)
-    : chain_(chain), signer_(signer)
+rai::BindingKey::BindingKey(const rai::Account& account, rai::Chain chain,
+                            uint64_t height)
+    : account_(account), chain_(chain), height_(height)
 {
 }
 
-void rai::BindingEntry::Serialize(rai::Stream& stream) const
+void rai::BindingKey::Serialize(rai::Stream& stream) const
 {
+    rai::Write(stream, account_.bytes);
     rai::Write(stream, chain_);
-    rai::Write(stream, signer_.bytes);
+    rai::Write(stream, ~height_);
 }
 
-bool rai::BindingEntry::Deserialize(rai::Stream& stream)
+bool rai::BindingKey::Deserialize(rai::Stream& stream)
 {
     bool error = false;
+    error = rai::Read(stream, account_.bytes);
+    IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, chain_);
     IF_ERROR_RETURN(error, true);
-    error = rai::Read(stream, signer_.bytes);
+    error = rai::Read(stream, height_);
     IF_ERROR_RETURN(error, true);
+    height_ = ~height_;
     return false;
 }
 
@@ -1034,6 +1038,49 @@ rai::Iterator rai::Ledger::TokenUnmapInfoUpperBound(
     return TokenUnmapInfoLowerBound(transaction, account_next);
 }
 
+rai::TokenUnwrapInfo::TokenUnwrapInfo()
+    : source_tx_hash_(0), from_(0), value_(0), wrapped_token_(0)
+{
+}
+
+rai::TokenUnwrapInfo::TokenUnwrapInfo(const rai::TokenKey& token,
+                                      const rai::BlockHash& source_tx_hash,
+                                      const rai::Account& from,
+                                      const rai::TokenValue& value,
+                                      const rai::TokenAddress& wrapped_token)
+    : token_(token),
+      source_tx_hash_(source_tx_hash),
+      from_(from),
+      value_(value),
+      wrapped_token_(wrapped_token)
+{
+}
+
+void rai::TokenUnwrapInfo::Serialize(rai::Stream& stream) const
+{
+    token_.Serialize(stream);
+    rai::Write(stream, source_tx_hash_.bytes);
+    rai::Write(stream, from_.bytes);
+    rai::Write(stream, value_.bytes);
+    rai::Write(stream, wrapped_token_.bytes);
+}
+
+bool rai::TokenUnwrapInfo::Deserialize(rai::Stream& stream)
+{
+    bool error = false;
+    error = token_.Deserialize(stream);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, source_tx_hash_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, from_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, value_.bytes);
+    IF_ERROR_RETURN(error, true);
+    error = rai::Read(stream, wrapped_token_.bytes);
+    IF_ERROR_RETURN(error, true);
+    return false;
+}
+
 rai::TokenWrapInfo::TokenWrapInfo()
     : type_(rai::TokenType::INVALID),
       value_(0),
@@ -1095,7 +1142,7 @@ bool rai::TokenWrapInfo::Deserialize(rai::Stream& stream)
     error = rai::Read(stream, target_height_);
     IF_ERROR_RETURN(error, true);
     error = rai::Read(stream, wrapped_token_.bytes);
-    IF_ERROR_RETURN(error);
+    IF_ERROR_RETURN(error, true);
     return false;
 }
 
@@ -2775,9 +2822,9 @@ bool rai::Ledger::BindingCountDel(rai::Transaction& transaction,
                       nullptr);
 }
 
-bool rai::Ledger::BindingEntryPut(rai::Transaction& transaction,
-                                  const rai::Account& account, uint64_t height,
-                                  const rai::BindingEntry& entry)
+bool rai::Ledger::BindingPut(rai::Transaction& transaction,
+                             const rai::BindingKey& binding_key,
+                             const rai::SignerAddress& signer)
 {
     if (!transaction.write_)
     {
@@ -2787,13 +2834,12 @@ bool rai::Ledger::BindingEntryPut(rai::Transaction& transaction,
     std::vector<uint8_t> bytes_key;
     {
         rai::VectorStream stream(bytes_key);
-        rai::Write(stream, account.bytes);
-        rai::Write(stream, ~height);
+        binding_key.Serialize(stream);
     }
     std::vector<uint8_t> bytes_value;
     {
         rai::VectorStream stream(bytes_value);
-        entry.Serialize(stream);
+        rai::Write(stream, signer.bytes);
     }
 
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
@@ -2805,15 +2851,14 @@ bool rai::Ledger::BindingEntryPut(rai::Transaction& transaction,
     return false;
 }
 
-bool rai::Ledger::BindingEntryGet(rai::Transaction& transaction,
-                                  const rai::Account& account, uint64_t height,
-                                  rai::BindingEntry& entry) const
+bool rai::Ledger::BindingGet(rai::Transaction& transaction,
+                             const rai::BindingKey& binding_key,
+                             rai::SignerAddress& signer) const
 {
     std::vector<uint8_t> bytes_key;
     {
         rai::VectorStream stream(bytes_key);
-        rai::Write(stream, account.bytes);
-        rai::Write(stream, ~height);
+        binding_key.Serialize(stream);
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::MdbVal value;
@@ -2822,15 +2867,15 @@ bool rai::Ledger::BindingEntryGet(rai::Transaction& transaction,
     IF_ERROR_RETURN(error, true);
 
     rai::BufferStream stream(value.Data(), value.Size());
-    error = entry.Deserialize(stream);
+    error = rai::Read(stream, signer.bytes);
     IF_ERROR_RETURN(error, true);
 
     return false;
 }
 
-bool rai::Ledger::BindingEntryGet(const rai::Iterator& it,
-                                  rai::Account& account, uint64_t& height,
-                                  rai::BindingEntry& entry) const
+bool rai::Ledger::BindingGet(const rai::Iterator& it,
+                             rai::BindingKey& binding_key,
+                             rai::SignerAddress& signer) const
 {
     auto data = it.store_it_->first.Data();
     auto size = it.store_it_->first.Size();
@@ -2839,11 +2884,8 @@ bool rai::Ledger::BindingEntryGet(const rai::Iterator& it,
         return true;
     }
     rai::BufferStream stream_key(data, size);
-    bool error = rai::Read(stream_key, account.bytes);
+    bool error = binding_key.Deserialize(stream_key);
     IF_ERROR_RETURN(error, true);
-    error = rai::Read(stream_key, height);
-    IF_ERROR_RETURN(error, true);
-    height = ~height;
 
     data = it.store_it_->second.Data();
     size = it.store_it_->second.Size();
@@ -2852,14 +2894,29 @@ bool rai::Ledger::BindingEntryGet(const rai::Iterator& it,
         return true;
     }
     rai::BufferStream stream_value(data, size);
-    error = entry.Deserialize(stream_value);
+    error = rai::Read(stream_value, signer.bytes);
     IF_ERROR_RETURN(error, true);
 
     return false;
 }
 
-bool rai::Ledger::BindingEntryDel(rai::Transaction& transaction,
-                                  const rai::Account& account, uint64_t height)
+bool rai::Ledger::BindingGet(rai::Transaction& transaction,
+                             const rai::Account& account, rai::Chain chain,
+                             rai::SignerAddress& signer)
+{
+    rai::Iterator i = BindingLowerBound(transaction, account, chain);
+    rai::Iterator n = BindingUpperBound(transaction, account, chain);
+    if (i == n)
+    {
+        return true;
+    }
+
+    rai::BindingKey ignore;
+    return BindingGet(i, ignore, signer);
+}
+
+bool rai::Ledger::BindingDel(rai::Transaction& transaction,
+                             const rai::BindingKey& binding_key)
 {
     if (!transaction.write_)
     {
@@ -2869,8 +2926,7 @@ bool rai::Ledger::BindingEntryDel(rai::Transaction& transaction,
     std::vector<uint8_t> bytes_key;
     {
         rai::VectorStream stream(bytes_key);
-        rai::Write(stream, account.bytes);
-        rai::Write(stream, ~height);
+        binding_key.Serialize(stream);
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     bool error = store_.Del(transaction.mdb_transaction_,
@@ -2880,15 +2936,16 @@ bool rai::Ledger::BindingEntryDel(rai::Transaction& transaction,
     return false;
 }
 
-rai::Iterator rai::Ledger::BindingEntryLowerBound(
-    rai::Transaction& transaction, const rai::Account& account) const
+rai::Iterator rai::Ledger::BindingLowerBound(rai::Transaction& transaction,
+                                             const rai::Account& account,
+                                             rai::Chain chain) const
 {
     uint64_t height = std::numeric_limits<uint64_t>::max();
+    rai::BindingKey binding_key(account, chain, height);
     std::vector<uint8_t> bytes_key;
     {
         rai::VectorStream stream(bytes_key);
-        rai::Write(stream, account.bytes);
-        rai::Write(stream, ~height);
+        binding_key.Serialize(stream);
     }
     rai::MdbVal key(bytes_key.size(), bytes_key.data());
     rai::StoreIterator store_it(transaction.mdb_transaction_,
@@ -2896,16 +2953,48 @@ rai::Iterator rai::Ledger::BindingEntryLowerBound(
     return rai::Iterator(std::move(store_it));
 }
 
-rai::Iterator rai::Ledger::BindingEntryUpperBound(
-    rai::Transaction& transaction, const rai::Account& account) const
+rai::Iterator rai::Ledger::BindingLowerBound(rai::Transaction& transaction,
+                                             const rai::Account& account) const
 {
-    rai::Account account_next(account + 1);
-    if (account_next.IsZero())
+    return BindingLowerBound(transaction, account, static_cast<rai::Chain>(0));
+}
+
+rai::Iterator rai::Ledger::BindingUpperBound(rai::Transaction& transaction,
+                                             const rai::Account& account,
+                                             rai::Chain chain) const
+{
+    rai::Account account_l(account);
+    uint32_t next = static_cast<uint32_t>(chain) + 1;
+    rai::Chain chain_l = static_cast<rai::Chain>(next);
+    do
+    {
+        if (next != 0)
+        {
+            break;
+        }
+
+        account_l += 1;
+        if (!account_l.IsZero())
+        {
+            break;
+        }
+
+        return rai::Iterator(rai::StoreIterator(nullptr));
+    } while (0);
+
+    return BindingLowerBound(transaction, account_l, chain_l);
+}
+
+rai::Iterator rai::Ledger::BindingUpperBound(rai::Transaction& transaction,
+                                             const rai::Account& account) const
+{
+    rai::Account next = account + 1;
+    if (next.IsZero())
     {
         return rai::Iterator(rai::StoreIterator(nullptr));
     }
 
-    return BindingEntryLowerBound(transaction, account_next);
+    return BindingLowerBound(transaction, next);
 }
 
 bool rai::Ledger::AccountTokenInfoPut(rai::Transaction& transaction,

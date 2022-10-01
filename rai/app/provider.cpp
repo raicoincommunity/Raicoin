@@ -246,6 +246,22 @@ std::string rai::Provider::ToString(Action action)
         {
             return "token_wrap_infos";
         }
+        case rai::Provider::Action::TOKEN_PENDING_UNWRAP_INFO:
+        {
+            return "pending_token_unwrap_info";
+        }
+        case rai::Provider::Action::TOKEN_PENDING_UNWRAP_INFOS:
+        {
+            return "pending_token_unwrap_infos";
+        }
+        case rai::Provider::Action::TOKEN_UNWRAP_INFO:
+        {
+            return "token_unwrap_info";
+        }
+        case rai::Provider::Action::TOKEN_UNWRAP_INFOS:
+        {
+            return "token_unwrap_infos";
+        }
         default:
         {
             return "";

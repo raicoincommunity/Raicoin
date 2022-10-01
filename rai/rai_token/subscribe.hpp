@@ -1,6 +1,7 @@
 #pragma once
 
 #include <rai/app/subscribe.hpp>
+#include <rai/rai_token/crosschain/event.hpp>
 
 namespace rai
 {
@@ -30,10 +31,14 @@ public:
                                       const std::shared_ptr<rai::Block>&);
     void NotifyPendingTokenMapInfo(const std::shared_ptr<rai::CrossChainEvent>&,
                                    bool);
+    void NotifyPendingTokenUnwrapInfo(
+        const std::shared_ptr<rai::CrossChainEvent>&, bool);
     void NotifyTokenMapInfo(const rai::Account&, rai::Chain, uint64_t,
                             uint64_t);
     void NotifyTokenUnmapInfo(const rai::Account&, uint64_t);
     void NotifyTokenWrapInfo(const rai::Account&, uint64_t);
+    void NotifyTokenUnwrapInfo(const rai::Account&, rai::Chain, uint64_t,
+                               uint64_t);
 
     void ProcessCrossChainEvent(const std::shared_ptr<rai::CrossChainEvent>&,
                                 bool);

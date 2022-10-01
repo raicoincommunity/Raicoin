@@ -53,6 +53,8 @@ public:
         token_map_;
     rai::ObserverContainer<const rai::Account&, uint64_t> token_unmap_;
     rai::ObserverContainer<const rai::Account&, uint64_t> token_wrap_;
+    rai::ObserverContainer<const rai::Account&, rai::Chain, uint64_t, uint64_t>
+        token_unwrap_;
     rai::ObserverContainer<const std::shared_ptr<rai::CrossChainEvent>&, bool>
         cross_chain_event_;
 };
@@ -149,6 +151,9 @@ public:
     bool MakeTokenWrapInfoPtree(rai::Transaction&, const rai::Account&,
                                 uint64_t, const rai::TokenWrapInfo&,
                                 std::string&, rai::Ptree&) const;
+    bool MakeTokenUnwrapInfoPtree(rai::Transaction&, const rai::TokenUnwrapKey&,
+                                  const rai::TokenUnwrapInfo&, std::string&,
+                                  rai::Ptree&) const;
     std::shared_ptr<rai::CrossChainUnmapEvent> PendingUnmapEvent(
         rai::Chain, const rai::BlockHash&) const;
     std::shared_ptr<rai::CrossChainWrapEvent> PendingWrapEvent(
@@ -372,5 +377,7 @@ private:
         token_map_observer_;
     std::function<void(const rai::Account&, uint64_t)> token_unmap_observer_;
     std::function<void(const rai::Account&, uint64_t)> token_wrap_observer_;
+    std::function<void(const rai::Account&, rai::Chain, uint64_t, uint64_t)>
+        token_unwrap_observer_;
 };
 }

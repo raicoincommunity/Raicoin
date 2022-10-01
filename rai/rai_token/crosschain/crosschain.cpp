@@ -22,8 +22,8 @@ rai::CrossChain::CrossChain(rai::Token& token)
         {
             parsers_.insert(
                 rai::CrossChainParser(std::make_shared<rai::EvmParser>(
-                    token, config.eth_urls_, rai::Chain::ETHEREUM, 10, 30,
-                    "")));
+                    token, config.eth_urls_, rai::Chain::ETHEREUM, 12, 96,
+                    ""))); // todo:
         }
 
         if (!config.bsc_urls_.empty())
@@ -31,7 +31,7 @@ rai::CrossChain::CrossChain(rai::Token& token)
             parsers_.insert(
                 rai::CrossChainParser(std::make_shared<rai::EvmParser>(
                     token, config.bsc_urls_, rai::Chain::BINANCE_SMART_CHAIN, 5,
-                    30, "")));
+                    30, ""))); // todo:
         }
 
         if (!config.eth_test_goerli_urls_.empty())
@@ -39,7 +39,7 @@ rai::CrossChain::CrossChain(rai::Token& token)
             parsers_.insert(
                 rai::CrossChainParser(std::make_shared<rai::EvmParser>(
                     token, config.eth_test_goerli_urls_,
-                    rai::Chain::ETHEREUM_TEST_GOERLI, 10, 30,
+                    rai::Chain::ETHEREUM_TEST_GOERLI, 12, 96,
                     "0xfC113A7B68074642cA2FC74733A9BF325C045F14")));
         }
 

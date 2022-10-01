@@ -1441,7 +1441,6 @@ void rai::Node::OnBlockProcessed(const rai::BlockProcessResult& result,
     ConfirmRequestAck_(result, block);
     ElectNextFork_(result, block);
     UpdateActiveAccounts_(result, block);
-    UpdateBindingCaches_(result, block);
     ProcessReceivable_(result, block);
 
     if (result.operation_ == rai::BlockOperation::DROP)
@@ -1936,12 +1935,6 @@ boost::optional<rai::SignerAddress> rai::Node::BindingQuery(
     const rai::Account& account, rai::Chain chain)
 {
     boost::optional<rai::SignerAddress> result(boost::none);
-    result = binding_caches_.Query(account, chain);
-    if (result)
-    {
-        return result;
-    }
-
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, ledger_, false);
     if (error_code != rai::ErrorCode::SUCCESS)
@@ -1949,42 +1942,11 @@ boost::optional<rai::SignerAddress> rai::Node::BindingQuery(
         return result;
     }
 
-    rai::Iterator i = ledger_.BindingEntryLowerBound(transaction, account);
-    rai::Iterator n = ledger_.BindingEntryUpperBound(transaction, account);
-    for (; i != n; ++i)
+    rai::SignerAddress signer;
+    bool error = ledger_.BindingGet(transaction, account, chain, signer);
+    if (!error)
     {
-        rai::Account account_l;
-        uint64_t height;
-        rai::BindingEntry entry;
-        bool error = ledger_.BindingEntryGet(i, account_l, height, entry);
-        if (error)
-        {
-            rai::Log::Error(
-                rai::ToString("Node::BindingEntryGet: failed to get entry from "
-                              "ledger, account=",
-                              account.StringAccount()));
-            break;
-        }
-
-        if (account != account_l)
-        {
-            rai::Log::Error(rai::ToString(
-                "Node::BindingEntryGet: account mismatch, account=",
-                account.StringAccount(),
-                ", account_l=", account_l.StringAccount()));
-            break;
-        }
-
-        if (entry.chain_ == chain)
-        {
-            result = entry.signer_;
-            break;
-        }
-    }
-
-    if (result)
-    {
-        binding_caches_.Insert(account, chain, *result);
+        result = signer;
     }
     return result;
 }
@@ -2069,24 +2031,6 @@ void rai::Node::UpdateActiveAccounts_(const rai::BlockProcessResult& result,
         return;
     }
     active_accounts_.Add(block->Account());
-}
-
-void rai::Node::UpdateBindingCaches_(const rai::BlockProcessResult& result,
-                                     const std::shared_ptr<rai::Block>& block)
-{
-    if (result.error_code_ != rai::ErrorCode::SUCCESS)
-    {
-        return;
-    }
-
-    if (result.operation_ == rai::BlockOperation::APPEND)
-    {
-        binding_caches_.Update(block, true);
-    }
-    else if (result.operation_ == rai::BlockOperation::ROLLBACK)
-    {
-        binding_caches_.Update(block, false);
-    }
 }
 
 void rai::Node::ProcessReceivable_(const rai::BlockProcessResult& result,

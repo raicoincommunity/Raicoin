@@ -760,6 +760,21 @@ void rai::Token::Start()
         });
     };
 
+    token_unwrap_observer_ = [token](const rai::Account& account,
+                                     rai::Chain chain, uint64_t height,
+                                     uint64_t index) {
+        auto token_s = token.lock();
+        if (token_s == nullptr) return;
+
+        token_s->Background([token, account, chain, height, index]() {
+            if (auto token_s = token.lock())
+            {
+                token_s->observers_.token_unwrap_.Notify(account, chain, height,
+                                                         index);
+            }
+        });
+    };
+
     cross_chain_.RegisterEventObserver(
         [token](const std::shared_ptr<rai::CrossChainEvent>& event,
                 bool rollback) {
@@ -1339,6 +1354,37 @@ bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
     return false;
 }
 
+bool rai::Token::MakeTokenUnwrapInfoPtree(rai::Transaction& transaction,
+                                          const rai::TokenUnwrapKey& key,
+                                          const rai::TokenUnwrapInfo& unwrap,
+                                          std::string& error_info,
+                                          rai::Ptree& ptree) const
+{
+    ptree.put("account", key.to_.StringAccount());
+    ptree.put("height", std::to_string(key.height_));
+    ptree.put("index", std::to_string(key.index_));
+    TokenKeyToPtree(unwrap.token_, ptree);
+    rai::TokenInfo token_info;
+    bool error = ledger_.TokenInfoGet(transaction, unwrap.token_, token_info);
+    if (error)
+    {
+        error_info = "token not created";
+        return true;
+    }
+    ptree.put("type", rai::TokenTypeToString(token_info.type_));
+    ptree.put("decimals", std::to_string(token_info.decimals_));
+    ptree.put("value", unwrap.value_.StringDec());
+    ptree.put("from_chain", rai::ChainToString(key.chain_));
+    ptree.put("from_chain_id",
+              std::to_string(static_cast<uint32_t>(key.chain_)));
+    ptree.put("from_account_raw", unwrap.from_.StringHex());
+    ptree.put("to", key.to_.StringAccount());
+    ptree.put("to_raw", key.to_.StringHex());
+    ptree.put("source_transaction", unwrap.source_tx_hash_.StringHex());
+    ptree.put("wrapped_address_raw", unwrap.wrapped_token_.StringHex());
+    return false;
+}
+
 std::shared_ptr<rai::CrossChainUnmapEvent> rai::Token::PendingUnmapEvent(
     rai::Chain chain, const rai::BlockHash& source_hash) const
 {
@@ -1442,6 +1488,10 @@ rai::Provider::Info rai::Token::Provide()
     info.actions_.push_back(P::Action::TOKEN_UNMAP_INFOS);
     info.actions_.push_back(P::Action::TOKEN_PENDING_MAP_INFO);
     info.actions_.push_back(P::Action::TOKEN_WRAP_INFOS);
+    info.actions_.push_back(P::Action::TOKEN_PENDING_UNWRAP_INFO);
+    info.actions_.push_back(P::Action::TOKEN_PENDING_UNWRAP_INFOS);
+    info.actions_.push_back(P::Action::TOKEN_UNWRAP_INFO);
+    info.actions_.push_back(P::Action::TOKEN_UNWRAP_INFOS);
     // todo:
 
     return info;
@@ -4464,6 +4514,9 @@ rai::ErrorCode rai::Token::ProcessCrossChainWrapEvent_(
         return rai::ErrorCode::TOKEN_LEDGER_PUT;
     }
 
+    observers.push_back(std::bind(token_wrap_observer_, token_event->from_,
+                                  token_event->from_height_));
+
     return rai::ErrorCode::SUCCESS;
 }
 
@@ -4600,7 +4653,8 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
                                    token_event->block_height_,
                                    token_event->index_);
     rai::TokenUnwrapInfo unwrap_info(key, token_event->tx_hash_,
-                                     token_event->from_, token_event->value_);
+                                     token_event->from_, token_event->value_,
+                                     token_event->address_);
     error = ledger_.TokenUnwrapInfoPut(transaction, unwrap_key, unwrap_info);
     if (error)
     {
@@ -4612,6 +4666,10 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
             ", txn_hash=", token_event->tx_hash_.StringHex()));
         return rai::ErrorCode::TOKEN_LEDGER_PUT;
     }
+
+    observers.push_back(
+        std::bind(token_unwrap_observer_, token_event->to_, token_event->chain_,
+                  token_event->block_height_, token_event->index_));
 
     return rai::ErrorCode::SUCCESS;
 }
