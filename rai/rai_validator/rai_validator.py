@@ -1008,7 +1008,7 @@ class EvmChainValidator:
             if self.verifySubmitValidator(signer, message.validator, message.signer, message.weight,
                 message.epoch, message.signature):
                 return
-            self.signatures[message.validator] = self.WeightSignatureInfo(message.source,
+            self.signatures[message.source] = self.WeightSignatureInfo(message.source,
                 signer, message.epoch, message.signature)
 
     def is_native_token(self, address: Union[str, int]) -> bool:
@@ -3522,10 +3522,15 @@ ETH_TOKEN_SYMBOL_PATCH = [
     EthTokenSymbol('0x50D1c9771902476076eCFc8B2A83Ad6b9355a4c9', 'FTT'),
     EthTokenSymbol('0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1', 'TON'),
     EthTokenSymbol('0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', 'MKR'),
+    EthTokenSymbol('0x9E32b13ce7f2E80A01932B42553652E053D6ed8e', 'METIS'),
+    EthTokenSymbol('0x0ab87046fBb341D058F17CBC4c1133F25a20a52f', 'GOHM'),
+    EthTokenSymbol('0x0d438F3b5175Bebc262bF23753C1E53d03432bDE', 'WNXM'),
+
 ]
 
 BSC_TOKEN_SYMBOL_PATCH = [
-    EthTokenSymbol('0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', 'CAKE'),
+    BscTokenSymbol('0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', 'CAKE'),
+    BscTokenSymbol('0xe552Fb52a4F19e44ef5A967632DBc320B0820639', 'METIS'),
 ]
 
 BSC_TEST_CORE_CONTRACT = '0x68CF8517a569565F0B30f8856F0555d55d539307'
