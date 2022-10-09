@@ -1232,7 +1232,21 @@ bool rai::Token::MakeTokenMapInfoPtree(rai::Transaction& transaction,
     ptree.put("from_raw", map.from_.StringHex());
     ptree.put("to", key.to_.StringAccount());
     ptree.put("to_raw", key.to_.StringHex());
-    ptree.put("source_transaction", map.source_tx_hash_.StringHex());
+    ptree.put("source_transaction", map.source_tx_.StringHex());
+    ptree.put("target_transaction", map.target_tx_.StringHex());
+    if (!map.target_tx_.IsZero())
+    {
+        std::shared_ptr<rai::Block> block;
+        error = ledger_.BlockGet(transaction, map.target_tx_, block);
+        if (error || block == nullptr)
+        {
+            error_info = "Failed to get target block";
+            return true;
+        }
+        rai::Ptree block_ptree;
+        block->SerializeJson(block_ptree);
+        ptree.put_child("target_block", block_ptree);
+    }
     return false;
 }
 
@@ -1380,8 +1394,22 @@ bool rai::Token::MakeTokenUnwrapInfoPtree(rai::Transaction& transaction,
     ptree.put("from_account_raw", unwrap.from_.StringHex());
     ptree.put("to", key.to_.StringAccount());
     ptree.put("to_raw", key.to_.StringHex());
-    ptree.put("source_transaction", unwrap.source_tx_hash_.StringHex());
+    ptree.put("source_transaction", unwrap.source_tx_.StringHex());
     ptree.put("wrapped_address_raw", unwrap.wrapped_token_.StringHex());
+    ptree.put("target_transaction", unwrap.target_tx_.StringHex());
+    if (!unwrap.target_tx_.IsZero())
+    {
+        std::shared_ptr<rai::Block> block;
+        error = ledger_.BlockGet(transaction, unwrap.target_tx_, block);
+        if (error || block == nullptr)
+        {
+            error_info = "Failed to get target block";
+            return true;
+        }
+        rai::Ptree block_ptree;
+        block->SerializeJson(block_ptree);
+        ptree.put_child("target_block", block_ptree);
+    }
     return false;
 }
 
@@ -2214,6 +2242,7 @@ rai::TokenError rai::Token::ProcessReceive_(
 
     // wait source block
     rai::Chain chain = rai::Chain::INVALID;
+    uint64_t index = 0;
     if (rai::IsLocalSource(receive->source_))
     {
         if (receive->from_ == block->Account()
@@ -2238,6 +2267,14 @@ rai::TokenError rai::Token::ProcessReceive_(
         {
             return rai::ErrorCode::APP_PROCESS_WAITING;
         }
+        bool error = ledger_.TokenMapIndexGet(transaction, chain,
+                                              receive->tx_hash_, index);
+        if (error)
+        {
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_UNRECEIVABLE,
+                                       observers);
+        }
     }
     else if (receive->source_ == rai::TokenSource::UNWRAP)
     {
@@ -2245,6 +2282,14 @@ rai::TokenError rai::Token::ProcessReceive_(
         if (WaitChain_(transaction, chain, receive->block_height_, block))
         {
             return rai::ErrorCode::APP_PROCESS_WAITING;
+        }
+        bool error = ledger_.TokenUnwrapIndexGet(transaction, chain,
+                                                 receive->tx_hash_, index);
+        if (error)
+        {
+            return UpdateLedgerCommon_(transaction, block,
+                                       rai::ErrorCode::TOKEN_UNRECEIVABLE,
+                                       observers);
         }
     }
     else
@@ -2394,6 +2439,60 @@ rai::TokenError rai::Token::ProcessReceive_(
             "Token::ProcessReceive_: unexpected token type, hash=",
             block->Hash().StringHex()));
         return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+    }
+
+    if (receive->source_ == rai::TokenSource::MAP)
+    {
+        rai::TokenMapKey map_key(block->Account(), chain,
+                                 receive->block_height_, index);
+        rai::TokenMapInfo map_info;
+        error = ledger_.TokenMapInfoGet(transaction, map_key, map_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessReceive_: failed to get map info, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+        map_info.target_tx_ = block->Hash();
+        error = ledger_.TokenMapInfoPut(transaction, map_key, map_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessReceive_: failed to put map info, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+
+        observers.push_back(std::bind(token_map_observer_, block->Account(),
+                                      chain, receive->block_height_, index));
+
+    }
+    else if (receive->source_ == rai::TokenSource::UNWRAP)
+    {
+        rai::TokenUnwrapKey unwrap_key(block->Account(), chain,
+                                       receive->block_height_, index);
+        rai::TokenUnwrapInfo unwrap_info;
+        error =
+            ledger_.TokenUnwrapInfoGet(transaction, unwrap_key, unwrap_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessReceive_: failed to get unwrap info, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_UNEXPECTED;
+        }
+        unwrap_info.target_tx_ = block->Hash();
+        error = ledger_.TokenUnwrapInfoPut(transaction, unwrap_key, unwrap_info);
+        if (error)
+        {
+            rai::Log::Error(rai::ToString(
+                "Token::ProcessReceive_: failed to put unwrap info, hash=",
+                block->Hash().StringHex()));
+            return rai::ErrorCode::APP_PROCESS_LEDGER_PUT;
+        }
+        observers.push_back(std::bind(token_unwrap_observer_, block->Account(),
+                                      chain, receive->block_height_, index));
     }
 
     error = ledger_.TokenReceivableDel(transaction, receivable_key);
@@ -4298,6 +4397,35 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
         return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
     }
 
+    rai::TokenMapKey map_key(token_event->to_, token_event->chain_,
+                             token_event->block_height_, token_event->index_);
+    if (ledger_.TokenMapInfoExists(transaction, map_key))
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessCrossChainMapEvent_: token map info already exists, "
+            "chain=",
+            token_event->chain_,
+            ", address=", token_event->address_.StringHex(),
+            ", txn_hash=", token_event->tx_hash_.StringHex(), ", block_height=",
+            token_event->block_height_, ", log_index=", token_event->index_));
+        return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
+    }
+
+    uint64_t index;
+    error = ledger_.TokenMapIndexGet(transaction, token_event->chain_,
+                                     token_event->tx_hash_, index);
+    if (!error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessCrossChainMapEvent_: transaction hash collision, "
+            "chain=",
+            token_event->chain_,
+            ", address=", token_event->address_.StringHex(),
+            ", txn_hash=", token_event->tx_hash_.StringHex(),
+            ", block_height=", token_event->block_height_));
+        return rai::ErrorCode::SUCCESS;
+    }
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::TokenValue local_supply(0);
     if (info.type_ == rai::TokenType::_20)
@@ -4396,8 +4524,6 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
                                        local_supply);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    rai::TokenMapKey map_key(token_event->to_, token_event->chain_,
-                             token_event->block_height_, token_event->index_);
     rai::TokenMapInfo map_info(key, token_event->tx_hash_, token_event->from_,
                                token_event->value_);
     error = ledger_.TokenMapInfoPut(transaction, map_key, map_info);
@@ -4405,6 +4531,20 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
     {
         rai::Log::Error(rai::ToString(
             "Token::ProcessCrossChainMapEvent_: put token map info failed, "
+            "chain=",
+            token_event->chain_,
+            ", address=", token_event->address_.StringHex(),
+            ", txn_hash=", token_event->tx_hash_.StringHex()));
+        return rai::ErrorCode::TOKEN_LEDGER_PUT;
+    }
+
+    error =
+        ledger_.TokenMapIndexPut(transaction, token_event->chain_,
+                                 token_event->tx_hash_, token_event->index_);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessCrossChainMapEvent_: put token map index failed, "
             "chain=",
             token_event->chain_,
             ", address=", token_event->address_.StringHex(),
@@ -4551,6 +4691,36 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
         return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
     }
 
+    rai::TokenUnwrapKey unwrap_key(token_event->to_, token_event->chain_,
+                                   token_event->block_height_,
+                                   token_event->index_);
+    if (ledger_.TokenUnwrapInfoExists(transaction, unwrap_key))
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessCrossChainUnwrapEvent_: token unwrap info already "
+            "exists, chain=",
+            token_event->chain_,
+            ", address=", token_event->address_.StringHex(),
+            ", txn_hash=", token_event->tx_hash_.StringHex(), ", block_height=",
+            token_event->block_height_, ", log_index=", token_event->index_));
+        return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
+    }
+
+    uint64_t index;
+    error = ledger_.TokenUnwrapIndexGet(transaction, token_event->chain_,
+                                        token_event->tx_hash_, index);
+    if (!error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessCrossChainUnwrapEvent_: transaction hash collision, "
+            "chain=",
+            token_event->chain_,
+            ", address=", token_event->address_.StringHex(),
+            ", txn_hash=", token_event->tx_hash_.StringHex(),
+            ", block_height=", token_event->block_height_));
+        return rai::ErrorCode::SUCCESS;
+    }
+
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::TokenValue local_supply(0);
     if (info.type_ == rai::TokenType::_20)
@@ -4649,9 +4819,6 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
                                        local_supply);
     IF_NOT_SUCCESS_RETURN(error_code);
 
-    rai::TokenUnwrapKey unwrap_key(token_event->to_, token_event->chain_,
-                                   token_event->block_height_,
-                                   token_event->index_);
     rai::TokenUnwrapInfo unwrap_info(key, token_event->tx_hash_,
                                      token_event->from_, token_event->value_,
                                      token_event->address_);
@@ -4664,6 +4831,21 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
             token_event->chain_,
             ", address=", token_event->address_.StringHex(),
             ", txn_hash=", token_event->tx_hash_.StringHex()));
+        return rai::ErrorCode::TOKEN_LEDGER_PUT;
+    }
+
+    error =
+        ledger_.TokenUnwrapIndexPut(transaction, token_event->chain_,
+                                    token_event->tx_hash_, token_event->index_);
+    if (error)
+    {
+        rai::Log::Error(rai::ToString(
+            "Token::ProcessCrossChainUnwrapEvent_: put token unwrap index "
+            "failed, chain=",
+            token_event->chain_,
+            ", address=", token_event->address_.StringHex(),
+            ", txn_hash=", token_event->tx_hash_.StringHex(), ", block_height=",
+            token_event->block_height_, ", log_index=", token_event->index_));
         return rai::ErrorCode::TOKEN_LEDGER_PUT;
     }
 

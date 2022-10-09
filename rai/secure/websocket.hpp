@@ -32,7 +32,7 @@ class WebsocketClient
 {
 public:
     WebsocketClient(boost::asio::io_service&, const std::string&, uint16_t,
-                    const std::string&, bool = true);
+                    const std::string&, bool = true, bool = false);
     ~WebsocketClient();
 
     void OnResolve(uint32_t, const boost::system::error_code&,
@@ -55,14 +55,18 @@ public:
     std::function<void(const std::shared_ptr<rai::Ptree>&)> message_processor_;
 private:
     void CloseStream_();
+    void TrySend_();
     void Send_();
+    void SendKeeplive_();
     void Receive_();
     void ChangeStatus_(rai::WebsocketStatus);
+    std::string Url_() const;
 
     static size_t constexpr MAX_QUEUE_SIZE = 2048;
 
     boost::asio::io_service& service_;
     bool ssl_;
+    bool keeplive_;
     std::string host_;
     uint16_t port_;
     std::string path_;
@@ -78,6 +82,8 @@ private:
     bool sending_;
     std::deque<std::string> send_queue_;
     std::chrono::steady_clock::time_point connect_at_;
+    std::chrono::steady_clock::time_point keeplive_sent_at_;
+    std::chrono::steady_clock::time_point keeplive_received_at_;
     boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 };
 

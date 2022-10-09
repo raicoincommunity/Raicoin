@@ -314,9 +314,10 @@ public:
     bool Deserialize(rai::Stream&);
 
     rai::TokenKey token_;
-    rai::BlockHash source_tx_hash_;
+    rai::BlockHash source_tx_;
     rai::Account from_;
     rai::TokenValue value_;
+    rai::BlockHash target_tx_;
 };
 
 class TokenUnmapInfo
@@ -370,10 +371,11 @@ public:
     bool Deserialize(rai::Stream&);
 
     rai::TokenKey token_;
-    rai::BlockHash source_tx_hash_;
+    rai::BlockHash source_tx_;
     rai::Account from_;
     rai::TokenValue value_;
     rai::TokenAddress wrapped_token_;
+    rai::BlockHash target_tx_;
 };
 
 class TokenIdInfo
@@ -951,12 +953,17 @@ public:
                          rai::TokenMapInfo&) const;
     bool TokenMapInfoGet(const rai::Iterator&, rai::TokenMapKey&,
                          rai::TokenMapInfo&) const;
+    bool TokenMapInfoExists(rai::Transaction&, const rai::TokenMapKey&) const;
     rai::Iterator TokenMapInfoLowerBound(
         rai::Transaction&, const rai::Account&, rai::Chain,
         uint64_t = std::numeric_limits<uint64_t>::max(),
         uint64_t = std::numeric_limits<uint64_t>::max()) const;
     rai::Iterator TokenMapInfoUpperBound(rai::Transaction&, const rai::Account&,
                                          rai::Chain) const;
+    bool TokenMapIndexPut(rai::Transaction&, rai::Chain, const rai::BlockHash&,
+                          uint64_t);
+    bool TokenMapIndexGet(rai::Transaction&, rai::Chain, const rai::BlockHash&,
+                          uint64_t&);
     bool TokenUnmapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
                            const rai::TokenUnmapInfo&);
     bool TokenUnmapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
@@ -985,6 +992,8 @@ public:
                             rai::TokenUnwrapInfo&) const;
     bool TokenUnwrapInfoGet(const rai::Iterator&, rai::TokenUnwrapKey&,
                             rai::TokenUnwrapInfo&) const;
+    bool TokenUnwrapInfoExists(rai::Transaction&,
+                               const rai::TokenUnwrapKey&) const;
     rai::Iterator TokenUnwrapInfoLowerBound(
         rai::Transaction&, const rai::Account&, rai::Chain,
         uint64_t = std::numeric_limits<uint64_t>::max(),
@@ -992,6 +1001,10 @@ public:
     rai::Iterator TokenUnwrapInfoUpperBound(rai::Transaction&,
                                             const rai::Account&,
                                             rai::Chain) const;
+    bool TokenUnwrapIndexPut(rai::Transaction&, rai::Chain,
+                             const rai::BlockHash&, uint64_t);
+    bool TokenUnwrapIndexGet(rai::Transaction&, rai::Chain,
+                             const rai::BlockHash&, uint64_t&);
     bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,
