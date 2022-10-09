@@ -7,9 +7,11 @@
 
 rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
                                       const std::string& host, uint16_t port,
-                                      const std::string& path, bool ssl)
+                                      const std::string& path, bool ssl,
+                                      bool keeplive)
     : service_(service),
       ssl_(ssl),
+      keeplive_(keeplive),
       host_(host),
       port_(port),
       path_(path),
@@ -20,6 +22,8 @@ rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
       session_id_(0),
       sending_(false),
       connect_at_(),
+      keeplive_sent_at_(),
+      keeplive_received_at_(),
       strand_(service_.get_executor())
 {
     if (ssl)
@@ -29,7 +33,7 @@ rai::WebsocketClient::WebsocketClient(boost::asio::io_service& service,
             std::string pem_path = rai::PemPath();
             ctx_.load_verify_file(pem_path);
         }
-        catch(...)
+        catch (...)
         {
             throw std::runtime_error("Failed to load cacert.pem");
         }
@@ -60,7 +64,6 @@ void rai::WebsocketClient::OnResolve(
         CloseStream_();
         return;
     }
-    std::cout << "Websocket resolve success " << std::endl;
 
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     if (ssl_)
@@ -186,7 +189,6 @@ void rai::WebsocketClient::OnSslHandshake(uint32_t session_id,
         CloseStream_();
         return;
     }
-    std::cout << "SSL handshake success " << std::endl;
 
     std::weak_ptr<rai::WebsocketClient> client_w(Shared());
     std::shared_ptr<rai::WssStream> stream(wss_stream_);
@@ -222,14 +224,14 @@ void rai::WebsocketClient::OnWebsocketHandshake(
         return;
     }
     ChangeStatus_(rai::WebsocketStatus::CONNECTED);
-    std::cout << "Websocket handshake success" << std::endl;
-
-    if (!sending_)
+    if (keeplive_)
     {
-        sending_ = true;
-        Send_();
+        keeplive_sent_at_ = std::chrono::steady_clock::time_point();
+        keeplive_received_at_ = std::chrono::steady_clock::time_point();
     }
+    std::cout << "Websocket connected: " << Url_() << std::endl;
 
+    TrySend_();
     Receive_();
 }
 
@@ -250,11 +252,7 @@ void rai::WebsocketClient::Send(const std::string& message)
     }
 
     send_queue_.push_back(message);
-    if (!sending_)
-    {
-        sending_ = true;
-        Send_();
-    }
+    TrySend_();
 }
 
 void rai::WebsocketClient::Send(const rai::Ptree& message)
@@ -319,15 +317,21 @@ void rai::WebsocketClient::OnReceive(uint32_t session_id,
     os << boost::beast::buffers(receive_buffer_->data());
     receive_buffer_->consume(receive_buffer_->size());
 
-    lock.unlock();
 
     auto message = std::make_shared<rai::Ptree>();
     try
     {
         boost::property_tree::read_json(os, *message);
-        if (message_processor_)
+        auto ack_o = message->get_optional<std::string>("ack");
+        if (ack_o && *ack_o == "keeplive")
         {
+            keeplive_received_at_ = std::chrono::steady_clock::now();
+        }
+        else if (message_processor_)
+        {
+            lock.unlock();
             message_processor_(message);
+            lock.lock();
         }
     }
     catch(const std::exception& e)
@@ -336,7 +340,6 @@ void rai::WebsocketClient::OnReceive(uint32_t session_id,
         // log
     }
 
-    lock.lock();
     if (stopped_ || session_id != session_id_
         || status_ != rai::WebsocketStatus::CONNECTED)
     {
@@ -389,17 +392,32 @@ void rai::WebsocketClient::Run()
         return;
     }
 
+    auto now = std::chrono::steady_clock::now();
     if (status_ == rai::WebsocketStatus::CONNECTED)
     {
-        return;
+        if (!keeplive_) return;
+        if (keeplive_sent_at_ == std::chrono::steady_clock::time_point()
+            || keeplive_sent_at_ + std::chrono::seconds(60) < now)
+        {
+            SendKeeplive_();
+            keeplive_sent_at_ = now;
+        }
+        if (keeplive_received_at_ == std::chrono::steady_clock::time_point())
+        {
+            keeplive_received_at_ = now;
+        }
+        if (keeplive_received_at_ + std::chrono::seconds(300) >= now)
+        {
+            return;
+        }
     }
 
-    auto cutoff = std::chrono::steady_clock::now() - std::chrono::seconds(10);
+    auto cutoff = now - std::chrono::seconds(10);
     if (status_ == rai::WebsocketStatus::CONNECTING && connect_at_ >= cutoff)
     {
         return;
     }
-    connect_at_ = std::chrono::steady_clock::now();
+    connect_at_ = now;
     ChangeStatus_(rai::WebsocketStatus::CONNECTING);
 
     CloseStream_();
@@ -482,6 +500,15 @@ void rai::WebsocketClient::CloseStream_()
     }
 }
 
+void rai::WebsocketClient::TrySend_()
+{
+    if (!sending_)
+    {
+        sending_ = true;
+        Send_();
+    }
+}
+
 void rai::WebsocketClient::Send_()
 {
     if (send_queue_.empty() || status_ != rai::WebsocketStatus::CONNECTED)
@@ -558,6 +585,34 @@ void rai::WebsocketClient::ChangeStatus_(rai::WebsocketStatus status)
     {
         status_observer_(status_);
     }
+}
+
+std::string rai::WebsocketClient::Url_() const
+{
+    std::string url = ssl_ ? "wss://" : "ws://";
+    url += host_;
+    if ((ssl_ && port_ != 443) || (!ssl_ && port_ != 80))
+    {
+        url += ":" + std::to_string(port_);
+    }
+    if (!path_.empty() && !rai::StringStartsWith(path_, "/", false))
+    {
+        url += "/";
+    }
+    url += path_;
+    return url;
+}
+
+void rai::WebsocketClient::SendKeeplive_()
+{
+    rai::Ptree ptree;
+    ptree.put("action", "keeplive");
+    ptree.put("timestamp", std::to_string(rai::CurrentTimestamp()));
+    std::stringstream ostream;
+    boost::property_tree::write_json(ostream, ptree);
+    ostream.flush();
+    send_queue_.push_front(ostream.str());
+    TrySend_();
 }
 
 void rai::WebsocketClient::Receive_()

@@ -16,7 +16,8 @@ void rai::Validator::Start()
     }
 
     websocket_ = std::make_shared<rai::WebsocketClient>(
-        service_, url_.host_, url_.port_, url_.path_, url_.protocol_ == "wss");
+        service_, url_.host_, url_.port_, url_.path_, url_.protocol_ == "wss",
+        true);
 
     websocket_->message_processor_ =
         [this](const std::shared_ptr<rai::Ptree>& message) {

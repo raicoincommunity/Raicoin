@@ -23,7 +23,7 @@ import struct
 
 from typing import Tuple, Union, Callable, List
 from logging.handlers import TimedRotatingFileHandler, WatchedFileHandler
-from aiohttp import ClientSession, WSMessage, WSMsgType, log, web, ClientWebSocketResponse
+from aiohttp import ClientSession, WSMsgType, log, web, ClientWebSocketResponse
 from web3 import Web3, Account as EvmAccount
 from web3.middleware import geth_poa_middleware, construct_sign_and_send_raw_middleware
 from concurrent.futures import ThreadPoolExecutor
@@ -44,7 +44,7 @@ from web3.gas_strategies.rpc import rpc_gas_price_strategy
 ALLOWED_RPC_ACTIONS = [
     'service_subscribe', 'chain_info', 'chain_head_height', 'sign_transfer', 'sign_creation',
     'token_symbol', 'token_name', 'token_type', 'token_decimals', 'token_wrapped',
-    'creation_parameters'
+    'creation_parameters', 'transaction_timestamp'
 ]
 
 CLIENTS = {}
@@ -907,6 +907,8 @@ class EvmChainValidator:
         self.token_types = {}
         self.token_decimals_entries = {}
         self.token_wrapped_entries = {}
+        self.block_timestamps = OrderedDict()
+        self.pending_tx_timestamps = {}
 
         self.proposals = {}
         self.proposal_active = None
@@ -923,8 +925,7 @@ class EvmChainValidator:
         for i in token_symbol_patch:
             if i.chainId != self.chain_id:
                 raise ValueError("invalid rai address")
-                ...
-                self.token_symbols[self.to_checksum_address(i.address)] = i.symbol
+            self.token_symbols[self.to_checksum_address(i.address)] = i.symbol
 
     def zero_address(self) -> str:
         return '0x0000000000000000000000000000000000000000'
@@ -1744,6 +1745,15 @@ class EvmChainValidator:
             return True, 0
 
     @awaitable
+    def get_block_by_height(self, height):
+        w3 = self.make_web3()
+        try:
+            return False, w3.eth.get_block(block_identifier=height, full_transactions=False)
+        except Exception as e:
+            log.server_logger.error('get_block_by_height exception:%s', str(e))
+            return True, None
+
+    @awaitable
     def get_total_weight(self, block_number='latest'):
         contract = self.make_validator_contract()
         try:
@@ -2405,6 +2415,15 @@ class EvmChainValidator:
         else:
             log.server_logger.error('process_proposals:unexpected submission state:%s', state.name)
 
+    def purge_pending_tx_timestamps(self, head_height: int):
+        confirmed_height = head_height - self.confirmations
+        purgables = []
+        for i in self.pending_tx_timestamps.keys():
+            if i <= confirmed_height:
+                purgables.append(i)
+        for i in purgables:
+            del self.pending_tx_timestamps[i]
+
     async def __call__(self):
         notify = False
         if not self.evm_chain_id_checked:
@@ -2446,6 +2465,7 @@ class EvmChainValidator:
         await self.bind()
         await self.submit()
         await self.process_proposals()
+        self.purge_pending_tx_timestamps(block_number)
 
     async def creation_parameters(self, req: dict) -> dict:
         if not node_synced():
@@ -2626,6 +2646,45 @@ class EvmChainValidator:
             return { 'wrapped': 'false' }
         self.token_wrapped_entries[address] = wrapped
         return {'wrapped': 'true' if wrapped else 'false'}
+
+    async def transaction_timestamp(self, _: str, req: dict) -> dict:
+        height = int(req['height'])
+        if height in self.block_timestamps:
+            return {'timestamp': str(self.block_timestamps[height])}
+
+        tx_hash = req['tx_hash'].lower()
+        if not tx_hash.startswith('0x'):
+            tx_hash = '0x' + tx_hash
+        if height in self.pending_tx_timestamps:
+            if tx_hash in self.pending_tx_timestamps[height]['tx']:
+                return {'timestamp': str(self.pending_tx_timestamps[height]['timestamp'])}
+            else:
+                return {'error': 'fork'}
+
+        error, block_number = await self.get_block_number()
+        if error:
+            return {'error': 'failed to get block_number'}
+
+        if height > block_number:
+            return {'error': 'synchronizing'}
+
+        error, block = await self.get_block_by_height(height)
+        if error:
+            return {'error': 'failed to get block info'}
+        if height <= block_number - self.confirmations:
+            self.block_timestamps[height] = int(block.timestamp)
+            if len(self.block_timestamps) > 200000:
+                del self.block_timestamps[next(iter(self.block_timestamps))]
+            return {'timestamp': str(block.timestamp)}
+        else:
+            pending = {'timestamp': int(block.timestamp), 'tx': set()}
+            for i in block.transactions:
+                pending['tx'].add(i.hex())
+            self.pending_tx_timestamps[height] = pending
+            if tx_hash in pending['tx']:
+                return {'timestamp': str(block.timestamp)}
+            else:
+                return {'error': 'fork'}
 
     def debug_json_encode(self) -> dict:
         result = {}
@@ -2868,7 +2927,7 @@ async def creation_parameters(req, res):
         res.update(await validator.creation_parameters(req))
     except Exception as e:
         res['error'] = 'exception'
-        log.server_logger.exception('sign_creation exception:%s', str(e))
+        log.server_logger.exception('creation_parameters exception:%s', str(e))
 
 async def sign_transfer(uid, req, res):
     try:
@@ -2989,6 +3048,23 @@ async def token_wrapped(uid, req, res):
         res['error'] = 'exception'
         log.server_logger.exception('token_wrapped exception:%s', str(e))
 
+async def transaction_timestamp(uid, req, res):
+    try:
+        if 'chain' in req:
+            res['chain'] = req['chain']
+        res['chain_id'] = req['chain_id']
+        res['height'] = req['height']
+        res['tx_hash'] = req['tx_hash']
+        chain_id = int(req['chain_id'])
+        validator = get_validator(chain_id)
+        if validator == None:
+            res['error'] = 'chain not supported'
+            return
+        res.update(await validator.transaction_timestamp(uid, req))
+    except Exception as e:
+        res['error'] = 'exception'
+        log.server_logger.exception('transaction_timestamp exception:%s', str(e))
+
 async def notify_chain_info(chain_id: ChainId, info: dict):
     chain_id = str(int(chain_id))
     message = {
@@ -3051,6 +3127,8 @@ async def handle_client_messages(r : web.Request, message : str, ws : web.WebSoc
             await token_decimals(uid, request, res)
         elif action == 'token_wrapped':
             await token_wrapped(uid, request, res)
+        elif action == 'transaction_timestamp':
+            await transaction_timestamp(uid, request, res)
         else:
             res.update({'error':'unknown action'})
         return res
@@ -3187,6 +3265,11 @@ async def handle_node_cross_chain_message(r : dict):
         return
     await VALIDATORS[chain_id]['validator'].process_cross_chain_message(message)
 
+async def handle_node_keeplive(r: dict):
+    r['ack'] = 'keeplive'
+    del r['action']
+    await send_to_node(r)
+
 async def handle_node_weight_query_ack(r : dict):
     global NODE
     chain_id = int(r['request_id'], 16)
@@ -3223,6 +3306,8 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
             await handle_node_bind_query_ack(r)
         elif action == 'cross_chain':
             await handle_node_cross_chain_message(r)
+        elif action == 'keeplive':
+            await handle_node_keeplive(r)
         elif action == 'node_account_ack':
             NODE['account'] = r['account']
             NODE['account_hex'] = '0x' + r['account_hex'].lower()
