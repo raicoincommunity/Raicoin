@@ -319,6 +319,7 @@ public:
     rai::Account from_;
     uint64_t block_height_;
     rai::BlockHash tx_hash_;
+    uint64_t index_;
     rai::TokenValue value_;
     rai::Chain unwrap_chain_;
 };

@@ -562,6 +562,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         {
             return "Invalid cross chain message destination";
         }
+        case rai::ErrorCode::LEDGER_OUTDATED:
+        {
+            return "Ledger outdated";
+        }
         case rai::ErrorCode::JSON_GENERIC:
         {
             return "Failed to parse json";
@@ -835,6 +839,10 @@ std::string rai::ErrorString(rai::ErrorCode error_code)
         case rai::ErrorCode::JSON_BLOCK_CHAIN_ID:
         {
             return "Failed to parse chain id from json";
+        }
+        case rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_RECEIVE_INDEX:
+        {
+            return "Failed to parse token extension receive index from json";
         }
         case rai::ErrorCode::JSON_CONFIG_VERSION:
         {

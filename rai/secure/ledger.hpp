@@ -264,7 +264,7 @@ class TokenReceivableKey
 public:
     TokenReceivableKey();
     TokenReceivableKey(const rai::Account&, const rai::TokenKey&, rai::Chain,
-                       const rai::BlockHash&);
+                       const rai::BlockHash&, uint64_t);
     void Serialize(rai::Stream&) const;
     bool Deserialize(rai::Stream&);
 
@@ -272,6 +272,7 @@ public:
     rai::TokenKey token_;
     rai::Chain chain_;
     rai::BlockHash tx_hash_;
+    uint64_t index_;
 };
 
 class TokenReceivable
@@ -337,6 +338,7 @@ public:
     uint64_t extra_data_;
     rai::BlockHash target_tx_;
     uint64_t target_height_;
+    uint64_t target_index_;
 };
 
 class TokenWrapInfo
@@ -356,6 +358,7 @@ public:
     rai::BlockHash source_tx_;
     rai::BlockHash target_tx_;
     uint64_t target_height_;
+    uint64_t target_index_;
     rai::TokenAddress wrapped_token_;
 };
 
@@ -960,10 +963,6 @@ public:
         uint64_t = std::numeric_limits<uint64_t>::max()) const;
     rai::Iterator TokenMapInfoUpperBound(rai::Transaction&, const rai::Account&,
                                          rai::Chain) const;
-    bool TokenMapIndexPut(rai::Transaction&, rai::Chain, const rai::BlockHash&,
-                          uint64_t);
-    bool TokenMapIndexGet(rai::Transaction&, rai::Chain, const rai::BlockHash&,
-                          uint64_t&);
     bool TokenUnmapInfoPut(rai::Transaction&, const rai::Account&, uint64_t,
                            const rai::TokenUnmapInfo&);
     bool TokenUnmapInfoGet(rai::Transaction&, const rai::Account&, uint64_t,
@@ -1001,10 +1000,6 @@ public:
     rai::Iterator TokenUnwrapInfoUpperBound(rai::Transaction&,
                                             const rai::Account&,
                                             rai::Chain) const;
-    bool TokenUnwrapIndexPut(rai::Transaction&, rai::Chain,
-                             const rai::BlockHash&, uint64_t);
-    bool TokenUnwrapIndexGet(rai::Transaction&, rai::Chain,
-                             const rai::BlockHash&, uint64_t&);
     bool TokenIdInfoPut(rai::Transaction&, const rai::TokenKey&,
                         const rai::TokenValue&, const rai::TokenIdInfo&);
     bool TokenIdInfoGet(rai::Transaction&, const rai::TokenKey&,
