@@ -46,9 +46,7 @@ rai::Store::Store(rai::ErrorCode& error_code,
       token_wrap_(0),
       token_unwrap_(0),
       chain_head_(0),
-      wrapped_tokens_(0),
-      token_map_index_(0),
-      token_unwrap_index_(0)
+      wrapped_tokens_(0)
 {
     if (error_code != rai::ErrorCode::SUCCESS)
     {
@@ -384,22 +382,6 @@ rai::Store::Store(rai::ErrorCode& error_code,
 
     ret = mdb_dbi_open(transaction, "wrapped_tokens", MDB_CREATE,
                        &wrapped_tokens_);
-    if (ret != MDB_SUCCESS)
-    {
-        error_code = rai::ErrorCode::MDB_DBI_OPEN;
-        return;
-    }
-
-    ret = mdb_dbi_open(transaction, "token_map_index", MDB_CREATE,
-                       &token_map_index_);
-    if (ret != MDB_SUCCESS)
-    {
-        error_code = rai::ErrorCode::MDB_DBI_OPEN;
-        return;
-    }
-
-    ret = mdb_dbi_open(transaction, "token_unwrap_index", MDB_CREATE,
-                       &token_unwrap_index_);
     if (ret != MDB_SUCCESS)
     {
         error_code = rai::ErrorCode::MDB_DBI_OPEN;

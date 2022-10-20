@@ -146,6 +146,7 @@ enum class ErrorCode : int
     BLOCK_CHAIN                          = 136,
     BINDING_IGNORED                      = 137,
     CROSS_CHAIN_MESSAGE_DESTINATION      = 138,
+    LEDGER_OUTDATED                      = 139,
 
     // json parsing errors: 200 ~ 299
     JSON_GENERIC                                    = 200,
@@ -558,6 +559,7 @@ enum class ErrorCode : int
     JSON_BLOCK_EXTENSION_TOKEN_UNMAP_EXTRA_DATA     = 1015,
     JSON_BLOCK_EXTENSION_TOKEN_SWAP_ACK_HEIGHT      = 1016,
     JSON_BLOCK_CHAIN_ID                             = 1017,
+    JSON_BLOCK_EXTENSION_TOKEN_RECEIVE_INDEX        = 1018,
 
 
     JSON_CONFIG_CROSS_CHAIN                         = 1100,

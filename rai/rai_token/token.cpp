@@ -987,6 +987,7 @@ void rai::Token::MakeReceivablePtree(const rai::TokenReceivableKey& key,
     ptree.put("from_raw", receivable.from_.StringHex());
     ptree.put("value", receivable.value_.StringDec());
     ptree.put("block_height", std::to_string(receivable.block_height_));
+    ptree.put("index", std::to_string(key.index_));
     ptree.put("source", rai::TokenSourceToString(receivable.source_));
     if (block != nullptr)
     {
@@ -1288,6 +1289,7 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
     ptree.put("extra_data", std::to_string(unmap.extra_data_));
     rai::BlockHash target_tx = unmap.target_tx_;
     uint64_t target_height = unmap.target_height_;
+    uint64_t target_index = unmap.target_index_;
     if (target_tx.IsZero())
     {
         ptree.put("target_confirmed", rai::BoolToString(false));
@@ -1296,6 +1298,7 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
         {
             target_tx = event->tx_hash_;
             target_height = event->block_height_;
+            target_index = event->index_;
         }
     }
     else
@@ -1304,6 +1307,7 @@ bool rai::Token::MakeTokenUnmapInfoPtree(rai::Transaction& transaction,
     }
     ptree.put("target_transaction", target_tx.StringHex());
     ptree.put("target_height", std::to_string(target_height));
+    ptree.put("target_index", std::to_string(target_index));
     return false;
 }
 
@@ -1346,6 +1350,7 @@ bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
     ptree.put_child("source_block", block_ptree);
     rai::BlockHash target_tx = wrap.target_tx_;
     uint64_t target_height = wrap.target_height_;
+    uint64_t target_index = wrap.target_index_;
     rai::TokenAddress wrapped_address = wrap.wrapped_token_;
     if (target_tx.IsZero())
     {
@@ -1355,6 +1360,7 @@ bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
         {
             target_tx = event->tx_hash_;
             target_height = event->block_height_;
+            target_index = event->index_;
             wrapped_address = event->address_;
         }
     }
@@ -1364,6 +1370,7 @@ bool rai::Token::MakeTokenWrapInfoPtree(rai::Transaction& transaction,
     }
     ptree.put("target_transaction", target_tx.StringHex());
     ptree.put("target_height", std::to_string(target_height));
+    ptree.put("target_index", std::to_string(target_index));
     ptree.put("wrapped_address_raw", wrapped_address.StringHex());
     return false;
 }
@@ -1543,7 +1550,7 @@ rai::ErrorCode rai::Token::InitLedger_()
 
     if (version > rai::Token::CURRENT_LEDGER_VERSION)
     {
-        std::cout << "[Error] Ledger version=" << version << std::endl;
+        std::cout << "[Error] Unknown ledger version=" << version << std::endl;
         return rai::ErrorCode::LEDGER_VERSION;
     }
 
@@ -1555,6 +1562,13 @@ rai::ErrorCode rai::Token::InitLedger_()
             IF_NOT_SUCCESS_RETURN(error_code);
         }
         case 2:
+        {
+            std::cout << "[Error] Ledger incompatible, please remove "
+                         "token_data.ldb and resync with network"
+                      << std::endl;
+            return rai::ErrorCode::LEDGER_OUTDATED;
+        }
+        case 3:
         {
             break;
         }
@@ -1641,7 +1655,7 @@ rai::TokenError rai::Token::ProcessCreate_(
             info.total_supply_ = create20->init_supply_;
             info.local_supply_ = create20->init_supply_;
             rai::TokenReceivableKey receivable_key(
-                block->Account(), key, rai::CurrentChain(), block->Hash());
+                block->Account(), key, rai::CurrentChain(), block->Hash(), 0);
             rai::TokenReceivable receivable(
                 block->Account(), create20->init_supply_, block->Height(),
                 rai::TokenType::_20, rai::TokenSource::MINT);
@@ -1767,7 +1781,7 @@ rai::TokenError rai::Token::ProcessMint_(
         }
 
         rai::TokenReceivableKey receivable_key(
-            mint->to_, key, rai::CurrentChain(), block->Hash());
+            mint->to_, key, rai::CurrentChain(), block->Hash(), 0);
         rai::TokenReceivable receivable(
             block->Account(), mint->value_, block->Height(),
             rai::TokenType::_20, rai::TokenSource::MINT);
@@ -1831,7 +1845,7 @@ rai::TokenError rai::Token::ProcessMint_(
         }
 
         rai::TokenReceivableKey receivable_key(
-            mint->to_, key, rai::CurrentChain(), block->Hash());
+            mint->to_, key, rai::CurrentChain(), block->Hash(), 0);
         rai::TokenReceivable receivable(block->Account(), mint->value_,
                                         block->Height(), rai::TokenType::_721,
                                         rai::TokenSource::MINT);
@@ -2134,7 +2148,7 @@ rai::TokenError rai::Token::ProcessSend_(
         balance = account_token_info.balance_ - send->value_;
 
         rai::TokenReceivableKey receivable_key(
-            send->to_, key, rai::CurrentChain(), block->Hash());
+            send->to_, key, rai::CurrentChain(), block->Hash(), 0);
         rai::TokenReceivable receivable(
             block->Account(), send->value_, block->Height(),
             rai::TokenType::_20, rai::TokenSource::SEND);
@@ -2183,7 +2197,7 @@ rai::TokenError rai::Token::ProcessSend_(
         IF_NOT_SUCCESS_RETURN(error_code);
 
         rai::TokenReceivableKey receivable_key(
-            send->to_, key, rai::CurrentChain(), block->Hash());
+            send->to_, key, rai::CurrentChain(), block->Hash(), 0);
         rai::TokenReceivable receivable(block->Account(), send->value_,
                                         block->Height(), rai::TokenType::_721,
                                         rai::TokenSource::SEND);
@@ -2242,7 +2256,7 @@ rai::TokenError rai::Token::ProcessReceive_(
 
     // wait source block
     rai::Chain chain = rai::Chain::INVALID;
-    uint64_t index = 0;
+    uint64_t index = std::numeric_limits<uint64_t>::max();
     if (rai::IsLocalSource(receive->source_))
     {
         if (receive->from_ == block->Account()
@@ -2259,37 +2273,24 @@ rai::TokenError rai::Token::ProcessReceive_(
                       block, true, source_block);
         IF_NOT_SUCCESS_RETURN(error_code);
         chain = rai::CurrentChain();
+        index = 0;
     }
     else if (receive->source_ == rai::TokenSource::MAP)
     {
         chain = receive->token_.chain_;
+        index = receive->index_;
         if (WaitChain_(transaction, chain, receive->block_height_, block))
         {
             return rai::ErrorCode::APP_PROCESS_WAITING;
-        }
-        bool error = ledger_.TokenMapIndexGet(transaction, chain,
-                                              receive->tx_hash_, index);
-        if (error)
-        {
-            return UpdateLedgerCommon_(transaction, block,
-                                       rai::ErrorCode::TOKEN_UNRECEIVABLE,
-                                       observers);
         }
     }
     else if (receive->source_ == rai::TokenSource::UNWRAP)
     {
         chain = receive->unwrap_chain_;
+        index = receive->index_;
         if (WaitChain_(transaction, chain, receive->block_height_, block))
         {
             return rai::ErrorCode::APP_PROCESS_WAITING;
-        }
-        bool error = ledger_.TokenUnwrapIndexGet(transaction, chain,
-                                                 receive->tx_hash_, index);
-        if (error)
-        {
-            return UpdateLedgerCommon_(transaction, block,
-                                       rai::ErrorCode::TOKEN_UNRECEIVABLE,
-                                       observers);
         }
     }
     else
@@ -2304,8 +2305,8 @@ rai::TokenError rai::Token::ProcessReceive_(
     std::vector<rai::TokenKey> keys;
     keys.push_back(key);
 
-    rai::TokenReceivableKey receivable_key(
-        block->Account(), key, chain, receive->tx_hash_);
+    rai::TokenReceivableKey receivable_key(block->Account(), key, chain,
+                                           receive->tx_hash_, index);
     rai::TokenReceivable receivable;
     bool error =
         ledger_.TokenReceivableGet(transaction, receivable_key, receivable);
@@ -3494,7 +3495,7 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
     // put receivable
     {
         rai::TokenReceivableKey receivable_key(
-            take_ack->taker_, key, rai::CurrentChain(), block->Hash());
+            take_ack->taker_, key, rai::CurrentChain(), block->Hash(), 0);
         rai::TokenReceivable receivable(swap_info.maker_, take_ack->value_,
                                         block->Height(), info.type_,
                                         rai::TokenSource::SWAP);
@@ -3515,7 +3516,7 @@ rai::TokenError rai::Token::ProcessSwapTakeAck_(
             return rai::ErrorCode::APP_PROCESS_HALT;  // Ledger inconsistency
         }
         rai::TokenReceivableKey receivable_key(
-            swap_info.maker_, key_want, rai::CurrentChain(), block->Hash());
+            swap_info.maker_, key_want, rai::CurrentChain(), block->Hash(), 0);
         rai::TokenReceivable receivable(swap_info.maker_, swap_info.value_,
                                         block->Height(), order_info.type_want_,
                                         rai::TokenSource::SWAP);
@@ -3785,7 +3786,7 @@ rai::TokenError rai::Token::ProcessSwapCancel_(
         value = order_info.value_offer_;
     }
     rai::TokenReceivableKey receivable_key(maker, key, rai::CurrentChain(),
-                                           block->Hash());
+                                           block->Hash(), 0);
     rai::TokenReceivable receivable(maker, value, block->Height(), info.type_,
                                     rai::TokenSource::REFUND);
     rai::ErrorCode error_code = UpdateLedgerReceivable_(
@@ -4411,21 +4412,6 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
         return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
     }
 
-    uint64_t index;
-    error = ledger_.TokenMapIndexGet(transaction, token_event->chain_,
-                                     token_event->tx_hash_, index);
-    if (!error)
-    {
-        rai::Log::Error(rai::ToString(
-            "Token::ProcessCrossChainMapEvent_: transaction hash collision, "
-            "chain=",
-            token_event->chain_,
-            ", address=", token_event->address_.StringHex(),
-            ", txn_hash=", token_event->tx_hash_.StringHex(),
-            ", block_height=", token_event->block_height_));
-        return rai::ErrorCode::SUCCESS;
-    }
-
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::TokenValue local_supply(0);
     if (info.type_ == rai::TokenType::_20)
@@ -4443,7 +4429,8 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
         }
 
         rai::TokenReceivableKey receivable_key(
-            token_event->to_, key, token_event->chain_, token_event->tx_hash_);
+            token_event->to_, key, token_event->chain_, token_event->tx_hash_,
+            token_event->index_);
         rai::TokenReceivable receivable(
             token_event->from_, token_event->value_, token_event->block_height_,
             rai::TokenType::_20, rai::TokenSource::MAP);
@@ -4502,7 +4489,8 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
         }
 
         rai::TokenReceivableKey receivable_key(
-            token_event->to_, key, token_event->chain_, token_event->tx_hash_);
+            token_event->to_, key, token_event->chain_, token_event->tx_hash_,
+            token_event->index_);
         rai::TokenReceivable receivable(
             token_event->from_, token_event->value_, token_event->block_height_,
             rai::TokenType::_721, rai::TokenSource::MAP);
@@ -4538,20 +4526,6 @@ rai::ErrorCode rai::Token::ProcessCrossChainMapEvent_(
         return rai::ErrorCode::TOKEN_LEDGER_PUT;
     }
 
-    error =
-        ledger_.TokenMapIndexPut(transaction, token_event->chain_,
-                                 token_event->tx_hash_, token_event->index_);
-    if (error)
-    {
-        rai::Log::Error(rai::ToString(
-            "Token::ProcessCrossChainMapEvent_: put token map index failed, "
-            "chain=",
-            token_event->chain_,
-            ", address=", token_event->address_.StringHex(),
-            ", txn_hash=", token_event->tx_hash_.StringHex()));
-        return rai::ErrorCode::TOKEN_LEDGER_PUT;
-    }
-
     observers.push_back(
         std::bind(token_map_observer_, token_event->to_, token_event->chain_,
                   token_event->block_height_, token_event->index_));
@@ -4578,18 +4552,18 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnmapEvent_(
                                            token_event->from_height_, info);
     if (error)
     {
-        // ignore missing item
         rai::Log::Error(rai::ToString(
             "Token::ProcessCrossChainUnmapEvent_: get token unmap info "
             "failed, chain=",
             token_event->chain_,
             ", address=", token_event->address_.StringHex(),
             ", txn_hash=", token_event->tx_hash_.StringHex()));
-        return rai::ErrorCode::SUCCESS;
+        return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
     }
 
     info.target_height_ = token_event->block_height_;
     info.target_tx_ = token_event->tx_hash_;
+    info.target_index_ = token_event->index_;
     error = ledger_.TokenUnmapInfoPut(transaction, token_event->from_,
                                       token_event->from_height_, info);
     if (error)
@@ -4706,21 +4680,6 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
         return rai::ErrorCode::TOKEN_CROSS_CHAIN_UNEXPECTED;
     }
 
-    uint64_t index;
-    error = ledger_.TokenUnwrapIndexGet(transaction, token_event->chain_,
-                                        token_event->tx_hash_, index);
-    if (!error)
-    {
-        rai::Log::Error(rai::ToString(
-            "Token::ProcessCrossChainUnwrapEvent_: transaction hash collision, "
-            "chain=",
-            token_event->chain_,
-            ", address=", token_event->address_.StringHex(),
-            ", txn_hash=", token_event->tx_hash_.StringHex(),
-            ", block_height=", token_event->block_height_));
-        return rai::ErrorCode::SUCCESS;
-    }
-
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::TokenValue local_supply(0);
     if (info.type_ == rai::TokenType::_20)
@@ -4738,7 +4697,8 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
         }
 
         rai::TokenReceivableKey receivable_key(
-            token_event->to_, key, token_event->chain_, token_event->tx_hash_);
+            token_event->to_, key, token_event->chain_, token_event->tx_hash_,
+            token_event->index_);
         rai::TokenReceivable receivable(
             token_event->from_, token_event->value_, token_event->block_height_,
             rai::TokenType::_20, rai::TokenSource::UNWRAP);
@@ -4797,7 +4757,8 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
         }
 
         rai::TokenReceivableKey receivable_key(
-            token_event->to_, key, token_event->chain_, token_event->tx_hash_);
+            token_event->to_, key, token_event->chain_, token_event->tx_hash_,
+            token_event->index_);
         rai::TokenReceivable receivable(
             token_event->from_, token_event->value_, token_event->block_height_,
             rai::TokenType::_721, rai::TokenSource::UNWRAP);
@@ -4831,21 +4792,6 @@ rai::ErrorCode rai::Token::ProcessCrossChainUnwrapEvent_(
             token_event->chain_,
             ", address=", token_event->address_.StringHex(),
             ", txn_hash=", token_event->tx_hash_.StringHex()));
-        return rai::ErrorCode::TOKEN_LEDGER_PUT;
-    }
-
-    error =
-        ledger_.TokenUnwrapIndexPut(transaction, token_event->chain_,
-                                    token_event->tx_hash_, token_event->index_);
-    if (error)
-    {
-        rai::Log::Error(rai::ToString(
-            "Token::ProcessCrossChainUnwrapEvent_: put token unwrap index "
-            "failed, chain=",
-            token_event->chain_,
-            ", address=", token_event->address_.StringHex(),
-            ", txn_hash=", token_event->tx_hash_.StringHex(), ", block_height=",
-            token_event->block_height_, ", log_index=", token_event->index_));
         return rai::ErrorCode::TOKEN_LEDGER_PUT;
     }
 
@@ -5038,7 +4984,7 @@ rai::ErrorCode rai::Token::PurgeTakeWaiting_(
             || info.type_ == rai::TokenType::_721)
         {
             rai::TokenReceivableKey receivable_key(
-                i.account_, key, rai::CurrentChain(), block->Hash());
+                i.account_, key, rai::CurrentChain(), block->Hash(), 0);
             rai::TokenReceivable receivable(maker, swap_info.value_, height,
                                             info.type_,
                                             rai::TokenSource::REFUND);

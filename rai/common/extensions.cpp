@@ -1773,6 +1773,10 @@ void rai::ExtensionTokenReceive::Serialize(rai::Stream& stream) const
     {
         rai::Write(stream, unwrap_chain_);
     }
+    if (source_ == rai::TokenSource::UNWRAP || source_ == rai::TokenSource::MAP)
+    {
+        rai::Write(stream, index_);
+    }
 }
 
 rai::ErrorCode rai::ExtensionTokenReceive::Deserialize(rai::Stream& stream)
@@ -1800,6 +1804,10 @@ rai::ErrorCode rai::ExtensionTokenReceive::Deserialize(rai::Stream& stream)
         error = rai::Read(stream, unwrap_chain_);
         IF_ERROR_RETURN(error, rai::ErrorCode::STREAM);
     }
+    if (source_ == rai::TokenSource::UNWRAP || source_ == rai::TokenSource::MAP)
+    {
+        error = rai::Read(stream, index_);
+    }
 
     return CheckData();
 }
@@ -1824,6 +1832,10 @@ void rai::ExtensionTokenReceive::SerializeJson(rai::Ptree& ptree) const
     if (source_ == rai::TokenSource::UNWRAP)
     {
         ptree.put("unwrap_chain", rai::ChainToString(unwrap_chain_));
+    }
+    if (source_ == rai::TokenSource::UNWRAP || source_ == rai::TokenSource::MAP)
+    {
+        ptree.put("index", std::to_string(index_));
     }
 }
 
@@ -1875,6 +1887,16 @@ rai::ErrorCode rai::ExtensionTokenReceive::DeserializeJson(
                 rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_UNWRAP_CHAIN;
             std::string unwrap_chain = ptree.get<std::string>("unwrap_chain");
             unwrap_chain_ = rai::StringToChain(unwrap_chain);
+        }
+
+        if (source_ == rai::TokenSource::UNWRAP
+            || source_ == rai::TokenSource::MAP)
+        {
+            error_code =
+                rai::ErrorCode::JSON_BLOCK_EXTENSION_TOKEN_RECEIVE_INDEX;
+            std::string index = ptree.get<std::string>("index");
+            error = rai::StringToUint(index, index_);
+            IF_ERROR_RETURN(error, error_code);
         }
 
         return CheckData();

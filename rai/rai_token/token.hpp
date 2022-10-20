@@ -174,7 +174,7 @@ public:
     rai::ChainWaiting chain_waiting_;
 
 private:
-    static uint32_t constexpr CURRENT_LEDGER_VERSION = 2;
+    static uint32_t constexpr CURRENT_LEDGER_VERSION = 3;
     rai::ErrorCode InitLedger_();
     rai::ErrorCode ReadTakeNackBlocks_();
     rai::TokenError ProcessCreate_(rai::Transaction&,
