@@ -344,7 +344,7 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
             websocket_ = std::make_shared<rai::WebsocketClient>(
                 service_, config_.callback_url_.host_,
                 config_.callback_url_.port_, config_.callback_url_.path_,
-                config_.callback_url_.protocol_ == "wss");
+                config_.callback_url_.protocol_ == "wss", true);
         }
     }
 
