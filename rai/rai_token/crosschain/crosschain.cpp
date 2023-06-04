@@ -40,7 +40,7 @@ rai::CrossChain::CrossChain(rai::Token& token)
                 rai::CrossChainParser(std::make_shared<rai::EvmParser>(
                     token, config.eth_test_goerli_urls_,
                     rai::Chain::ETHEREUM_TEST_GOERLI, 12, 96,
-                    "0xfC113A7B68074642cA2FC74733A9BF325C045F14")));
+                    "0xae9f9cA3eABE4AEdaaa26f0522EaD246B769ca5f")));
         }
 
         if (!config.bsc_test_urls_.empty())
@@ -49,7 +49,7 @@ rai::CrossChain::CrossChain(rai::Token& token)
                 rai::CrossChainParser(std::make_shared<rai::EvmParser>(
                     token, config.bsc_test_urls_,
                     rai::Chain::BINANCE_SMART_CHAIN_TEST, 5, 30,
-                    "0x68CF8517a569565F0B30f8856F0555d55d539307")));
+                    "0x3e729788b5e12CC43c4B62345075b3654129a009")));
         }
     }
     condition_.notify_all();

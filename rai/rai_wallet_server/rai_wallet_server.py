@@ -634,6 +634,16 @@ def callback_check_ip(r : web.Request):
         return True
     return False
 
+async def handle_node_keeplive(r : web.Request, message : dict, node_id):
+    message['ack'] = 'keeplive'
+    del message['action']
+
+    node = r.app['nodes'][node_id]
+    try:
+        await node['ws'].send_str(json.dumps(message))
+    except Exception as e:
+        log.server_logger.error('node error;%s;%s', str(e), node['ip'])
+
 # Primary handler for all node websocket connections
 async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocketResponse):
     """Process data sent by node"""
@@ -689,6 +699,10 @@ async def handle_node_messages(r : web.Request, message : str, ws : web.WebSocke
                 await clients[client_id]['ws'].send_str(json.dumps(request_json))
             except:
                 pass
+        elif 'action' in request_json:
+            action = request_json['action']
+            if action == 'keeplive':
+                await handle_node_keeplive(r, request_json, node_id)
         else:
             log.server_logger.error('unexpected node message;%s;%s;%s', message, ip, node_id)
     except Exception as e:

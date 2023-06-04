@@ -11,8 +11,8 @@ std::vector<std::string> DefaultEndpoints(rai::Chain chain)
         {
             result.push_back("https://rpc.ankr.com/eth");
             result.push_back("https://eth-rpc.gateway.pokt.network");
-            result.push_back("https://main-rpc.linkpool.io/");
-            result.push_back("https://api.mycryptoapi.com/eth");
+            result.push_back("https://1rpc.io/eth");
+            result.push_back("https://eth.llamarpc.com");
             result.push_back("https://eth.public-rpc.com");
             break;
         }

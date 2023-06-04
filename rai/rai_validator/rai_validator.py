@@ -178,6 +178,53 @@ else:
     ]
 
 
+BSC_ENDPOINTS = os.getenv('BSC_ENDPOINTS', '')
+if BSC_ENDPOINTS != '':
+    try:
+        endpoints = BSC_ENDPOINTS.split(',')
+        BSC_ENDPOINTS = []
+        for i in endpoints:
+            if not i.strip():
+                continue
+            BSC_ENDPOINTS.append(i.strip())
+        if not BSC_ENDPOINTS:
+            print("Error found in .env: invalid BSC_ENDPOINTS config")
+    except:
+        print("Error found in .env: invalid BSC_ENDPOINTS config")
+        sys.exit(0)
+else:
+    BSC_ENDPOINTS = [
+        'https://bsc-dataseed.binance.org/',
+        'https://bsc-dataseed1.defibit.io/',
+        'https://bsc-dataseed1.ninicoin.io/',
+        'https://bsc.nodereal.io',
+        'https://rpc.ankr.com/bsc',
+    ]
+
+ETH_ENDPOINTS = os.getenv('ETH_ENDPOINTS', '')
+if ETH_ENDPOINTS != '':
+    try:
+        endpoints = ETH_ENDPOINTS.split(',')
+        ETH_ENDPOINTS = []
+        for i in endpoints:
+            if not i.strip():
+                continue
+            ETH_ENDPOINTS.append(i.strip())
+        if not ETH_ENDPOINTS:
+            print("Error found in .env: invalid ETH_ENDPOINTS config")
+    except:
+        print("Error found in .env: invalid ETH_ENDPOINTS config")
+        sys.exit(0)
+else:
+    ETH_ENDPOINTS = [
+        'https://rpc.ankr.com/eth',
+        'https://eth-rpc.gateway.pokt.network',
+        'https://1rpc.io/eth',
+        'https://eth-mainnet.g.alchemy.com/v2/demo',
+        'https://eth.public-rpc.com',
+    ]
+
+
 def valid_evm_private_key(key):
     try:
         if (len(key) != 64):
@@ -187,31 +234,59 @@ def valid_evm_private_key(key):
     except:
         return False
 
-BSC_TEST_SIGNER_PRIVATE_KEY = os.getenv('BSC_TEST_SIGNER_PRIVATE_KEY', '')
-if BSC_TEST_SIGNER_PRIVATE_KEY.lower() == 'input':
-    BSC_TEST_SIGNER_PRIVATE_KEY = getpass(
-        prompt='Input the private key of your signer account for BSC testnet: ')
-    if not valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
-        if len(BSC_TEST_SIGNER_PRIVATE_KEY) > 0:
-            print('Error: invalid private key format')
-        sys.exit(0)
-elif BSC_TEST_SIGNER_PRIVATE_KEY != '':
-    if not valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
-        print("Error found in .env: invalid BSC_TEST_SIGNER_PRIVATE_KEY")
-        sys.exit(0)
+if TEST_MODE:
+    BSC_TEST_SIGNER_PRIVATE_KEY = os.getenv('BSC_TEST_SIGNER_PRIVATE_KEY', '')
+    if BSC_TEST_SIGNER_PRIVATE_KEY == '':
+        BSC_TEST_SIGNER_PRIVATE_KEY = getpass(
+            prompt='Input the private key of your signer account for BSC testnet: ')
+        if not valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
+            if len(BSC_TEST_SIGNER_PRIVATE_KEY) > 0:
+                print('Error: invalid private key format')
+            sys.exit(0)
+    else:
+        if not valid_evm_private_key(BSC_TEST_SIGNER_PRIVATE_KEY):
+            print("Error found in .env: invalid BSC_TEST_SIGNER_PRIVATE_KEY")
+            sys.exit(0)
 
-GOERLI_SIGNER_PRIVATE_KEY = os.getenv('GOERLI_SIGNER_PRIVATE_KEY', '')
-if GOERLI_SIGNER_PRIVATE_KEY.lower() == 'input':
-    GOERLI_SIGNER_PRIVATE_KEY = getpass(
-        prompt='Input the private key of your signer account for Goerli testnet: ')
-    if not valid_evm_private_key(GOERLI_SIGNER_PRIVATE_KEY):
-        if len(GOERLI_SIGNER_PRIVATE_KEY) > 0:
-            print('Error: invalid private key format')
-        sys.exit(0)
-elif GOERLI_SIGNER_PRIVATE_KEY != '':
-    if not valid_evm_private_key(GOERLI_SIGNER_PRIVATE_KEY):
-        print("Error found in .env: invalid GOERLI_SIGNER_PRIVATE_KEY")
-        sys.exit(0)
+    GOERLI_SIGNER_PRIVATE_KEY = os.getenv('GOERLI_SIGNER_PRIVATE_KEY', '')
+    if GOERLI_SIGNER_PRIVATE_KEY == '':
+        GOERLI_SIGNER_PRIVATE_KEY = getpass(
+            prompt='Input the private key of your signer account for Goerli testnet: ')
+        if not valid_evm_private_key(GOERLI_SIGNER_PRIVATE_KEY):
+            if len(GOERLI_SIGNER_PRIVATE_KEY) > 0:
+                print('Error: invalid private key format')
+            sys.exit(0)
+    else:
+        if not valid_evm_private_key(GOERLI_SIGNER_PRIVATE_KEY):
+            print("Error found in .env: invalid GOERLI_SIGNER_PRIVATE_KEY")
+            sys.exit(0)
+
+else:
+    BSC_SIGNER_PRIVATE_KEY = os.getenv('BSC_SIGNER_PRIVATE_KEY', '')
+    if BSC_SIGNER_PRIVATE_KEY == '':
+        BSC_SIGNER_PRIVATE_KEY = getpass(
+            prompt='Input the private key of your signer account for BSC: ')
+        if not valid_evm_private_key(BSC_SIGNER_PRIVATE_KEY):
+            if len(BSC_SIGNER_PRIVATE_KEY) > 0:
+                print('Error: invalid private key format')
+            sys.exit(0)
+    else:
+        if not valid_evm_private_key(BSC_SIGNER_PRIVATE_KEY):
+            print("Error found in .env: invalid BSC_SIGNER_PRIVATE_KEY")
+            sys.exit(0)
+
+    ETH_SIGNER_PRIVATE_KEY = os.getenv('ETH_SIGNER_PRIVATE_KEY', '')
+    if ETH_SIGNER_PRIVATE_KEY == '':
+        ETH_SIGNER_PRIVATE_KEY = getpass(
+            prompt='Input the private key of your signer account for Ethereum: ')
+        if not valid_evm_private_key(ETH_SIGNER_PRIVATE_KEY):
+            if len(ETH_SIGNER_PRIVATE_KEY) > 0:
+                print('Error: invalid private key format')
+            sys.exit(0)
+    else:
+        if not valid_evm_private_key(ETH_SIGNER_PRIVATE_KEY):
+            print("Error found in .env: invalid ETH_SIGNER_PRIVATE_KEY")
+            sys.exit(0)
 
 class Util:
     def __init__(self, use_cf: bool, use_nginx : bool):
@@ -818,11 +893,77 @@ class UpgradeSignMessage(CrossChainMessage):
                 return True
         return False
 
+class UpdateTokenVolatileMessage(CrossChainMessage):
+    def __init__(self, source: str, destination: str, chain_id: ChainId = ChainId.INVALID,
+        source_signer: str = '', is_request: bool = True, proposal_id: int = 0, token: str = '',
+        volatile: bool = True, nonce: int = 0, signature: bytes = b''):
+        super().__init__(source, destination, chain_id, source_signer)
+        self.is_request = is_request
+        self.proposal_id = proposal_id
+        self.token = token
+        self.volatile = volatile
+        self.nonce = nonce
+
+        if not self.is_request:
+            self.signature = signature
+
+    def __str__(self) -> str:
+        return json.dumps(self.to_dict())
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            'type': 'UpdateTokenVolatileMessage',
+            'is_request': self.is_request,
+            'proposal_id': self.proposal_id,
+            'token': self.token,
+            'volatile': self.volatile,
+            'nonce': self.nonce,
+            'signature':  UTIL.bytes_to_hex(self.signature)
+        })
+        return d
+
+    def serialize(self, stream: BytesIO) -> str:
+        Serializer.write_uint8(stream, CrossChainMessageType.UpdateTokenVolatile)
+        Serializer.write_bool(stream, self.is_request)
+        Serializer.write_uint32(stream, self.proposal_id)
+        Serializer.write_uint256(stream, self.token)
+        Serializer.write_bool(stream, self.volatile)
+        Serializer.write_uint256(stream, self.nonce)
+        if not self.is_request:
+            Serializer.write_bytes(stream, self.signature)
+
+    def deserialize(self, stream: BytesIO) -> bool:
+        msg_type = Serializer.read_uint8(stream)
+        if msg_type != CrossChainMessageType.UpdateTokenVolatile:
+            return True
+        self.is_request = Serializer.read_bool(stream)
+        if self.is_request == None:
+            return True
+        self.proposal_id = Serializer.read_uint32(stream)
+        if self.proposal_id == None:
+            return True
+        self.token = Serializer.read_uint256(stream)
+        if self.token == None:
+            return True
+        self.volatile = Serializer.read_bool(stream)
+        if self.volatile == None:
+            return True
+        self.nonce = Serializer.read_uint256(stream)
+        if self.nonce == None:
+            return True
+        if not self.is_request:
+            self.signature = Serializer.read_bytes(stream)
+            if self.signature == None:
+                return True
+        return False
+
 class CrossChainMessageType(IntEnum):
     WeightSign = 1
     TransferSign = 2
     CreationSign = 3
     UpgradeSign = 4
+    UpdateTokenVolatile = 5
 
 async def send_cross_chain_message(data: CrossChainMessage):
     stream = BytesIO()
@@ -862,6 +1003,9 @@ class EvmChainValidator:
     def __init__(self, chain_id: ChainId, evm_chain_id: EvmChainId, core_contract: str,
                  validator_contract: str, core_abi: dict, validator_abi: dict, endpoints: list,
                  signer_private_key: str, confirmations: int, tag: str, native: str, token_symbol_patch: List[TokenSymbol] = []):
+        if not core_contract or not validator_contract:
+            print(f'EvmChainValidator: core or validator contract not set, evm chain id {evm_chain_id}')
+            sys.exit(0)
         self.chain_id = chain_id
         self.evm_chain_id = evm_chain_id
         self.core_contract = self.to_checksum_address(core_contract)
@@ -872,6 +1016,7 @@ class EvmChainValidator:
         self.genesis_signer = None
         self.genesis_signer_raw = None
         self.endpoints = endpoints
+        self.endpoints_check_status = [0] * len(self.endpoints)
         self.confirmations = confirmations
         self.tag = tag
         self.signer = None
@@ -1193,8 +1338,59 @@ class EvmChainValidator:
             self.proposal_signatures[message.source] = self.SignatureInfo(message.source,
                 signer, message.signature)
 
+    async def process_update_token_volatile_message(self, message: UpdateTokenVolatileMessage):
+        if not node_synced():
+            return
+        if message.is_request:
+            if not self.signer:
+                return
+            if message.proposal_id not in self.proposals:
+                return
+            proposal = self.proposals[message.proposal_id]
+            if self.to_checksum_address(proposal['contract']) != self.core_contract \
+                or proposal['method'] != 'updateTokenVolatile':
+                return
+            now = time.time()
+            if now < proposal['begin_timestamp'] or now > proposal['end_timestamp']:
+                return
+            params = proposal['params']
+            if int(params['nonce']) != message.nonce:
+                return
+            volatile = params['volatile']
+            if not isinstance(volatile, bool) or params['volatile'] != message.volatile:
+                return
+            if int(params['nonce']) != message.nonce:
+                return
+            signature = self.signUpdateTokenVolatile(params['token'], params['volatile'], params['nonce'])
+            response = UpdateTokenVolatileMessage(NODE['account_hex'], message.source,
+                self.chain_id, '', False, int(proposal['id']), params['token'], params['volatile'],
+                int(params['nonce']), signature)
+            await send_cross_chain_message(response)
+        else:
+            proposal = self.proposal_active
+            if proposal == None:
+                return
+            if int(proposal['id']) != message.proposal_id:
+                return
+            if proposal['method'] != 'updateTokenVolatile':
+                return
+            params = proposal['params']
+            nonce = int(params['nonce'])
+            if nonce != message.nonce:
+                return
+            if self.check_validator(message.source):
+                return
+            signer = self.get_signer(message.source)
+            if not signer:
+                return
+            if self.verifyUpdateTokenVolatile(signer, params['token'], params['volatile'], nonce,
+                message.signature):
+                return
+            self.proposal_signatures[message.source] = self.SignatureInfo(message.source,
+                signer, message.signature)
+
     async def process_cross_chain_message(self, message: Union[WeightSignMessage,
-        TransferSignMessage, CreationSignMessage, UpgradeSignMessage]):
+        TransferSignMessage, CreationSignMessage, UpgradeSignMessage, UpdateTokenVolatileMessage]):
         if message.source == self.genesis_validator:
             if not self.genesis_signer_raw:
                 return
@@ -1207,6 +1403,8 @@ class EvmChainValidator:
             await self.process_creation_sign_message(message)
         elif isinstance(message, UpgradeSignMessage):
             await self.process_upgrade_sign_message(message)
+        elif isinstance(message, UpdateTokenVolatileMessage):
+            await self.process_update_token_volatile_message(message)
         else:
             pass
 
@@ -1497,6 +1695,34 @@ class EvmChainValidator:
             return True
         return self.to_checksum_address(recover) != self.to_checksum_address(signer)
 
+    def eip712_update_token_volatile(self, token: str, volatile: bool, nonce: int):
+        data = self.eip712_base(self.core_contract)
+        data['types']['UpdateTokenVolatile'] = [
+            {"name": "token", "type": "address"},
+            {"name": "volatile", "type": "bool"},
+            {"name": "nonce", "type": "uint256"},
+        ]
+        data['primaryType'] = 'UpdateTokenVolatile'
+        data['message'] = {
+            'token': token,
+            'volatile': volatile,
+            'nonce': nonce,
+        }
+        return self.encode_structured_data(data)
+
+    def signUpdateTokenVolatile(self, token: str, volatile: bool, nonce: int) -> bytes:
+        signable = self.eip712_update_token_volatile(token, volatile, nonce)
+        return self.sign(signable)
+
+    def verifyUpdateTokenVolatile(self, signer: str, token: str, volatile: bool, nonce: int, signature: bytes) -> bool:
+        if len(signature) != 65:
+            return True
+        signable = self.eip712_update_token_volatile(token, volatile, nonce)
+        recover = self.recover(signable, signature)
+        if not recover:
+            return True
+        return self.to_checksum_address(recover) != self.to_checksum_address(signer)
+
     class ValidatorFullInfo:
         def __init__(self, validator: str, signer: str, weight: int, gas_price: int,
                      last_submit: int, epoch: int):
@@ -1672,16 +1898,29 @@ class EvmChainValidator:
         self.proposal_signature_collect_count = 0
 
     async def check_evm_chain_id(self):
-        for _ in range(len(self.endpoints)):
+        for i in range(len(self.endpoints)):
+            status = self.endpoints_check_status[i]
+            if status == True or status == False:
+                continue
+            if status >= 10:
+                self.endpoints_check_status[i] = False
+                continue
+            self.endpoint_index = i
             error, chain_id = await self.get_chain_id()
+            self.endpoints_check_status[i] += 1
             if error:
-                return
+                continue
             if chain_id != self.evm_chain_id:
                 print(
                     f"[ERROR] Chain id mismatch, expected {self.evm_chain_id}, got {chain_id}, endpoint={self.get_endpoint()}")
                 sys.exit(0)
-            self.use_next_endpoint()
-        self.evm_chain_id_checked = True
+            self.endpoints_check_status[i] = True
+        if not self.evm_chain_id_checked:
+            self.evm_chain_id_checked = True
+            for status in self.endpoints_check_status:
+                if status != True and status != False:
+                    self.evm_chain_id_checked = False
+                    break
 
     @awaitable
     def get_block_number(self):
@@ -1874,6 +2113,22 @@ class EvmChainValidator:
             self.use_next_endpoint()
 
     @awaitable
+    def update_token_volatile(self, token: str, volatile: bool, nonce: int, signatures: bytes):
+        contract = self.make_core_contract()
+        try:
+            gas= contract.functions.updateTokenVolatile(token, volatile, nonce, signatures).estimateGas({
+                'from': self.signer
+            })
+            gas = int(gas) * 2
+            contract.functions.updateTokenVolatile(token, volatile, nonce, signatures).transact({
+                'from': self.signer,
+                'gas': gas
+            })
+        except Exception as e:
+            log.server_logger.error('update_token_volatile exception:%s', str(e))
+            self.use_next_endpoint()
+
+    @awaitable
     def supports_interface(self, address: str, interface: str, block_number='latest') -> Tuple[bool, bool]:
         contract = self.make_erc721_contract(address)
         try:
@@ -1943,10 +2198,23 @@ class EvmChainValidator:
             self.use_next_endpoint()
             return True, ''
 
+    def has_checked_endpoint(self):
+        for status in self.endpoints_check_status:
+            if status == True:
+                return True
+        return False
+
     def use_next_endpoint(self):
-        self.endpoint_index = (self.endpoint_index + 1) % len(self.endpoints)
+        if not self.has_checked_endpoint():
+            self.endpoint_index = -1
+        for i in range(len(self.endpoints)):
+            self.endpoint_index = (self.endpoint_index + i + 1) % len(self.endpoints)
+            if self.endpoints_check_status[self.endpoint_index] == True:
+                break
 
     def get_endpoint(self):
+        if self.endpoint_index < 0:
+            return None
         return self.endpoints[self.endpoint_index]
 
     def make_web3(self):
@@ -2079,7 +2347,7 @@ class EvmChainValidator:
             return False
         current_weight = node_snapshot_weight(NODE['account'])
         if current_weight == None:
-            return
+            return False
 
         if validator not in self.validator_indices:
             return current_weight != 0
@@ -2089,8 +2357,11 @@ class EvmChainValidator:
             return False
         if info.epoch >= current_epoch():
             return False
-        return info.last_submit == 0 or \
-            in_reward_time_range(info.last_submit, int(time.time() - 10))
+        if info.last_submit == 0:
+            return True
+        now = int(time.time())
+        return in_reward_time_range(info.last_submit, now - 30) and \
+            in_reward_time_range(info.last_submit, now)
 
     def genesis_weight(self):
         if self.total_weight == None or self.__total_weight == None:
@@ -2223,6 +2494,9 @@ class EvmChainValidator:
         if contract == self.core_contract and method == 'upgrade':
             return UpgradeSignMessage(source, validator, self.chain_id, '', True,
             int(proposal['id']), params['impl'], int(params['nonce']))
+        elif contract == self.core_contract and method == 'updateTokenVolatile':
+            return UpdateTokenVolatileMessage(source, validator, self.chain_id, '', True,
+            int(proposal['id']), params['token'], params['volatile'], int(params['nonce']))
         else:
             log.server_logger.error('unexpected proposal: id=%s', proposal['id'])
             return None
@@ -2367,6 +2641,8 @@ class EvmChainValidator:
             if not params['impl']:
                 return
             await self.upgrade_core(params['impl'], int(params['nonce']), signatures)
+        elif contract == self.core_contract and method == 'updateTokenVolatile':
+            await self.update_token_volatile(params['token'], params['volatile'], int(params['nonce']), signatures)
         else:
             log.server_logger.error('execute_proposal: logic error, id=%s', proposal['id'])
             return None
@@ -2447,6 +2723,8 @@ class EvmChainValidator:
         error, block_number = await self.get_block_number()
         if error or (self.synced_height != None and block_number <= self.synced_height):
             return
+        if self.synced_height != None and block_number > self.synced_height + 4000:
+            block_number = self.synced_height + 4000
 
         error, updated = await self.sync_fee(block_number)
         if error:
@@ -2701,6 +2979,7 @@ class EvmChainValidator:
                     'epoch': validator.epoch,
                 })
         result['validators'] = validators
+        result['validator_indices'] = self.validator_indices
         result['total_weight'] = self.total_weight
         result['chain_id'] = self.chain_id
         result['evm_chain_id'] = self.evm_chain_id
@@ -3254,6 +3533,8 @@ async def handle_node_cross_chain_message(r : dict):
         message = CreationSignMessage(source, destination, chain_id, source_signer)
     elif message_type == CrossChainMessageType.UpgradeSign:
         message = UpgradeSignMessage(source, destination, chain_id, source_signer)
+    elif message_type == CrossChainMessageType.UpdateTokenVolatile:
+        message = UpdateTokenVolatileMessage(source, destination, chain_id, source_signer)
     else:
         pass
 
@@ -3449,7 +3730,10 @@ async def connect_to_token_service():
         TOKEN_SERVICE = None
 
 PROPOSALS = {}
-PROPOSALS_FILE = 'proposals.json'
+if TEST_MODE:
+    PROPOSALS_FILE = 'proposals_test.json'
+else:
+    PROPOSALS_FILE = 'proposals.json'
 def proposals_file_hash() -> Union[None, str]:
     if not os.path.exists(PROPOSALS_FILE):
         return ''
@@ -3616,13 +3900,22 @@ ETH_TOKEN_SYMBOL_PATCH = [
 BSC_TOKEN_SYMBOL_PATCH = [
     BscTokenSymbol('0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', 'CAKE'),
     BscTokenSymbol('0xe552Fb52a4F19e44ef5A967632DBc320B0820639', 'METIS'),
+    BscTokenSymbol('0x3eaeE3319Fe4D930B79cFA21a03714A38d45154A', 'MAZI'),
 ]
 
-BSC_TEST_CORE_CONTRACT = '0x1Ded8D4495ECa1C75D9d7b3a865eb66E8e05f12D'
-BSC_TEST_VALIDATOR_CONTRACT = '0x0f09F9E00d572E87e62C6CbCdaC6036F5B9FC4E1'
+BSC_TEST_CORE_CONTRACT = '0x3e729788b5e12CC43c4B62345075b3654129a009'
+BSC_TEST_VALIDATOR_CONTRACT = '0xE1461EEEeB35EfBB4B028cA3546eAaBd1553D103'
 
-GOERLI_CORE_CONTRACT = '0xB14928aec3200BBe5B7517A7501CCDD5ea50a6ff'
-GOERLI_VALIDATOR_CONTRACT = '0xDd947CeE995A1c1411ACe5B841Ad6DB3F3b3953E'
+GOERLI_CORE_CONTRACT = '0xae9f9cA3eABE4AEdaaa26f0522EaD246B769ca5f'
+GOERLI_VALIDATOR_CONTRACT = '0x00DFaDA8C2E1A0Cea889f76cC4423213383f41e5'
+
+# TODO:
+BSC_CORE_CONTRACT = ''
+BSC_VALIDATOR_CONTRACT = ''
+
+ETH_CORE_CONTRACT = ''
+ETH_VALIDATOR_CONTRACT = ''
+
 
 
 if TEST_MODE:
@@ -3649,7 +3942,29 @@ if TEST_MODE:
         },
     }
 else:
-    VALIDATORS = {}
+    VALIDATORS = {
+        ChainId.RAICOIN: {
+            'period': 0,
+            'validator': RaiChainValidator(ChainId.RAICOIN, 'Raicoin')
+        },
+        ChainId.ETHEREUM: {
+            'period': 12,
+            'validator': EvmChainValidator(ChainId.ETHEREUM,
+                                           EvmChainId.ETHEREUM,
+                                           ETH_CORE_CONTRACT, ETH_VALIDATOR_CONTRACT,
+                                           EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI,
+                                           ETH_ENDPOINTS, ETH_SIGNER_PRIVATE_KEY, 96, 'Ethereum', 'ETH', ETH_TOKEN_SYMBOL_PATCH)
+        },
+        ChainId.BINANCE_SMART_CHAIN: {
+            'period': 5,
+            'validator': EvmChainValidator(ChainId.BINANCE_SMART_CHAIN,
+                                           EvmChainId.BINANCE_SMART_CHAIN,
+                                           BSC_CORE_CONTRACT, BSC_VALIDATOR_CONTRACT,
+                                           EVM_CHAIN_CORE_ABI, EVM_CHAIN_VALIDATOR_ABI,
+                                           BSC_ENDPOINTS, BSC_SIGNER_PRIVATE_KEY, 30, 'BSC', 'BNB',
+                                           BSC_TOKEN_SYMBOL_PATCH)
+        },
+    }
 
 def main():
     global APP
