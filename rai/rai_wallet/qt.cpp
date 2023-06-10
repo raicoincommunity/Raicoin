@@ -634,6 +634,33 @@ public:
         return rai::ErrorCode::SUCCESS;
     }
 
+    rai::ErrorCode Bind(const rai::Block& block) override
+    {
+        record_.height_   = block.Height();
+        record_.type_     = "bind";
+        record_.link_     = block.Representative().StringAccount();
+        record_.amount_   = 0;
+        record_.hash_     = block.Hash();
+        record_.previous_ = block.Previous();
+
+        if (confirmed_height_ == rai::Block::INVALID_HEIGHT
+            || block.Height() > confirmed_height_)
+        {
+            record_.status_ = "pending";
+        }
+        else
+        {
+            record_.status_ = "confirmed";
+        }
+        if (fork_)
+        {
+			record_.status_ += ", fork";
+        }
+
+        return rai::ErrorCode::SUCCESS;
+
+    }
+
     rai::Transaction& transaction_;
     rai::Ledger& ledger_;
     uint64_t confirmed_height_;
