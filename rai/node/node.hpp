@@ -163,6 +163,7 @@ public:
     rai::ObserverContainer<bool, const std::shared_ptr<rai::Block>&,
                            const std::shared_ptr<rai::Block>&>
         fork_;
+    rai::ObserverContainer<const rai::Account&> election_cutoff_;
 };
 
 class RepWeights

@@ -564,7 +564,7 @@ void rai::Elections::ProcessElection(const rai::Election& election,
         {
             node_.ForceConfirmBlock(status.block_);
             stats_.IncRounds(election.rounds_);
-            Erase_(election);;
+            Erase_(election);
             return;
         }
 
@@ -580,6 +580,16 @@ void rai::Elections::ProcessElection(const rai::Election& election,
             ModifyBroadcast_(election, true);
             ModifyRounds_(election, election.rounds_ + 1);
             ModifyWakeup_(election, NextWakeup_(election));
+        }
+
+        if (election.rounds_ >= rai::Elections::CUTOFF_ROUNDS)
+        {
+            rai::Account account = election.account_;
+            Erase_(election);
+            if (cutoff_observer_)
+            {
+                cutoff_observer_(account);
+            }
         }
         return;
     }

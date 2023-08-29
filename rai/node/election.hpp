@@ -155,6 +155,9 @@ public:
         std::chrono::seconds(1);
     static size_t constexpr FORK_CONCURRENCY = 4;
     static size_t constexpr ELECTION_CONCURRENCY = 16;
+    static uint32_t constexpr CUTOFF_ROUNDS = 10;
+
+    std::function<void(const rai::Account&)> cutoff_observer_;
 
 private:
     void Erase_(const rai::Election&);
