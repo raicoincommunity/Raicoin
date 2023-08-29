@@ -65,6 +65,34 @@ rai::Subscriptions::Subscriptions(rai::Node& node) : node_(node)
             }
             BlockFork(add, first, second);
         });
+
+    node_.observers_.election_cutoff_.Add([this](const rai::Account& account) {
+        if (!node_.CallbackEnabled())
+        {
+            return;
+        }
+        AccountCongest(account);
+    });
+}
+
+void rai::Subscriptions::AccountCongest(const rai::Account& account)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = congestions_.find(account);
+        if (it == congestions_.end())
+        {
+            congestions_.insert(rai::SubscriptionCongestion{
+                account, std::chrono::steady_clock::now()});
+        }
+        else
+        {
+            congestions_.modify(it, [](rai::SubscriptionCongestion& data) {
+                data.time_ = std::chrono::steady_clock::now();
+            });
+        }
+    }
+    StartElection(account);
 }
 
 void rai::Subscriptions::Add(const rai::Account& account)
@@ -124,6 +152,7 @@ void rai::Subscriptions::BlockConfirm(const std::shared_ptr<rai::Block>& block,
     {
         return;
     }
+    UpdateCongestion(block->Account());
 
     rai::ErrorCode error_code = rai::ErrorCode::SUCCESS;
     rai::Transaction transaction(error_code, node_.ledger_, false);
@@ -320,6 +349,19 @@ void rai::Subscriptions::Cutoff()
     auto end_c_r =
         confirm_requests_.get<ConfirmRequestByTime>().lower_bound(cutoff);
     confirm_requests_.get<ConfirmRequestByTime>().erase(begin_c_r, end_c_r);
+
+    auto begin_congestion =
+        congestions_.get<SubscriptionCongestionByTime>().begin();
+    auto end_congestion =
+        congestions_.get<SubscriptionCongestionByTime>().lower_bound(cutoff);
+    congestions_.get<SubscriptionCongestionByTime>().erase(begin_congestion,
+                                                           end_congestion);
+}
+
+bool rai::Subscriptions::CongestionExists(const rai::Account& account) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return congestions_.find(account) != congestions_.end();
 }
 
 void rai::Subscriptions::Erase(const rai::Account& account)
@@ -352,6 +394,13 @@ void rai::Subscriptions::Erase(const rai::Block& block)
         confirm_requests_.erase(it);
     }
 }
+
+void rai::Subscriptions::EraseCongestion(const rai::Account& account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    congestions_.erase(account);
+}
+
 
 bool rai::Subscriptions::Exists(const rai::Account& account) const
 {
@@ -524,25 +573,59 @@ void rai::Subscriptions::Unsubscribe(rai::SubscriptionEvent event)
     Erase(event);
 }
 
+void rai::Subscriptions::UpdateCongestion(const rai::Account& account)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = congestions_.find(account);
+    if (it != congestions_.end())
+    {
+        congestions_.modify(it, [](rai::SubscriptionCongestion& data) {
+            data.time_ = std::chrono::steady_clock::now();
+        });
+    }
+}
+
 void rai::Subscriptions::StartElection_(rai::Transaction& transaction,
                                         const rai::Account& account)
 {
+    bool congestion = CongestionExists(account);
+
     rai::AccountInfo info;
     bool error = node_.ledger_.AccountInfoGet(transaction, account, info);
     IF_ERROR_RETURN_VOID(error);
 
     if (info.confirmed_height_ == info.head_height_)
     {
+        if (congestion)
+        {
+            EraseCongestion(account);
+        }
         return;
     }
 
     std::shared_ptr<rai::Block> block(nullptr);
-    error = node_.ledger_.BlockGet(transaction, info.head_, block);
-    if (error)
+    if (congestion)
     {
-        rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
-                        "Subscriptions::StartElection_");
-        return;
+        uint64_t height = info.confirmed_height_ == rai::Block::INVALID_HEIGHT
+                              ? 0
+                              : info.confirmed_height_ + 1;
+        error = node_.ledger_.BlockGet(transaction, account, height, block);
+        if (error)
+        {
+            rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
+                            "Subscriptions::StartElection_:BlockGetByHeight");
+            return;
+        }
+    }
+    else
+    {
+        error = node_.ledger_.BlockGet(transaction, info.head_, block);
+        if (error)
+        {
+            rai::Stats::Add(rai::ErrorCode::LEDGER_BLOCK_GET,
+                            "Subscriptions::StartElection_:BlockGetByHash");
+            return;
+        }
     }
 
     node_.StartElection(block);
@@ -591,7 +674,7 @@ void rai::Subscriptions::BlockConfirm_(rai::Transaction& transaction,
 bool rai::Subscriptions::NeedConfirm_(rai::Transaction& transaction,
                                       const rai::Account& account)
 {
-    if (Exists(account))
+    if (Exists(account) || CongestionExists(account))
     {
         return true;
     }
@@ -621,9 +704,11 @@ bool rai::Subscriptions::NeedConfirm_(rai::Transaction& transaction,
         return false;
     }
 
+    uint64_t count = 0;
     rai::BlockHash hash(info.head_);
-    while (!hash.IsZero())
+    while (!hash.IsZero() && count < 1000)
     {
+        ++count;
         std::shared_ptr<rai::Block> block(nullptr);
         error = node_.ledger_.BlockGet(transaction, hash, block);
         if (error)

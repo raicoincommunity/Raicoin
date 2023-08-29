@@ -370,6 +370,11 @@ rai::Node::Node(rai::ErrorCode& error_code, boost::asio::io_service& service,
             });
         };
 
+    elections_.cutoff_observer_ = [this](const rai::Account& account) {
+        Background(
+            [this, account]() { observers_.election_cutoff_.Notify(account); });
+    };
+
     observers_.block_.Add([this](const rai::BlockProcessResult& result,
                                  const std::shared_ptr<rai::Block>& block) {
             this->OnBlockProcessed(result, block);

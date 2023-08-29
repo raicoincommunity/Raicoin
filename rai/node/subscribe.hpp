@@ -33,10 +33,22 @@ enum class SubscriptionEvent
 };
 rai::SubscriptionEvent StringToSubscriptionEvent(const std::string&);
 
+class SubscriptionCongestion
+{
+public:
+    rai::Account account_;
+    std::chrono::steady_clock::time_point time_;
+};
+
+class SubscriptionCongestionByTime
+{
+};
+
 class Subscriptions
 {
 public:
     Subscriptions(rai::Node&);
+    void AccountCongest(const rai::Account&);
     void Add(const rai::Account&);
     void Add(rai::SubscriptionEvent);
     void BlockAppend(const std::shared_ptr<rai::Block>&);
@@ -47,9 +59,11 @@ public:
                    const std::shared_ptr<rai::Block>&);
     void ConfirmReceivables(const rai::Account&);
     void Cutoff();
+    bool CongestionExists(const rai::Account&) const;
     void Erase(const rai::Account&);
     void Erase(rai::SubscriptionEvent);
     void Erase(const rai::Block&);
+    void EraseCongestion(const rai::Account&);
     bool Exists(const rai::Account&) const;
     bool Exists(rai::SubscriptionEvent) const;
     bool Exists(const rai::Block&) const;
@@ -63,6 +77,7 @@ public:
     rai::ErrorCode Subscribe(const rai::Block&);
     void Unsubscribe(const rai::Account&);
     void Unsubscribe(rai::SubscriptionEvent);
+    void UpdateCongestion(const rai::Account&);
 
     static std::chrono::seconds constexpr CUTOFF_TIME =
         std::chrono::seconds(900);
@@ -115,6 +130,19 @@ private:
                     ConfirmRequest, std::chrono::steady_clock::time_point,
                     &ConfirmRequest::time_>>>>
         confirm_requests_;
-    
+
+    boost::multi_index_container<
+        rai::SubscriptionCongestion,
+        boost::multi_index::indexed_by<
+            boost::multi_index::hashed_unique<boost::multi_index::member<
+                rai::SubscriptionCongestion, rai::Account,
+                &rai::SubscriptionCongestion::account_>>,
+            boost::multi_index::ordered_non_unique<
+                boost::multi_index::tag<rai::SubscriptionCongestionByTime>,
+                boost::multi_index::member<
+                    rai::SubscriptionCongestion,
+                    std::chrono::steady_clock::time_point,
+                    &rai::SubscriptionCongestion::time_>>>>
+        congestions_;
 };
 }
